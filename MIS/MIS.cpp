@@ -19,7 +19,7 @@
     I will figure out how to make this dynamic later
 */
 
-const int max_degree = 1000;
+const int max_degree = 100;
 
 // **************************************************************
 // Driver
@@ -43,14 +43,24 @@ int main(int argc, char* argv[]) {
     if (n == 0) {
         std::cout << "n should be an integer greater than 1" << std::endl;
         return -1;
-    } else if (n >=100) {
-        std::cout << "please use a maximum of 100 for now" << std::endl;
-        n = 100;
     }
-    G = utils::rmat_symmetric_graph(n, 200*n);
+    std::cout << "using graph with vertices = " << n << std::endl;
+    G = utils::rmat_graph(n, 2000*n);
+    
+    for(uint i = 0; i < G.size(); i++)
+    {
+        std::cout << G[i].size() << " ";
+    }
+    std::cout << std::endl;
     
     remove_higher_degree(G, max_degree);
 
+    for(uint i = 0; i < G.size(); i++)
+    {
+        std::cout << G[i].size() << " ";
+    }
+    std::cout << std::endl;
 
 
+    return 0;
 }
