@@ -47,15 +47,16 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    G = utils::rmat_graph(n, 2000*n);
+    long max_degree_count = 0;
+    G = utils::rmat_symmetric_graph(n, 3*n);
+    utils::print_graph_stats(G);    
+    return_degree_capped_graph(G, max_degree);
+    utils::print_graph_stats(G);    
+    G = utils::symmetrize(G);
+    utils::print_graph_stats(G);    
 
-    remove_higher_degree(G, max_degree);
+    // auto colours = colour_graph(G, max_degree);
 
-    utils::print_graph_stats(G);
-
-    auto colours = colour_graph(G, max_degree);
-
-    
 
     return 0;
 }

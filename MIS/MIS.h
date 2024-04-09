@@ -3,16 +3,7 @@
 #include "/scratch/parlaylib/include/parlay/sequence.h"
 
 
-/**
- * @brief Make sure the graph has a maximum of max_degree edges
- * 
- * @param[in] The graph
- * @param[in] The maximum degree as an integer
- * 
- * Takes the adjacency list of each node and removes the edges until it has a size of max_degree
- * It should work in-place
- * @return nothing
-*/
+
 
 template <typename T>
 void printBits(T num) {
@@ -44,16 +35,71 @@ void print_string(std::string input_string)
     std::cout << std::endl;
 }
 
-template <typename graph> 
-auto remove_higher_degree(graph& G, const int max_degree)
+/*
+    Basic workflow
+    1) Find edges that are assymetric (do a parfor on the edge list of the target array)
+    2) Mark them in a global, boolean graph
+    then
+    3) filter them out
+*/
+template <typename graph>
+void delete_assymetric_pairs(graph& G)
+{
+     auto vertices = parlay::tabulate<int>(G.size(), [&] (int i) {return i;});
+
+     parlay::sequence<parlay::sequence<bool> >  keep_edges_graph = parlay::map(vertices, [&] (int v) {
+        auto edge = G[v];
+        auto keep_edge = parlay::tabulate<bool>(edge.size(), [&] (int i) {return (bool) false;});
+        
+        int starting_node = v;
+        parlay::parallel_for(0, edge.size(), [&] (int e){
+            int ending_node = edge[e];
+            parlay::sequence<int> ending_edge_list = G[ending_node];
+            
+            // is starting node in ending node?
+            parlay::parallel_for(0, ending_edge_list.size(), [&] (int w) {
+                if (ending_edge_list[w] == starting_node)
+                    keep_edge[e] = true;
+            });
+        });
+        return keep_edge;
+     });
+
+     parlay::parallel_for(0, G.size(), [&] (int v) {
+        auto edge = G[v];
+        parlay::parallel_for(0, edge.size(), [&] (int w){
+            edge[w] = keep_edges_graph[v][w] ? edge[w] : -1;
+        }
+        );
+
+        edge = parlay::filter(edge, [&] (int w){
+            return w != -1;
+        });
+
+        G[v] = edge;
+     });
+
+     
+}
+
+
+/*
+    Only works on symmetric graphs with no redundancies
+    Like the one returned from rmat_symmetric_graph
+*/
+template <typename graph>
+auto return_degree_capped_graph(graph& G, const int max_degree)
 {   
-    auto n = G.size();
+    int n = G.size();
     auto vertices = parlay::tabulate<int>(n, [&] (int i) {return n;});
 
     parlay::parallel_for(0, vertices.size(), [&] (int i) {
         if(G[i].size() > max_degree)
             G[i] = G[i].subseq(0, max_degree); // Does this result in gaps?
     });
+
+    delete_assymetric_pairs(G);
+
     return;
 }
 
@@ -103,6 +149,9 @@ std::string get_vertex_colour_string(int mycolour, parlay::sequence<int> adjacen
     // calculate the size of one vertex_colour
     // This is equal to max_degree * ( log(max colour variety) + 1) 
     std::string final_string(max_degree, '\0');
+
+    if(adjacent_colours.size() > max_degree )
+        std::cout << "AHA!" << std::endl;
 
     parlay::parallel_for(0, adjacent_colours.size(), [&] (int v) {
         final_string[v] = get_single_colour_contribution(mycolour, adjacent_colours[v]);
