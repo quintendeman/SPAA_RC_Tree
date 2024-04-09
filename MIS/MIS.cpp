@@ -12,14 +12,14 @@
 
 #include "MIS.h"
 #include "/scratch/parlaylib/examples/helper/graph_utils.h"
-
+#include "/scratch/parlaylib/examples/samplesort.h"
 
 /*
     MAXIMUM DEGREE
     I will figure out how to make this dynamic later
 */
 
-const int max_degree = 100;
+const int max_degree = 1000;
 
 // **************************************************************
 // Driver
@@ -48,15 +48,26 @@ int main(int argc, char* argv[]) {
     }
 
     long max_degree_count = 0;
-    G = utils::rmat_symmetric_graph(n, 3*n);
-    utils::print_graph_stats(G);    
+    G = utils::rmat_symmetric_graph(n, 10*n);
     return_degree_capped_graph(G, max_degree);
-    utils::print_graph_stats(G);    
     G = utils::symmetrize(G);
     utils::print_graph_stats(G);    
 
-    // auto colours = colour_graph(G, max_degree);
+    auto colours = colour_graph(G, max_degree);
+    int original_colour_size = colours.size();
+    // extra colours were:
+    std::cout << "unique colours are: " << original_colour_size << std::endl;
 
+    sample_sort(colours); // TODO, replace with bucket sort
+
+    // for(uint i = 0; i < colours.size(); i++)
+    // {
+    //     print_string(colours[i].first);
+    // }
+
+    auto mis_vertices = generate_MIS(G, colours);
+
+    std::cout << "Number of nodes in the mis are " << mis_vertices.size() << std::endl;
 
     return 0;
 }

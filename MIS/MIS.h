@@ -165,9 +165,48 @@ template <typename graph>
 auto colour_graph(graph& G, const int max_degree)
 {
     auto initial_colour = parlay::tabulate(G.size(),[&] (int i) {
-        return get_vertex_colour_string(i, G[i], max_degree);        
+        return std::make_pair(get_vertex_colour_string(i, G[i], max_degree), i);        
     } );
 
     return initial_colour;
 }
 
+
+template<typename graph>
+parlay::sequence<int> generate_MIS(graph& G, parlay::sequence<std::pair<std::string, int>> &string_values)
+{
+    parlay::sequence<int> mis_vertices = parlay::tabulate(G.size(), [&] (int v){return v;});
+    parlay::sequence<bool> deleted = parlay::tabulate(G.size(), [&] (int v){return false;});
+    
+    int colour_index = 0;
+    std::string top_colour = string_values[string_values.size()-1].first;
+    
+    while(string_values.size() > 0)
+    {
+        while(string_values.size() > 0 && string_values[string_values.size()-1].first == top_colour)
+        {
+            string_values.pop_back();
+        }
+        top_colour = string_values[string_values.size()-1].first;
+        parlay::parallel_for(0, G.size(), [&] (int v){
+            if(string_values[v].first != top_colour)
+                return;
+            int node = string_values[v].second;
+            // is node deleted?
+            if(deleted[node])
+                return;
+            // delete the neighbours of node
+            auto edge_list = G[node];
+            parlay::parallel_for(0, edge_list.size(), [&] (int cnt) {
+                deleted[edge_list[cnt]] = true;
+            });
+        });
+
+    }
+
+    mis_vertices = parlay::filter(mis_vertices, [&] (int v) {
+        return !deleted[v];
+    });
+
+    return mis_vertices;
+}
