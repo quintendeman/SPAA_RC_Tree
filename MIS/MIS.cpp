@@ -29,6 +29,8 @@ using nested_seq = parlay::sequence<parlay::sequence<vertex>>;
 using graph = nested_seq;
 using utils = graph_utils<vertex>;
 
+
+
 int main(int argc, char* argv[]) {
     auto usage = "Usage: BFS <n>";
    
@@ -44,23 +46,16 @@ int main(int argc, char* argv[]) {
         std::cout << "n should be an integer greater than 1" << std::endl;
         return -1;
     }
-    std::cout << "using graph with vertices = " << n << std::endl;
+
     G = utils::rmat_graph(n, 2000*n);
-    
-    for(uint i = 0; i < G.size(); i++)
-    {
-        std::cout << G[i].size() << " ";
-    }
-    std::cout << std::endl;
-    
+
     remove_higher_degree(G, max_degree);
 
-    for(uint i = 0; i < G.size(); i++)
-    {
-        std::cout << G[i].size() << " ";
-    }
-    std::cout << std::endl;
+    utils::print_graph_stats(G);
 
+    auto colours = colour_graph(G, max_degree);
+
+    
 
     return 0;
 }
