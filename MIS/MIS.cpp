@@ -19,7 +19,7 @@
     I will figure out how to make this dynamic later
 */
 
-const int max_degree = 1000;
+const int max_degree = 3;
 
 // **************************************************************
 // Driver
@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
     // extra colours were:
     std::cout << "unique colours are: " << original_colour_size << std::endl;
 
-    sample_sort(colours); // TODO, replace with bucket sort
+    sample_sort(colours); // TODO, replace with bucket sort and get counts of each colour
 
     // for(uint i = 0; i < colours.size(); i++)
     // {

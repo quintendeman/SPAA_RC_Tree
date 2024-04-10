@@ -188,6 +188,8 @@ parlay::sequence<int> generate_MIS(graph& G, parlay::sequence<std::pair<std::str
             string_values.pop_back();
         }
         top_colour = string_values[string_values.size()-1].first;
+
+        //TODO don't parfor for all the nodes, just the ones we know match the colour
         parlay::parallel_for(0, G.size(), [&] (int v){
             if(string_values[v].first != top_colour)
                 return;
