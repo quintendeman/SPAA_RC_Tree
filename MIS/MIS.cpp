@@ -11,7 +11,6 @@
 #include "/scratch/parlaylib/include/parlay/internal/get_time.h"
 
 #include "MIS.h"
-#include "/scratch/parlaylib/examples/helper/graph_utils.h"
 #include "/scratch/parlaylib/examples/samplesort.h"
 
 /*
@@ -24,9 +23,9 @@ const int max_degree = 3;
 // **************************************************************
 // Driver
 // **************************************************************
-using vertex = int;
-// using utils = graph_utils<vertex>;
-
+using vertex = long;
+using utils = graph_utils<vertex>;
+using graph = parlay::sequence<parlay::sequence<vertex> >;
 
 
 int main(int argc, char* argv[]) {
@@ -36,7 +35,7 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    long n = 0;
+    vertex n = 0;
     try { n = std::stoi(argv[1]); }
     catch (...) {}
     if (n == 0) {
@@ -44,19 +43,28 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
+    graph G;
+
 
     auto parents = generate_tree_graph(n, true, false);
 
     
     
-    parlay::sequence<long> colours = parlay::tabulate(n, [&] (long i) {return i;});
+    parlay::sequence<vertex> colours = parlay::tabulate(n, [&] (vertex i) {return i;});
 
     colours = six_colour_rooted_tree(parents, colours);
+
+    
+    G = convert_parents_to_graph(G, parents);
+
+    utils::print_graph_stats(G);
+
+    colours = convert_6_to_3_tree(G, parents, colours);
 
     sample_sort(colours);
 
     std::cout << "Unique colours are: " << parlay::unique(colours).size() << std::endl;
-    
+
 
     return 0;
 }

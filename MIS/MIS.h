@@ -1,6 +1,7 @@
 #include <atomic>
 #include "/scratch/parlaylib/include/parlay/primitives.h"
 #include "/scratch/parlaylib/include/parlay/sequence.h"
+#include "/scratch/parlaylib/examples/helper/graph_utils.h"
 
 
 
@@ -190,11 +191,10 @@ auto six_colour_rooted_tree(parlay::sequence<T> parents, parlay::sequence<T> ini
         
     }while(same_count != 3);
     
-    // uint8_t max_colour_val = parlay::reduce(colouring, parlay::maximum<T>());
-    // std::cout << "lg2 of max colouring is " << log2(max_colour_val) << std::endl;
-
     return colouring;
 }
+
+
 
 
 /*
@@ -235,4 +235,173 @@ parlay::sequence<T> generate_tree_graph(T num_elements, bool randomized = true, 
 
     
     return dummy_initial_parents;
+}
+
+template<typename T>
+bool isBadColour(T colour, parlay::sequence<T> unique_colours)
+{
+    // assert(unique_colours.size() == 6);
+    if (colour == unique_colours[0])
+        return false;
+    if (colour == unique_colours[1])
+        return false;
+    if (colour == unique_colours[2])
+        return false;
+    if (colour == unique_colours[3])
+        return true;
+    if (colour == unique_colours[4])
+        return true;
+    if (colour == unique_colours[5])
+        return true;
+    return false;
+}
+
+/*
+    Convert 6 colour tree into 3 colour tree
+*/
+template <typename graph, typename T>
+parlay::sequence<T> convert_6_to_3_tree(graph G, parlay::sequence<T> parents, parlay::sequence<T> original_colours)
+{   
+
+
+
+    static const T uncoloured = (T) -1;
+
+    parlay::sequence<T> colours = parlay::tabulate(parents.size(), [&] (T v) {
+        return original_colours[v];
+    });
+
+    // sample_sort(colours);  // TODO find a better way to get the 6 unique colours
+    auto unique_colours = parlay::tabulate(6, [&] (T v) {return v;});
+
+
+
+    // each node is recolored as its parent
+    parlay::parallel_for(0, parents.size(), [&] (T v){
+        if(parents[v] == v)
+        {
+            if (original_colours[v] == unique_colours[0]) // root recolours as any other colour
+            {
+                colours[v] = unique_colours[1];
+            }
+            else
+                colours[v] = unique_colours[0];
+            return;
+        }
+        colours[v] = original_colours[parents[v]];
+    });
+
+    // each node that is a bad colour and has a neighbour with a good colour
+    // gets no colour
+    parlay::parallel_for(0, parents.size(), [&] (T v){
+
+        T my_original_colour = colours[v];
+        bool current_is_bad = isBadColour(my_original_colour, unique_colours);
+        if(!current_is_bad)
+        {
+            return;
+        }
+
+        auto neighbours = G[v];
+        bool good_neighbour_exists = false;
+        parlay::parallel_for(0, neighbours.size(),[&] (int e) {
+            T neighbouring_node = neighbours[e];
+            T neighbouring_node_colour = colours[neighbouring_node];
+            if(!isBadColour(neighbouring_node_colour, unique_colours))
+                good_neighbour_exists = true;
+        });
+        T parent_colour = colours[parents[v]];
+        if(!isBadColour(parent_colour,unique_colours))
+            colours[v] = uncoloured;
+
+        if(good_neighbour_exists)
+            colours[v] = uncoloured;
+
+    });
+
+    // recolour bad colours to colour mod 3
+    parlay::parallel_for(0, parents.size(), [&] (T v) {
+        if(colours[v] == uncoloured)
+            return;
+        if(isBadColour(colours[v], unique_colours))// 4 5 6 are the bad colours
+            colours[v] = colours[v] % 3;
+    });
+
+
+    // recolour uncoloured nodes
+    parlay::parallel_for(0, parents.size(), [&] (T v) {
+        if(colours[v] != uncoloured)
+            return;
+        
+        // pick the parent colour
+        // This should work for root too
+        T parent_colour = colours[parents[v]];
+
+        // pick a child colour, all children should have the same colour
+
+        T child_colour;
+
+        if(G[v].size() > 0) // a child exists
+        {
+            child_colour = colours[G[v][0]]; //first child's colour
+        }
+        else
+            child_colour = (parent_colour + 1) % 3;
+
+        T my_colour = uncoloured;
+        
+        for(uint i = 0; i < 3; i++)
+        {
+           if(unique_colours[i] != child_colour && unique_colours[i] != parent_colour)
+            {
+                my_colour = unique_colours[i]; 
+            }
+        }
+
+        colours[v] = my_colour;
+
+    });
+
+    
+
+
+
+
+    return colours;
+}
+
+
+/*
+    Converts parents into a graph
+*/
+template <typename graph, typename T>
+graph convert_parents_to_graph(graph G, parlay::sequence<T> parents)
+{
+    parlay::sequence<T> vertices = parlay::tabulate(parents.size(), [&] (T v) {return v;});
+
+    G = parlay::map(vertices, [&] (T v) {
+        parlay::sequence<T> temp = parlay::tabulate(1, [&] (T v) {return v;});
+        temp[0] = parents[v];
+        return temp;
+    });
+
+    G = graph_utils<T>::symmetrize(G);
+    /*
+        // delete parent pointers
+        parlay::parallel_for(0, vertices.size(), [&] (T v) {
+            T parent = parents[v];
+            auto edgelist = G[v];
+            for(T i = 0; i < edgelist.size(); i++)
+            {
+                if(edgelist[i] == parent)
+                {
+                    std::swap(edgelist[i], edgelist[edgelist.size()-1]);
+                    edgelist.pop_back();
+                    return;
+                }
+            }
+        });
+    */
+
+    return G;
 }
