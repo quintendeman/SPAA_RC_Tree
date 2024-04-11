@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    int n = 0;
+    long n = 0;
     try { n = std::stoi(argv[1]); }
     catch (...) {}
     if (n == 0) {
@@ -49,37 +49,14 @@ int main(int argc, char* argv[]) {
 
     
     
-    parlay::sequence<int> initial_colours = parlay::tabulate(n, [&] (int i) {return i;});
+    parlay::sequence<long> colours = parlay::tabulate(n, [&] (long i) {return i;});
 
-    auto colours = six_colour_rooted_tree(parents, initial_colours);
-    colours = six_colour_rooted_tree(parents, colours);
-    colours = six_colour_rooted_tree(parents, colours);
-    colours = six_colour_rooted_tree(parents, colours);
-    colours = six_colour_rooted_tree(parents, colours);
-    colours = six_colour_rooted_tree(parents, colours);
     colours = six_colour_rooted_tree(parents, colours);
 
     sample_sort(colours);
 
     std::cout << "Unique colours are: " << parlay::unique(colours).size() << std::endl;
-
     
-    // long max_degree_count = 0;
-    // G = utils::rmat_symmetric_graph(n, 10*n);
-    // return_degree_capped_graph(G, max_degree);
-    // G = utils::symmetrize(G);
-    // utils::print_graph_stats(G);    
-
-    // auto colours = colour_graph(G, max_degree);
-    // int original_colour_size = parlay::unique(colours).size();
-    // // extra colours were:
-    // std::cout << "unique colours are: " << original_colour_size << std::endl;
-
-    // sample_sort(colours); // TODO, replace with bucket sort and get counts of each colour
-
-    // auto mis_vertices = generate_MIS(G, colours);
-
-    // std::cout << "Number of nodes in the mis are " << mis_vertices.size() << std::endl;
 
     return 0;
 }

@@ -42,22 +42,22 @@ void print_string(std::string input_string)
     then
     3) filter them out
 */
-template <typename graph>
+template <typename graph, typename vertex>
 void delete_assymetric_pairs(graph& G)
 {
-     auto vertices = parlay::tabulate<int>(G.size(), [&] (int i) {return i;});
+     auto vertices = parlay::tabulate<vertex>(G.size(), [&] (vertex i) {return i;});
 
-     parlay::sequence<parlay::sequence<bool> >  keep_edges_graph = parlay::map(vertices, [&] (int v) {
+     parlay::sequence<parlay::sequence<bool> >  keep_edges_graph = parlay::map(vertices, [&] (vertex v) {
         auto edge = G[v];
-        auto keep_edge = parlay::tabulate<bool>(edge.size(), [&] (int i) {return (bool) false;});
+        auto keep_edge = parlay::tabulate<bool>(edge.size(), [&] (vertex i) {return (bool) false;});
         
         int starting_node = v;
-        parlay::parallel_for(0, edge.size(), [&] (int e){
+        parlay::parallel_for(0, edge.size(), [&] (vertex e){
             int ending_node = edge[e];
             parlay::sequence<int> ending_edge_list = G[ending_node];
             
             // is starting node in ending node?
-            parlay::parallel_for(0, ending_edge_list.size(), [&] (int w) {
+            parlay::parallel_for(0, ending_edge_list.size(), [&] (vertex w) {
                 if (ending_edge_list[w] == starting_node)
                     keep_edge[e] = true;
             });
@@ -65,14 +65,14 @@ void delete_assymetric_pairs(graph& G)
         return keep_edge;
      });
 
-     parlay::parallel_for(0, G.size(), [&] (int v) {
+     parlay::parallel_for(0, G.size(), [&] (vertex v) {
         auto edge = G[v];
-        parlay::parallel_for(0, edge.size(), [&] (int w){
+        parlay::parallel_for(0, edge.size(), [&] (vertex w){
             edge[w] = keep_edges_graph[v][w] ? edge[w] : -1;
         }
         );
 
-        edge = parlay::filter(edge, [&] (int w){
+        edge = parlay::filter(edge, [&] (vertex w){
             return w != -1;
         });
 
@@ -87,13 +87,13 @@ void delete_assymetric_pairs(graph& G)
     Only works on symmetric graphs with no redundancies
     Like the one returned from rmat_symmetric_graph
 */
-template <typename graph>
+template <typename graph, typename vertex>
 auto return_degree_capped_graph(graph& G, const int max_degree)
 {   
-    int n = G.size();
-    auto vertices = parlay::tabulate<int>(n, [&] (int i) {return n;});
+    vertex n = G.size();
+    auto vertices = parlay::tabulate<vertex>(n, [&] (vertex i) {return n;});
 
-    parlay::parallel_for(0, vertices.size(), [&] (int i) {
+    parlay::parallel_for(0, vertices.size(), [&] (vertex i) {
         if(G[i].size() > max_degree)
             G[i] = G[i].subseq(0, max_degree); // Does this result in gaps?
     });
@@ -163,13 +163,17 @@ static unsigned char get_single_colour_contribution(const T vcolour, const T wco
  * @returns A sequence of 8-bit chars representing the colour of each node
 */
 template <typename T>
-parlay::sequence<uint8_t> six_colour_rooted_tree(parlay::sequence<int> parents, parlay::sequence<T> initial_colours)
+auto six_colour_rooted_tree(parlay::sequence<T> parents, parlay::sequence<T> initial_colours)
 {
 
-    parlay::sequence<uint8_t> colouring = parlay::tabulate(parents.size(), [&] (T v) {return (uint8_t) 0;});
+    parlay::sequence<T> colouring = parlay::tabulate(parents.size(), [&] (T v) {return (T) 0;});
 
-    parlay::parallel_for(0, parents.size(),[&] (int v) {
-        int parent_id = parents[v];
+    auto same_count = 0;
+    double L = (double) (sizeof(long) * 8);
+    do
+    {
+        parlay::parallel_for(0, parents.size(),[&] (int v) {
+        long parent_id = parents[v];
         if (parent_id == v) // root node
             colouring[v] = (uint8_t) 0;
         else
@@ -178,7 +182,17 @@ parlay::sequence<uint8_t> six_colour_rooted_tree(parlay::sequence<int> parents, 
 
             colouring[v] =  my_colouring;
         }
-    });
+        });
+        initial_colours = colouring;
+        if(L == ceil(log2(L) + 1))
+            same_count++;
+        L = ceil(log2(L) + 1);
+        
+    }while(same_count != 3);
+    
+    // uint8_t max_colour_val = parlay::reduce(colouring, parlay::maximum<T>());
+    // std::cout << "lg2 of max colouring is " << log2(max_colour_val) << std::endl;
+
     return colouring;
 }
 
@@ -187,15 +201,16 @@ parlay::sequence<uint8_t> six_colour_rooted_tree(parlay::sequence<int> parents, 
     Generate a simple, single rooted graph with each node having two children
     Then, randomly, change the parent of each node with a certain probability such that it picks something on the left of it
 */
-parlay::sequence<int> generate_tree_graph(int num_elements, bool randomized = true, bool sequential = false)
+template <typename T>
+parlay::sequence<T> generate_tree_graph(T num_elements, bool randomized = true, bool sequential = false)
 {
     assert(num_elements > 0);
 
-    parlay::sequence<int> dummy_initial_parents = parlay::tabulate(num_elements, [&] (int v) {return 0;});
+    parlay::sequence<T> dummy_initial_parents = parlay::tabulate(num_elements, [&] (T v) {return (T) 0;});
 
     if(sequential)
     {
-       parlay::parallel_for(0, num_elements, [&] (int i) {
+       parlay::parallel_for(0, num_elements, [&] (T i) {
             
             dummy_initial_parents[i] = i-1;
 
@@ -203,17 +218,17 @@ parlay::sequence<int> generate_tree_graph(int num_elements, bool randomized = tr
         return dummy_initial_parents;
     }
 
-    parlay::parallel_for(0, num_elements, [&] (int i) {
+    parlay::parallel_for(0, num_elements, [&] (T i) {
         dummy_initial_parents[i] = i/2;
     }); 
     if(!randomized)
         return dummy_initial_parents;
 
-    parlay::sequence<int> vertices = parlay::tabulate(num_elements, [&] (int v) {return v;});
-    parlay::sequence<int> random_index = parlay::random_shuffle(vertices);
+    parlay::sequence<T> vertices = parlay::tabulate(num_elements, [&] (T v) {return v;});
+    parlay::sequence<T> random_index = parlay::random_shuffle(vertices);
 
-    parlay::parallel_for(0, num_elements, [&] (int v) {
-        int picked_parent = random_index[v];
+    parlay::parallel_for(0, num_elements, [&] (T v) {
+        T picked_parent = random_index[v];
         if(picked_parent < v)
             dummy_initial_parents[v] = picked_parent;
     });
