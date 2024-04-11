@@ -25,9 +25,7 @@ const int max_degree = 3;
 // Driver
 // **************************************************************
 using vertex = int;
-using nested_seq = parlay::sequence<parlay::sequence<vertex>>;
-using graph = nested_seq;
-using utils = graph_utils<vertex>;
+// using utils = graph_utils<vertex>;
 
 
 
@@ -39,7 +37,6 @@ int main(int argc, char* argv[]) {
     }
 
     int n = 0;
-    graph G;
     try { n = std::stoi(argv[1]); }
     catch (...) {}
     if (n == 0) {
@@ -47,27 +44,42 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    long max_degree_count = 0;
-    G = utils::rmat_symmetric_graph(n, 10*n);
-    return_degree_capped_graph(G, max_degree);
-    G = utils::symmetrize(G);
-    utils::print_graph_stats(G);    
 
-    auto colours = colour_graph(G, max_degree);
-    int original_colour_size = colours.size();
-    // extra colours were:
-    std::cout << "unique colours are: " << original_colour_size << std::endl;
+    auto parents = generate_tree_graph(n, true, false);
 
-    sample_sort(colours); // TODO, replace with bucket sort and get counts of each colour
+    
+    
+    parlay::sequence<int> initial_colours = parlay::tabulate(n, [&] (int i) {return i;});
 
-    // for(uint i = 0; i < colours.size(); i++)
-    // {
-    //     print_string(colours[i].first);
-    // }
+    auto colours = six_colour_rooted_tree(parents, initial_colours);
+    colours = six_colour_rooted_tree(parents, colours);
+    colours = six_colour_rooted_tree(parents, colours);
+    colours = six_colour_rooted_tree(parents, colours);
+    colours = six_colour_rooted_tree(parents, colours);
+    colours = six_colour_rooted_tree(parents, colours);
+    colours = six_colour_rooted_tree(parents, colours);
 
-    auto mis_vertices = generate_MIS(G, colours);
+    sample_sort(colours);
 
-    std::cout << "Number of nodes in the mis are " << mis_vertices.size() << std::endl;
+    std::cout << "Unique colours are: " << parlay::unique(colours).size() << std::endl;
+
+    
+    // long max_degree_count = 0;
+    // G = utils::rmat_symmetric_graph(n, 10*n);
+    // return_degree_capped_graph(G, max_degree);
+    // G = utils::symmetrize(G);
+    // utils::print_graph_stats(G);    
+
+    // auto colours = colour_graph(G, max_degree);
+    // int original_colour_size = parlay::unique(colours).size();
+    // // extra colours were:
+    // std::cout << "unique colours are: " << original_colour_size << std::endl;
+
+    // sample_sort(colours); // TODO, replace with bucket sort and get counts of each colour
+
+    // auto mis_vertices = generate_MIS(G, colours);
+
+    // std::cout << "Number of nodes in the mis are " << mis_vertices.size() << std::endl;
 
     return 0;
 }

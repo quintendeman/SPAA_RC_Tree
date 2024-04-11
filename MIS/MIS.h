@@ -103,10 +103,16 @@ auto return_degree_capped_graph(graph& G, const int max_degree)
     return;
 }
 
+template <typename T>
+static inline bool extract_bit(T number, int offset_from_right)
+{
+    return (number >> offset_from_right) & 1;
+}
 
 /*
-    Returns first different bit from the left
-
+    Returns index of first different bit from the left
+    Sets the value of bit in the boolean bit
+    Sets the value of b
     sizeof(T) must be less than 16 bytes
 */
 template <typename T>
@@ -115,13 +121,13 @@ inline char first_different_bit(const T a, const T b, bool* bit)
     T difference = a ^ b;
     char num_bits = sizeof(T) * 8;
     
-    for(char i = num_bits - 1; i >= 0; i--)
+    for(char i = num_bits-1; i >= 0; i--)
     {
-        T temp = difference >> i;
-        if (temp)
-        {   
-            *bit = (b >> i) & 1;
-            return num_bits - 1 - i;
+        bool inspected_bit = extract_bit(difference, i);
+        if(inspected_bit)
+        {
+            if(bit) *bit = extract_bit(b, i);
+            return i;
         }
     }
 
@@ -132,83 +138,86 @@ inline char first_different_bit(const T a, const T b, bool* bit)
     returns a char with I_w and C_w(I_w) packed
     I_w is the index of the first different bit
     C_w is the value in neighbour w of this bit
+    Also sets the different bit index in the char ptr different_bit_index
 
     Also, technically I waste the left-most bit in each char
 */
 
-static char get_single_colour_contribution(const int vcolour, const int wcolour)
+template <typename T>
+static unsigned char get_single_colour_contribution(const T vcolour, const T wcolour, char* different_bit_index)
 {
     bool wbit = false;
     char different_bit = first_different_bit(vcolour, wcolour, &wbit);
     char final_returned_character = (different_bit << 1) | wbit;
+    if(different_bit_index) *different_bit_index = different_bit;
     return final_returned_character;
 }
 
-std::string get_vertex_colour_string(int mycolour, parlay::sequence<int> adjacent_colours, const int max_degree)
+
+/**
+ * @in[G] A sequence of integers representing the parent of each node
+ * 
+ * Note that each node has a parent which is the ID of another node.
+ * If it is a root node, the parent ID is itself
+ * 
+ * @returns A sequence of 8-bit chars representing the colour of each node
+*/
+template <typename T>
+parlay::sequence<uint8_t> six_colour_rooted_tree(parlay::sequence<int> parents, parlay::sequence<T> initial_colours)
 {
-    // calculate the size of one vertex_colour
-    // This is equal to max_degree * ( log(max colour variety) + 1) 
-    std::string final_string(max_degree, '\0');
 
-    if(adjacent_colours.size() > max_degree )
-        std::cout << "AHA!" << std::endl;
+    parlay::sequence<uint8_t> colouring = parlay::tabulate(parents.size(), [&] (T v) {return (uint8_t) 0;});
 
-    parlay::parallel_for(0, adjacent_colours.size(), [&] (int v) {
-        final_string[v] = get_single_colour_contribution(mycolour, adjacent_colours[v]);
-    });
-
-
-    return final_string;
-}
-
-template <typename graph>
-auto colour_graph(graph& G, const int max_degree)
-{
-    auto initial_colour = parlay::tabulate(G.size(),[&] (int i) {
-        return std::make_pair(get_vertex_colour_string(i, G[i], max_degree), i);        
-    } );
-
-    return initial_colour;
-}
-
-
-template<typename graph>
-parlay::sequence<int> generate_MIS(graph& G, parlay::sequence<std::pair<std::string, int>> &string_values)
-{
-    parlay::sequence<int> mis_vertices = parlay::tabulate(G.size(), [&] (int v){return v;});
-    parlay::sequence<bool> deleted = parlay::tabulate(G.size(), [&] (int v){return false;});
-    
-    int colour_index = 0;
-    std::string top_colour = string_values[string_values.size()-1].first;
-    
-    while(string_values.size() > 0)
-    {
-        while(string_values.size() > 0 && string_values[string_values.size()-1].first == top_colour)
+    parlay::parallel_for(0, parents.size(),[&] (int v) {
+        int parent_id = parents[v];
+        if (parent_id == v) // root node
+            colouring[v] = (uint8_t) 0;
+        else
         {
-            string_values.pop_back();
+            uint8_t my_colouring = get_single_colour_contribution(initial_colours[v], initial_colours[parent_id], NULL);
+
+            colouring[v] =  my_colouring;
         }
-        top_colour = string_values[string_values.size()-1].first;
+    });
+    return colouring;
+}
 
-        //TODO don't parfor for all the nodes, just the ones we know match the colour
-        parlay::parallel_for(0, G.size(), [&] (int v){
-            if(string_values[v].first != top_colour)
-                return;
-            int node = string_values[v].second;
-            // is node deleted?
-            if(deleted[node])
-                return;
-            // delete the neighbours of node
-            auto edge_list = G[node];
-            parlay::parallel_for(0, edge_list.size(), [&] (int cnt) {
-                deleted[edge_list[cnt]] = true;
-            });
-        });
 
+/*
+    Generate a simple, single rooted graph with each node having two children
+    Then, randomly, change the parent of each node with a certain probability such that it picks something on the left of it
+*/
+parlay::sequence<int> generate_tree_graph(int num_elements, bool randomized = true, bool sequential = false)
+{
+    assert(num_elements > 0);
+
+    parlay::sequence<int> dummy_initial_parents = parlay::tabulate(num_elements, [&] (int v) {return 0;});
+
+    if(sequential)
+    {
+       parlay::parallel_for(0, num_elements, [&] (int i) {
+            
+            dummy_initial_parents[i] = i-1;
+
+        }); 
+        return dummy_initial_parents;
     }
 
-    mis_vertices = parlay::filter(mis_vertices, [&] (int v) {
-        return !deleted[v];
+    parlay::parallel_for(0, num_elements, [&] (int i) {
+        dummy_initial_parents[i] = i/2;
+    }); 
+    if(!randomized)
+        return dummy_initial_parents;
+
+    parlay::sequence<int> vertices = parlay::tabulate(num_elements, [&] (int v) {return v;});
+    parlay::sequence<int> random_index = parlay::random_shuffle(vertices);
+
+    parlay::parallel_for(0, num_elements, [&] (int v) {
+        int picked_parent = random_index[v];
+        if(picked_parent < v)
+            dummy_initial_parents[v] = picked_parent;
     });
 
-    return mis_vertices;
+    
+    return dummy_initial_parents;
 }
