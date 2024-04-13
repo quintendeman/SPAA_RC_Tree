@@ -1,0 +1,6 @@
+Initial colouring is [32mVALID[0m
+Six colouring is [32mVALID[0m
+Six colouring is still [32mVALID[0m
+Invalid index: 8000 parent: 4041 colour: [1;35mMagenta [1;36mCyan 
+Three colouring is [31mINVALID[0m
+invalid index is: 5589

@@ -47,23 +47,58 @@ int main(int argc, char* argv[]) {
 
 
     auto parents = generate_tree_graph(n, true, false);
+    vertex invalid_vertex = -1;
+    
 
     
     
     parlay::sequence<vertex> colours = parlay::tabulate(n, [&] (vertex i) {return i;});
 
+    auto is_valid = verify_colouring(parents, colours, &invalid_vertex);
+
+    std::cout << "Initial colouring is " << (is_valid ? "\033[32mVALID\033[0m" : "\033[31mINVALID\033[0m") << std::endl;
+
     colours = six_colour_rooted_tree(parents, colours);
 
+    is_valid = verify_colouring(parents, colours, &invalid_vertex);  
+
+    std::cout << "Six colouring is " << (is_valid ? "\033[32mVALID\033[0m" : "\033[31mINVALID\033[0m") << std::endl;  
     
     G = convert_parents_to_graph(G, parents);
 
-    utils::print_graph_stats(G);
+    is_valid = verify_colouring(G, parents, colours, &invalid_vertex);  
 
-    colours = convert_6_to_3_tree(G, parents, colours);
+    std::cout << "Six colouring is still " << (is_valid ? "\033[32mVALID\033[0m" : "\033[31mINVALID\033[0m") << std::endl;  
 
-    sample_sort(colours);
+    // sample_sort(colours);
 
-    std::cout << "Unique colours are: " << parlay::unique(colours).size() << std::endl;
+    // std::cout << "Unique colours are " << std::endl;
+
+    // auto six_unique_colours = parlay::unique(colours);
+    // for(uint i = 0; i < six_unique_colours.size(); i++)
+    //     std::cout << six_unique_colours[i] << " ";
+    // std::cout << std::endl;
+
+    // // utils::print_graph_stats(G);
+
+    colours = convert_6_to_3_tree(G, parents, colours, true);
+
+    is_valid = verify_colouring(parents, colours, &invalid_vertex);  
+
+    std::cout << "Three colouring is " << (is_valid ? "\033[32mVALID\033[0m" : "\033[31mINVALID\033[0m") << std::endl;  
+    if(!is_valid)
+        std::cout << "invalid index is: " << invalid_vertex << std::endl;
+
+    
+    // for(uint i = 0; i < G.size(); i++)
+    // {
+    //     std::cout << colours[i] << "\t";
+    // }
+    // std::cout << std::endl;
+
+    // sample_sort(colours);
+
+    // std::cout << "Unique colours are: " << parlay::unique(colours).size() << std::endl;
 
 
     return 0;

@@ -2,8 +2,98 @@
 #include "/scratch/parlaylib/include/parlay/primitives.h"
 #include "/scratch/parlaylib/include/parlay/sequence.h"
 #include "/scratch/parlaylib/examples/helper/graph_utils.h"
+#include <set>
 
+// template <typename T>
+// class bad_set // A horrible implementation, only useful for very very small sets (such as colours)
+// {
+//     private:
+//         parlay::sequence<T> elements;
 
+//         int get_element_index(T element)
+//         {
+//             for(int i = 0; i < this->elements.size(); i++)
+//             {
+//                 if(this->elements[i] == element)
+//                     return i;
+//             }
+//             return -1;
+//         }
+
+//     public:
+//         bad_set(void)
+//         {
+//             return;
+//         }
+//         bad_set(parlay::sequence<T> input_elements)
+//         {
+//             this->elements = input_elements;
+//             return;
+//         }
+//         bad_set(T arr[])
+//         {
+//             auto size_arr = sizeof(arr)/sizeof(arr[0]); 
+//             for(auto i = 0;i < size_arr; i++)
+//             {
+//                 this->elements.push_back(arr[i]);
+//             }
+//         }
+
+//         bool is_member(T element)
+//         {
+//             bool retval = false;
+//             for(uint i = 0; i < this->num_elementsize(); i++)
+//             {
+//                 if(element == this->elements[i])
+//                 {
+//                     return true;
+//                 }
+//             }
+//             return false;
+//         }
+
+//         void add_member(T element)
+//         {
+//             this->elements.push_back(element);
+//         }
+
+//         void remove_member(T element)
+//         {
+//             int index = this->get_element_index(element);
+//             int last_index = this->elements.size() - 1;
+//             if(index >= 0 && last_index >= 0)
+//             {
+//                 std::swap(this->elements[index], this->elements[last_index]);
+//                 this->elements.pop_back();
+//             }
+//         }
+
+//         void add_set(parlay::sequence<T> new_elements)
+//         {
+//             for(auto i = 0; i < new_elements.size(); i++)
+//             {
+//                 this->add_member(new_elements[i]);
+//             }
+//         }
+
+//         void subtract_set(parlay::sequence<T> new_elements)
+//         {
+//             for(auto i = 0; i < new_elements.size(); i++)
+//             {
+//                 this->remove_member(new_elements[i]);
+//             }
+//         }
+
+//         parlay::sequence<T> get_elements(void)
+//         {
+//             return this->elements;
+//         }
+
+//         auto get_cound(void)
+//         {
+//             return this->elements.size();
+//         }
+// };
 
 
 template <typename T>
@@ -212,7 +302,10 @@ parlay::sequence<T> generate_tree_graph(T num_elements, bool randomized = true, 
     {
        parlay::parallel_for(0, num_elements, [&] (T i) {
             
-            dummy_initial_parents[i] = i-1;
+            if(i)
+                dummy_initial_parents[i] = i-1;
+            else 
+                dummy_initial_parents[0] = 0; // root's parent is itself
 
         }); 
         return dummy_initial_parents;
@@ -256,14 +349,57 @@ bool isBadColour(T colour, parlay::sequence<T> unique_colours)
     return false;
 }
 
+
+// if (verbose)
+    // {
+    //     for(uint i = 0; i < G.size(); i++)
+    //     {
+    //         std::cout << i << "(" << parents[i] << ")\t\t";
+    //     }
+    //     std::cout << std::endl;
+    // }
+
+    // if (verbose)
+    // {
+    //     for(uint i = 0; i < G.size(); i++)
+    //     {
+    //         std::cout << original_colours[i] << "\t\t";
+    //     }
+    //     std::cout << std::endl;
+    // }
+
+template <typename T>
+std::string coloured(T colour)
+{
+    switch (colour) {
+        case 0:
+            return "\033[1;34m0\033[0m"; // Blue
+        case 1:
+            return "\033[1;32m1\033[0m"; // Green
+        case 2:
+            return "\033[1;36m2\033[0m"; // Cyan
+        case 3:
+            return "\033[1;33m3\033[0m"; // Yellow
+        case 4:
+            return "\033[1;36m4\033[0m"; // Cyan
+        case 5:
+            return "\033[1;35m5\033[0m"; // Magenta
+        case 6:
+            return "\033[1;31m6\033[0m"; // Red
+        default:
+            return "\033[0m7\033[0m"; // Unknown colour (reset colour)
+    }
+
+}
+
 /*
     Convert 6 colour tree into 3 colour tree
 */
 template <typename graph, typename T>
-parlay::sequence<T> convert_6_to_3_tree(graph G, parlay::sequence<T> parents, parlay::sequence<T> original_colours)
+parlay::sequence<T> convert_6_to_3_tree(graph G, parlay::sequence<T> parents, parlay::sequence<T> original_colours, bool verbose = false)
 {   
 
-
+    static const int invalid_index = 9087;    
 
     static const T uncoloured = (T) -1;
 
@@ -271,100 +407,168 @@ parlay::sequence<T> convert_6_to_3_tree(graph G, parlay::sequence<T> parents, pa
         return original_colours[v];
     });
 
-    // sample_sort(colours);  // TODO find a better way to get the 6 unique colours
-    auto unique_colours = parlay::tabulate(6, [&] (T v) {return v;});
+    std::cout << "Invalid index: " << invalid_index << " parentclr: " << coloured(colours[parents[invalid_index]]) << " colour: " << coloured(colours[invalid_index]) << " ";
+    std::cout << "Children: ";
+    for(uint i = 0; i < G[invalid_index].size(); i++)
+        std:: cout << coloured(colours[G[invalid_index][i]]) << " ";
+    std::cout << std::endl;
 
 
-
-    // each node is recolored as its parent
+    // each node (except root) is recolored as its parent
     parlay::parallel_for(0, parents.size(), [&] (T v){
-        if(parents[v] == v)
-        {
-            if (original_colours[v] == unique_colours[0]) // root recolours as any other colour
-            {
-                colours[v] = unique_colours[1];
-            }
-            else
-                colours[v] = unique_colours[0];
-            return;
-        }
-        colours[v] = original_colours[parents[v]];
+        if(v != parents[v])
+            colours[v] = original_colours[parents[v]];
     });
 
-    // each node that is a bad colour and has a neighbour with a good colour
-    // gets no colour
+    std::cout << "Invalid index: " << invalid_index << " parentclr: " << coloured(colours[parents[invalid_index]]) << " colour: " << coloured(colours[invalid_index]) << " ";
+    std::cout << "Children: ";
+    for(uint i = 0; i < G[invalid_index].size(); i++)
+        std:: cout << coloured(colours[G[invalid_index][i]]) << " ";
+    std::cout << std::endl;
+
+    parlay::sequence<T> colours_copy = parlay::tabulate(parents.size(), [&] (T v) {
+        return colours[v];
+    });
+
     parlay::parallel_for(0, parents.size(), [&] (T v){
-
-        T my_original_colour = colours[v];
-        bool current_is_bad = isBadColour(my_original_colour, unique_colours);
-        if(!current_is_bad)
+        if(v == parents[v]) //its a root
         {
-            return;
+            std::set<int> Set;
+            Set.insert(0);
+            Set.insert(1);
+            Set.insert(2);
+
+            // All children must have the same colour
+            auto children = G[v];
+
+            auto children_colour = colours_copy[children[0]];
+
+            Set.erase(children_colour);
+
+            colours[v] = *Set.begin(); // sets are ordered, first is minimum
+            
+        }    
+    }); //so far so good
+
+    std::cout << "Invalid index: " << invalid_index << " parentclr: " << coloured(colours[parents[invalid_index]]) << " colour: " << coloured(colours[invalid_index]) << " ";
+    std::cout << "Children: ";
+    for(uint i = 0; i < G[invalid_index].size(); i++)
+        std:: cout << coloured(colours[G[invalid_index][i]]) << " ";
+    std::cout << std::endl;
+
+    parlay::sequence<bool> Vprime = parlay::tabulate(parents.size(), [&] (T v) {return false;});
+
+    parlay::parallel_for(0, parents.size(), [&] (T v) {
+        if(colours[v] > 2) // V2
+        {
+            auto edgelist = G[v];
+            edgelist.push_back(parents[v]); // just for ease
+            parlay::parallel_for(0, edgelist.size(), [&] (T edgenum) {
+                auto w = edgelist[edgenum]; 
+                if(colours[w] <= 2) //It is in V1
+                {
+                    Vprime[v] = true;
+                }
+            });
         }
-
-        auto neighbours = G[v];
-        bool good_neighbour_exists = false;
-        parlay::parallel_for(0, neighbours.size(),[&] (int e) {
-            T neighbouring_node = neighbours[e];
-            T neighbouring_node_colour = colours[neighbouring_node];
-            if(!isBadColour(neighbouring_node_colour, unique_colours))
-                good_neighbour_exists = true;
-        });
-        T parent_colour = colours[parents[v]];
-        if(!isBadColour(parent_colour,unique_colours))
-            colours[v] = uncoloured;
-
-        if(good_neighbour_exists)
-            colours[v] = uncoloured;
-
     });
 
-    // recolour bad colours to colour mod 3
+    // Cv <- uncoloured
+
     parlay::parallel_for(0, parents.size(), [&] (T v) {
-        if(colours[v] == uncoloured)
-            return;
-        if(isBadColour(colours[v], unique_colours))// 4 5 6 are the bad colours
-            colours[v] = colours[v] % 3;
+        if(Vprime[v])
+            colours[v] = 6; // 6 now represents uncoloured
     });
 
+    colours_copy = parlay::tabulate(parents.size(), [&] (T v) {
+        return colours[v];
+    });
 
-    // recolour uncoloured nodes
+    std::cout << "Invalid index: " << invalid_index << " parentclr: " << coloured(colours[parents[invalid_index]]) << " colour: " << coloured(colours[invalid_index]) << " ";
+    std::cout << "Children: ";
+    for(uint i = 0; i < G[invalid_index].size(); i++)
+        std:: cout << coloured(colours[G[invalid_index][i]]) << " ";
+    std::cout << std::endl;
+
     parlay::parallel_for(0, parents.size(), [&] (T v) {
-        if(colours[v] != uncoloured)
-            return;
-        
-        // pick the parent colour
-        // This should work for root too
-        T parent_colour = colours[parents[v]];
-
-        // pick a child colour, all children should have the same colour
-
-        T child_colour;
-
-        if(G[v].size() > 0) // a child exists
+        if (Vprime[v])
         {
-            child_colour = colours[G[v][0]]; //first child's colour
-        }
-        else
-            child_colour = (parent_colour + 1) % 3;
-
-        T my_colour = uncoloured;
-        
-        for(uint i = 0; i < 3; i++)
-        {
-           if(unique_colours[i] != child_colour && unique_colours[i] != parent_colour)
+            // if(Vprime[parents[v]] == false) // if father of v is not in V prime
+            if(colours_copy[parents[v]] != 6)
             {
-                my_colour = unique_colours[i]; 
+
+                bool invalid_colours[7] = {false, false, false, false, false, false, false};
+                
+                parlay::parallel_for(0, G[v].size(), [&] (T child_id) {
+                    
+                    invalid_colours[colours_copy[G[v][child_id]]] = true;
+                });
+                invalid_colours[colours_copy[parents[v]]] = true;
+
+                std::set<int> Set;
+                Set.insert(0);
+                Set.insert(1);
+                Set.insert(2);
+
+                for(uint i = 0; i < 7; i++)
+                {
+                    if(invalid_colours[i])
+                        Set.erase(i);
+                }
+
+                colours[v] = *Set.begin();
+
+                Vprime[v] = false;
             }
+
         }
-
-        colours[v] = my_colour;
-
     });
 
-    
+    colours_copy = parlay::tabulate(parents.size(), [&] (T v) {
+        return colours[v];
+    });
 
+    std::cout << "Invalid index: " << invalid_index << " parentclr: " << coloured(colours[parents[invalid_index]]) << " colour: " << coloured(colours[invalid_index]) << " ";
+    std::cout << "Children: ";
+    for(uint i = 0; i < G[invalid_index].size(); i++)
+        std:: cout << coloured(colours[G[invalid_index][i]]) << " ";
+    std::cout << std::endl;
 
+    parlay::parallel_for(0, parents.size(), [&] (T v) {
+        if (Vprime[v])
+        {
+            
+
+                bool invalid_colours[7] = {false, false, false, false, false, false, false};
+                
+                parlay::parallel_for(0, G[v].size(), [&] (T child_id) {
+                    invalid_colours[colours_copy[G[v][child_id]]] = true;
+                });
+                invalid_colours[colours_copy[parents[v]]] = true;
+
+                std::set<int> Set;
+                Set.insert(0);
+                Set.insert(1);
+                Set.insert(2);
+
+                for(uint i = 0; i < 7; i++)
+                {
+                    if(invalid_colours[i])
+                        Set.erase(i);
+                }
+
+                colours[v] = *Set.begin();
+
+            
+
+        }
+    });
+
+    std::cout << "Invalid index: " << invalid_index << " parentclr: " << coloured(colours[parents[invalid_index]]) << " colour: " << coloured(colours[invalid_index]) << " ";
+    std::cout << "Children: ";
+    for(uint i = 0; i < G[invalid_index].size(); i++)
+        std:: cout << coloured(colours[G[invalid_index][i]]) << " ";
+    std::cout << std::endl;
 
 
     return colours;
@@ -380,7 +584,7 @@ graph convert_parents_to_graph(graph G, parlay::sequence<T> parents)
     parlay::sequence<T> vertices = parlay::tabulate(parents.size(), [&] (T v) {return v;});
 
     G = parlay::map(vertices, [&] (T v) {
-        parlay::sequence<T> temp = parlay::tabulate(1, [&] (T v) {return v;});
+        parlay::sequence<T> temp = parlay::tabulate(1, [&] (T i) {return i;});
         temp[0] = parents[v];
         return temp;
     });
@@ -404,4 +608,47 @@ graph convert_parents_to_graph(graph G, parlay::sequence<T> parents)
     */
 
     return G;
+}
+
+template <typename T>
+bool verify_colouring(parlay::sequence<T> parents, parlay::sequence<T> colours, T* invalid_index)
+{
+
+    bool is_valid = true;
+
+    parlay::parallel_for(0, parents.size(), [&] (T v) {
+        if(v != parents[v] && colours[v] == colours[parents[v]])
+        {
+                is_valid = false;
+                *invalid_index = v;
+        }
+    });
+
+    return is_valid;
+}
+
+template <typename graph, typename T>
+bool verify_colouring(graph G, parlay::sequence<T> parents, parlay::sequence<T> colours, T* invalid_index)
+{
+
+    bool is_valid = true;
+
+    parlay::parallel_for(0, parents.size(), [&] (T v) {
+        if(v != parents[v] && colours[v] == colours[parents[v]])
+            {
+                is_valid = false;
+                *invalid_index = v;
+            }
+        auto edgelist = G[v];
+        parlay::parallel_for(0, edgelist.size(), [&] (int i) {
+            auto outgoing_node = edgelist[i];
+            if(colours[v] == colours[outgoing_node])
+            {    
+                is_valid = false;
+                *invalid_index = v;
+            }
+        });
+    });
+
+    return is_valid;
 }
