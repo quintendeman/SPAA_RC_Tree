@@ -627,6 +627,84 @@ bool verify_colouring(parlay::sequence<T> parents, parlay::sequence<T> colours, 
     return is_valid;
 }
 
+/*
+    returns edges, you gotta subtract them yourself later
+*/
+template<typename graph, typename T>
+parlay::sequence<T> find_forest(graph G, const int max_degree)
+{
+    parlay::sequence<T> edges = parlay::tabulate(G.size(), [&] (T v) {
+        return -1; // an edge of -1 means its not in the forest
+    });
+
+    parlay::sequence<T> roots = parlay::tabulate(G.size(), [&] (T v) {
+        return -1; // -1 means this vertex is note a root
+    });
+
+    parlay::sequence<T> vertices = parlay::tabulate(G.size(), [&] (T v) {
+        return v; // -1 means this vertex is note a root
+    });
+
+    parlay::parallel_for(0, G.size(), [&] (T v) {
+        auto edgelist = G[v];
+
+        bool local_maxima = true;
+
+        T max_neighbour = v;
+
+        for(uint i = 0; i < std::min(edgelist.size(), max_degree); i++) // max_degree so it doesn't mess up asymptotic spans etc
+        {
+            if (edgelist[i] > max_neighbour)
+            {
+                max_neighbour = edgelist[i];
+                local_maxima = false;
+            }
+        }
+
+        if(local_maxima)
+        {
+            roots[v] = v;
+        }
+        else
+            edges[v] = max_neighbour;
+        
+    });
+
+    parlay::parallel_for(0, G.size(), [&] (T v) {
+        if(roots[v])
+        {
+            auto edgelist = G[v];
+            if(edgelist.size())
+            {
+                edges[v] = edgelist[0];
+            }
+        }
+    });
+
+    return edges;
+}
+
+template<typename graph, typename T>
+graph subtract_edges(graph G, parlay::sequence<T> edges)
+{
+
+    parlay::parallel_for(0, G.size(), [&] (T v) {
+        if(edges[v] != -1)
+        {
+            G[v] = parlay::filter(G[v], (T w) {
+                return w != edges[v];
+            });
+            T w = edges[v];
+            G[w] = parlay::filter(G[w], (T vp) {
+                return vp != v;
+            });
+        }
+    });
+
+    return G;
+}
+
+
 template <typename graph, typename T>
 bool verify_colouring(graph G, parlay::sequence<T> parents, parlay::sequence<T> colours, T* invalid_index)
 {
@@ -651,4 +729,39 @@ bool verify_colouring(graph G, parlay::sequence<T> parents, parlay::sequence<T> 
     });
 
     return is_valid;
+}
+
+
+template <typename graph, typename T>
+parlay::sequence<T> colour_graph(graph G, const int max_degree = 8)
+{
+    parlay::sequence<T> colour;
+
+    parlay::sequence<T> vertex_id = parlay::tabulate(0, G.size(), [&] (T v) {
+        return v;
+    });
+
+    parlay::sequence<T> parents = find_forest(G, max_degree); 
+
+    parlay::sequence<T> valid_parent = parlay::map(parents, [&] (T v) {
+        return v != -1;
+    });
+
+    parents = parlay::parallel_for(0, parents.size(), [&] (T v) {
+        if(parents[v] == -1)
+            parents[v] = v; // just make each unconnected root's parent itself, so we don't break the implementations of colouring graphs
+    });
+
+
+
+    colour = six_colour_rooted_tree(parents, vertex_id);
+
+    // TODO remove edges to parents from graph
+    
+    // TODO 6 colour graph
+
+
+
+
+    return colour;
 }
