@@ -4,96 +4,7 @@
 #include "/scratch/parlaylib/examples/helper/graph_utils.h"
 #include <set>
 
-// template <typename T>
-// class bad_set // A horrible implementation, only useful for very very small sets (such as colours)
-// {
-//     private:
-//         parlay::sequence<T> elements;
 
-//         int get_element_index(T element)
-//         {
-//             for(int i = 0; i < this->elements.size(); i++)
-//             {
-//                 if(this->elements[i] == element)
-//                     return i;
-//             }
-//             return -1;
-//         }
-
-//     public:
-//         bad_set(void)
-//         {
-//             return;
-//         }
-//         bad_set(parlay::sequence<T> input_elements)
-//         {
-//             this->elements = input_elements;
-//             return;
-//         }
-//         bad_set(T arr[])
-//         {
-//             auto size_arr = sizeof(arr)/sizeof(arr[0]); 
-//             for(auto i = 0;i < size_arr; i++)
-//             {
-//                 this->elements.push_back(arr[i]);
-//             }
-//         }
-
-//         bool is_member(T element)
-//         {
-//             bool retval = false;
-//             for(uint i = 0; i < this->num_elementsize(); i++)
-//             {
-//                 if(element == this->elements[i])
-//                 {
-//                     return true;
-//                 }
-//             }
-//             return false;
-//         }
-
-//         void add_member(T element)
-//         {
-//             this->elements.push_back(element);
-//         }
-
-//         void remove_member(T element)
-//         {
-//             int index = this->get_element_index(element);
-//             int last_index = this->elements.size() - 1;
-//             if(index >= 0 && last_index >= 0)
-//             {
-//                 std::swap(this->elements[index], this->elements[last_index]);
-//                 this->elements.pop_back();
-//             }
-//         }
-
-//         void add_set(parlay::sequence<T> new_elements)
-//         {
-//             for(auto i = 0; i < new_elements.size(); i++)
-//             {
-//                 this->add_member(new_elements[i]);
-//             }
-//         }
-
-//         void subtract_set(parlay::sequence<T> new_elements)
-//         {
-//             for(auto i = 0; i < new_elements.size(); i++)
-//             {
-//                 this->remove_member(new_elements[i]);
-//             }
-//         }
-
-//         parlay::sequence<T> get_elements(void)
-//         {
-//             return this->elements;
-//         }
-
-//         auto get_cound(void)
-//         {
-//             return this->elements.size();
-//         }
-// };
 
 
 template <typename T>
@@ -732,36 +643,18 @@ bool verify_colouring(graph G, parlay::sequence<T> parents, parlay::sequence<T> 
 }
 
 
-template <typename graph, typename T>
-parlay::sequence<T> colour_graph(graph G, const int max_degree = 8)
-{
-    parlay::sequence<T> colour;
 
-    parlay::sequence<T> vertex_id = parlay::tabulate(0, G.size(), [&] (T v) {
+template <typename T, typename graph>
+parlay::sequence<T> colour_to_logn(graph G, const int max_degree = 8)
+{
+
+    static const T local_maxima_colour = (T) -1;
+
+    parlay::sequence<T> initial_colours = parlay::tabulate(G.size(), [&]  (T v) {
         return v;
     });
 
-    parlay::sequence<T> parents = find_forest(G, max_degree); 
 
-    parlay::sequence<T> valid_parent = parlay::map(parents, [&] (T v) {
-        return v != -1;
-    });
+    return initial_colours;
 
-    parents = parlay::parallel_for(0, parents.size(), [&] (T v) {
-        if(parents[v] == -1)
-            parents[v] = v; // just make each unconnected root's parent itself, so we don't break the implementations of colouring graphs
-    });
-
-
-
-    colour = six_colour_rooted_tree(parents, vertex_id);
-
-    // TODO remove edges to parents from graph
-    
-    // TODO 6 colour graph
-
-
-
-
-    return colour;
-}
+} 
