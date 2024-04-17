@@ -10,6 +10,7 @@
 #include "/scratch/parlaylib/include/parlay/internal/get_time.h"
 #include "RC.h"
 #include "/scratch/parlaylib/examples/samplesort.h"
+#include "/scratch/parlaylib/examples/counting_sort.h"
 
 /*
     MAXIMUM DEGREE
@@ -52,8 +53,40 @@ int main(int argc, char* argv[]) {
 
     is_valid_colouring(G, colours); // Takes a while but dw about it
 
-    
+    parlay::sequence<ColourIndexPair<vertex>> colour_pairs = colours_to_pairs(colours);
 
+    // std::cout << "pairs? ";
+    // for(uint i = 0; i < n; i++)
+    // {
+    //     std::cout << colour_pairs[i] << "." << (vertex) colour_pairs[i] << " ";
+    // }
+    // std::cout << std::endl;
+
+    // Count number of colours
+    // sample_sort(colours);
+
+    // std::cout << "There are unique colours: " << parlay::unique(colours).size() << std::endl;
+
+    parlay::sequence<ColourIndexPair<vertex>> result = parlay::tabulate(n, [&] (vertex v) {
+        return ColourIndexPair<vertex>(0,0);
+    });
+    // parlay::sequence<vertex> result(n);
+
+    parlay::sequence<unsigned long> offsets = counting_sort(colour_pairs.begin(), colour_pairs.end(), result.begin(), colour_pairs.begin(), 256);
+
+    // std::cout << "results? ";
+    // for(uint i = 0; i < n; i++)
+    // {
+    //     std::cout << result[i] << " ";
+    // }
+    // std::cout << std::endl;
+
+    // std::cout << "offsets? ";
+    // for(uint i = 0; i < offsets.size(); i++)
+    // {
+    //     std::cout << offsets[i] << " ";
+    // }
+    // std::cout << std::endl;
 
     return 0;
 }

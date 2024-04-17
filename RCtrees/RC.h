@@ -3,8 +3,54 @@
 #include "/scratch/parlaylib/include/parlay/sequence.h"
 #include "/scratch/parlaylib/examples/helper/graph_utils.h"
 #include <set>
+#include <iostream>
+
+template <typename T>
+struct ColourIndexPair {
+    public:
+        T colour;
+        T index;
+        ColourIndexPair(T incolour, T inindex)
+        {
+            this->colour = incolour;
+            this->index = inindex;
+        }
+
+        bool operator==(const ColourIndexPair& other) const {
+            return this->colour == other->colour;
+        }
+        bool operator<(const ColourIndexPair& other) const {
+            return this->colour < other->colour;
+        }
+        bool operator>(const ColourIndexPair& other) const {
+            return this->colour > other->colour;
+        }
+        bool operator>=(const ColourIndexPair& other) const {
+            return this->colour >= other->colour;
+        }
+        bool operator<=(const ColourIndexPair& other) const {
+            return this->colour <= other->colour;
+        }
+        ColourIndexPair& operator=(const ColourIndexPair& other) {
+        if (this != &other) { // Avoid self-assignment
+            this->colour = other.colour;
+            this->index = other.index;
+        }
+        return *this; // Return a reference to the modified object
+        }
+
+        operator long int() const {
+            return this->colour; // Return the colour
+        }
 
 
+        
+        friend std::ostream& operator<<(std::ostream& os, const ColourIndexPair& obj) {
+        os << obj.colour << ":" << obj.index;
+        return os;
+        }
+
+};
 
 
 template <typename T>
@@ -156,14 +202,32 @@ static unsigned char get_single_colour_contribution(const T vcolour, const T wco
 }
 
 
+template<typename T, typename graph>
+void print_graph(graph G, parlay::sequence<T> colours)
+{
+    for(uint i = 0; i < G.size(); i++)
+    {
+        std::cout << i << ":" << colours[i] << std::endl << "   ";
+        for(uint j = 0; j < G[i].size(); j++)
+        {
+            std::cout << G[i][j] << ":" << colours[G[i][j]] << " ";
+        }
+        std::cout << std::endl;
+    }
+
+
+    return;
+}
+
+
 /*
     Works on a CHAIN GRAPH
 */
 template <typename T, typename graph>
 parlay::sequence<T> colour_chains_to_logn(graph G, const T max_degree = 2)
 {
-    static const T local_maximum_colour = (T) -1;
-    static const T local_minimum_colour = (T) -2;
+    static const T local_maximum_colour = (T) 0;
+    static const T local_minimum_colour = (T) 1;
     
 
     parlay::sequence<T> colours = parlay::tabulate(G.size(), [&]  (T v) {
@@ -199,16 +263,18 @@ parlay::sequence<T> colour_chains_to_logn(graph G, const T max_degree = 2)
         {
             colours[v] = local_maximum_colour;
         }
-        if(local_minimum == v)
+        else if(local_minimum == v)
         {
             colours[v] = local_minimum_colour;
         }
         else
         {
-            colours[v] = get_single_colour_contribution(v, local_maximum) >> 1; // bit shifting right to eliminate that pesky indicator bit
+            colours[v] = 2 + (get_single_colour_contribution(v, local_maximum) / 2); // bit shifting right to eliminate that pesky indicator bit
         }
 
     });
+
+    // print_graph(G, colours);
 
     return colours;
 } 
@@ -254,8 +320,16 @@ bool is_valid_colouring(graph G, parlay::sequence<T> colours)
             std::cout << std::endl << std::endl;
         }
     }
-
-
     return is_valid;
 
+}
+
+template <typename T>
+parlay::sequence<ColourIndexPair<T>> colours_to_pairs( parlay::sequence<T> colours)
+{
+    parlay::sequence<ColourIndexPair<T>> ret_pairs = parlay::tabulate(colours.size(), [&] (T v) {
+        return ColourIndexPair(colours[v], v);
+    });
+    
+    return ret_pairs;
 }
