@@ -12,6 +12,8 @@
 #include "/scratch/parlaylib/examples/samplesort.h"
 #include "/scratch/parlaylib/examples/counting_sort.h"
 
+#include <cmath>
+
 /*
     MAXIMUM DEGREE
     I will figure out how to make this dynamic later
@@ -25,7 +27,7 @@ using vertex = long;
 using utils = graph_utils<vertex>;
 using graph = parlay::sequence<parlay::sequence<vertex> >;
 
-const vertex max_degree = 2;
+const vertex max_degree = 8;
 
 
 int main(int argc, char* argv[]) {
@@ -43,106 +45,58 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    graph G = utils::rmat_symmetric_graph(n, 1*n);
+    auto old_n = n;
 
-    degree_cap_graph(G, max_degree);
+    n = pow(2, floor(log2(n)));
+
+    std::cout << "Setting n to closest (lower) power of 2, so "  << old_n << " => " << n <<  std::endl;
+
+    auto parents = generate_tree_graph(n, true, false);
+
+    graph G;
+
+    G = convert_parents_to_graph(G, parents);
 
     utils::print_graph_stats(G);
 
-    auto colours = colour_chains_to_logn(G, max_degree);
+    degree_cap_graph(G, max_degree);
 
-    is_valid_colouring(G, colours); // Takes a while but dw about it
+    auto clusters = create_RC_Tree(G, max_degree);
 
-    parlay::sequence<ColourIndexPair<vertex>> colour_pairs = colours_to_pairs(colours);
+    return 0;
+}
 
-    // std::cout << "pairs? ";
-    // for(uint i = 0; i < n; i++)
-    // {
-    //     std::cout << colour_pairs[i] << "." << (vertex) colour_pairs[i] << " ";
-    // }
-    // std::cout << std::endl;
+// graph G = utils::rmat_symmetric_graph(n, 1*n);
 
-    // Count number of colours
-    // sample_sort(colours);
+    // degree_cap_graph(G, max_degree);
 
-    // std::cout << "There are unique colours: " << parlay::unique(colours).size() << std::endl;
+    // utils::print_graph_stats(G);
 
-    parlay::sequence<ColourIndexPair<vertex>> result = parlay::tabulate(n, [&] (vertex v) {
-        return ColourIndexPair<vertex>(0,0);
-    });
-    // parlay::sequence<vertex> result(n);
+    // auto colours = colour_chains_to_logn(G, max_degree);
 
-    parlay::sequence<unsigned long> offsets = counting_sort(colour_pairs.begin(), colour_pairs.end(), result.begin(), colour_pairs.begin(), 256);
+    // auto vertices = parlay::tabulate(n, [&] (vertex v) {return v;});
 
-    // std::cout << "results? ";
-    // for(uint i = 0; i < n; i++)
-    // {
-    //     std::cout << result[i] << " ";
-    // }
-    // std::cout << std::endl;
+    // is_valid_colouring(G, colours); // Takes a while but dw about it
 
-    // std::cout << "offsets? ";
-    // for(uint i = 0; i < offsets.size(); i++)
+    // auto result = vertices;
+
+    // parlay::sequence<unsigned long> offsets = counting_sort(vertices.begin(), vertices.end(), result.begin(), colours.begin(), 8 * sizeof(vertex));
+
+    // std::cout << "offsets ";
+    // for(uint i = 1; i < offsets.size(); i++)
     // {
     //     std::cout << offsets[i] << " ";
     // }
     // std::cout << std::endl;
 
-    return 0;
-}
+    // parlay::sequence<bool> MIS = get_MIS(G, result, offsets);
 
+    // std::cout << "MIS ";
+    // for(uint i = 1; i < MIS.size(); i++)
+    // {
+    //     std::cout << MIS[i] << " ";
+    // }
+    // std::cout << std::endl;
 
+    // auto base_clusters = 
 
-// auto parents = generate_tree_graph(n, true, false);
-    // vertex invalid_vertex = -1;
-    
-
-    
-    
-    // parlay::sequence<vertex> colours = parlay::tabulate(n, [&] (vertex i) {return i;});
-
-    // auto is_valid = verify_colouring(parents, colours, &invalid_vertex);
-
-    // std::cout << "Initial colouring is " << (is_valid ? "\033[32mVALID\033[0m" : "\033[31mINVALID\033[0m") << std::endl;
-
-    // colours = six_colour_rooted_tree(parents, colours);
-
-    // is_valid = verify_colouring(parents, colours, &invalid_vertex);  
-
-    // std::cout << "Six colouring is " << (is_valid ? "\033[32mVALID\033[0m" : "\033[31mINVALID\033[0m") << std::endl;  
-    
-    // G = convert_parents_to_graph(G, parents);
-
-    // is_valid = verify_colouring(G, parents, colours, &invalid_vertex);  
-
-    // std::cout << "Six colouring is still " << (is_valid ? "\033[32mVALID\033[0m" : "\033[31mINVALID\033[0m") << std::endl;  
-
-    // // sample_sort(colours);
-
-    // // std::cout << "Unique colours are " << std::endl;
-
-    // // auto six_unique_colours = parlay::unique(colours);
-    // // for(uint i = 0; i < six_unique_colours.size(); i++)
-    // //     std::cout << six_unique_colours[i] << " ";
-    // // std::cout << std::endl;
-
-    // // // utils::print_graph_stats(G);
-
-    // colours = convert_6_to_3_tree(G, parents, colours, true);
-
-    // is_valid = verify_colouring(parents, colours, &invalid_vertex);  
-
-    // std::cout << "Three colouring is " << (is_valid ? "\033[32mVALID\033[0m" : "\033[31mINVALID\033[0m") << std::endl;  
-    // if(!is_valid)
-    //     std::cout << "invalid index is: " << invalid_vertex << std::endl;
-
-    
-    // // for(uint i = 0; i < G.size(); i++)
-    // // {
-    // //     std::cout << colours[i] << "\t";
-    // // }
-    // // std::cout << std::endl;
-
-    // // sample_sort(colours);
-
-    // // std::cout << "Unique colours are: " << parlay::unique(colours).size() << std::endl;

@@ -5,83 +5,33 @@
 #include <set>
 #include <iostream>
 
-template <typename T>
-struct ColourIndexPair {
-    public:
-        T colour;
-        T index;
-        ColourIndexPair(T incolour, T inindex)
-        {
-            this->colour = incolour;
-            this->index = inindex;
-        }
-
-        bool operator==(const ColourIndexPair& other) const {
-            return this->colour == other->colour;
-        }
-        bool operator<(const ColourIndexPair& other) const {
-            return this->colour < other->colour;
-        }
-        bool operator>(const ColourIndexPair& other) const {
-            return this->colour > other->colour;
-        }
-        bool operator>=(const ColourIndexPair& other) const {
-            return this->colour >= other->colour;
-        }
-        bool operator<=(const ColourIndexPair& other) const {
-            return this->colour <= other->colour;
-        }
-        ColourIndexPair& operator=(const ColourIndexPair& other) {
-        if (this != &other) { // Avoid self-assignment
-            this->colour = other.colour;
-            this->index = other.index;
-        }
-        return *this; // Return a reference to the modified object
-        }
-
-        operator long int() const {
-            return this->colour; // Return the colour
-        }
+static const short empty_type = 0;
 
 
-        
-        friend std::ostream& operator<<(std::ostream& os, const ColourIndexPair& obj) {
-        os << obj.colour << ":" << obj.index;
-        return os;
-        }
 
-};
+static const short base_vertex = 1;
+static const short base_edge = 2;
+static const short unary_cluster = 4;
+static const short binary_cluster = 8;
+static const short nullary_cluster = 16;
+
+static const short needs_colouring = 32;
+
+static const short unaffected = 64;
+static const short affected = 128;
+static const short live = 256;
+static const short eligible = 512;
 
 
 template <typename T>
-void printBits(T num) {
-    int numBits = sizeof(T) * 8; // Total number of bits in an integer
-
-    // Start from the most significant bit and iterate through each bit
-    for (int i = numBits - 1; i >= 0; i--) {
-        // Check if the bit at position i is set
-        int mask = 1 << i;
-        if (num & mask) {
-            std::cout << "1";
-        } else {
-            std::cout << "0";
-        }
-
-        // Print a space after every 4 bits for better readability
-        if (i % 4 == 0) {
-            std::cout << " ";
-        }
-    }
-}
-
-void print_string(std::string input_string)
+struct cluster
 {
-    for(uint i = 0; i < input_string.length(); i++)
-    {
-        std::cout << (int) input_string[i] << " ";
-    }
-    std::cout << std::endl;
-}
+    public:
+        T index = -1;
+        short state = empty_type; // unaffected, affected or update eligible
+        parlay::sequence<cluster*> data;
+        
+};
 
 /*
     Basic workflow
@@ -234,6 +184,8 @@ parlay::sequence<T> colour_chains_to_logn(graph G, const T max_degree = 2)
         return v;
     });
 
+    auto initial_colours = colours;
+
       if(max_degree > 2)
     {
         std::cout << "Error: Need a chain" << std::endl;  
@@ -242,39 +194,37 @@ parlay::sequence<T> colour_chains_to_logn(graph G, const T max_degree = 2)
  
 
     parlay::parallel_for(0, G.size(), [&] (T v) {
-        auto edgelist = G[v]; // TODO replace with G[v] to remove extra writes
-        T local_maximum = v;
-        T local_minimum = v;
+        // auto edgelist = G[v]; // TODO replace with G[v] to remove extra writes
+        T local_maximum = initial_colours[v];
+        T local_minimum = initial_colours[v];
 
-        for(uint i = 0; i < std::min(max_degree, (T) edgelist.size()); i++)
+        for(uint i = 0; i < std::min(max_degree, (T) G[v].size()); i++)
         {
-            T w = edgelist[i];
-            if(w > local_maximum)
+            // T w = G[v][i];
+            if(initial_colours[G[v][i]] > local_maximum)
             {
-                local_maximum = w;
+                local_maximum = initial_colours[G[v][i]];
             }
-            if (w < local_minimum)
+            if (initial_colours[G[v][i]] < local_minimum)
             {
-                local_minimum = w;
+                local_minimum = initial_colours[G[v][i]];
             }
         }
 
-        if(local_maximum == v) // This node is a local maximum, give it a unique colour
+        if(local_maximum == initial_colours[v]) // This node is a local maximum, give it a unique colour
         {
             colours[v] = local_maximum_colour;
         }
-        else if(local_minimum == v)
+        else if(local_minimum == initial_colours[v])
         {
             colours[v] = local_minimum_colour;
         }
         else
         {
-            colours[v] = 2 + (get_single_colour_contribution(v, local_maximum) / 2); // bit shifting right to eliminate that pesky indicator bit
+            colours[v] = 2 + (get_single_colour_contribution(initial_colours[v], local_maximum) / 2); // bit shifting right to eliminate that pesky indicator bit
         }
 
     });
-
-    // print_graph(G, colours);
 
     return colours;
 } 
@@ -324,12 +274,131 @@ bool is_valid_colouring(graph G, parlay::sequence<T> colours)
 
 }
 
-template <typename T>
-parlay::sequence<ColourIndexPair<T>> colours_to_pairs( parlay::sequence<T> colours)
+
+template <typename T, typename graph>
+parlay::sequence<bool> get_MIS(graph G, parlay::sequence<T> sorted_vertices, parlay::sequence<unsigned long> offsets)
 {
-    parlay::sequence<ColourIndexPair<T>> ret_pairs = parlay::tabulate(colours.size(), [&] (T v) {
-        return ColourIndexPair(colours[v], v);
+    auto n = G.size();
+
+    parlay::sequence<bool> is_in_MIS = parlay::tabulate(n, [&] (T v) {
+        return false;
+    });
+
+    // iterate over the colours
+    for(T i = 0; i < offsets.size(); i++)
+    {
+        T start_index;
+        if (i == 0)
+            start_index = 0;
+        else
+            start_index = offsets[i-1];
+        T end_index = offsets[i];
+
+        parlay::parallel_for(start_index, end_index, [&] (T v) {
+            bool keep_this_node = true;
+
+            for(T w = 0; w < G[v].size(); w++)
+            {
+                if(is_in_MIS[G[v][w]])
+                    keep_this_node = false;
+            }
+
+            is_in_MIS[v] = keep_this_node;
+        });
+    }
+    return is_in_MIS;
+}
+
+/*
+    Generate a simple, single rooted graph with each node having two children
+    Then, randomly, change the parent of each node with a certain probability such that it picks something on the left of it
+*/
+template <typename T>
+parlay::sequence<T> generate_tree_graph(T num_elements, bool randomized = true, bool sequential = false)
+{
+    assert(num_elements > 0);
+
+    parlay::sequence<T> dummy_initial_parents = parlay::tabulate(num_elements, [&] (T v) {return (T) 0;});
+
+    if(sequential)
+    {
+       parlay::parallel_for(0, num_elements, [&] (T i) {
+            
+            if(i)
+                dummy_initial_parents[i] = i-1;
+            else 
+                dummy_initial_parents[0] = 0; // root's parent is itself
+
+        }); 
+        return dummy_initial_parents;
+    }
+
+    parlay::parallel_for(0, num_elements, [&] (T i) {
+        dummy_initial_parents[i] = i/2;
+    }); 
+    if(!randomized)
+        return dummy_initial_parents;
+
+    parlay::sequence<T> vertices = parlay::tabulate(num_elements, [&] (T v) {return v;});
+    parlay::sequence<T> random_index = parlay::random_shuffle(vertices);
+
+    parlay::parallel_for(0, num_elements, [&] (T v) {
+        T picked_parent = random_index[v];
+        if(picked_parent < v)
+            dummy_initial_parents[v] = picked_parent;
     });
     
-    return ret_pairs;
+    return dummy_initial_parents;
 }
+
+/*
+    Converts parents into a graph
+*/
+template <typename graph, typename T>
+graph convert_parents_to_graph(graph G, parlay::sequence<T> parents)
+{
+    parlay::sequence<T> vertices = parlay::tabulate(parents.size(), [&] (T v) {return v;});
+
+    G = parlay::map(vertices, [&] (T v) {
+        parlay::sequence<T> temp = parlay::tabulate(1, [&] (T i) {return i;});
+        temp[0] = parents[v];
+        return temp;
+    });
+
+    G = graph_utils<T>::symmetrize(G);
+
+    return G;
+}
+
+template <typename T>
+parlay::sequence<cluster<T>> create_RC_Tree(parlay::sequence<parlay::sequence<T>> G, const T max_degree)
+{
+
+    // create base clusters with no edges
+    parlay::sequence<cluster<T>> base_clusters = parlay::tabulate(G.size(), [&] (T v) {
+        cluster<T> base_cluster;
+        base_cluster.index = v;
+        base_cluster.state = base_vertex | live;
+        return base_cluster;
+    });
+
+    // add edges
+    // If a base_cluster directly pointers to another base_cluster, this represents an edge
+    parlay::parallel_for(0, base_clusters.size(), [&] (T v) {
+        base_clusters[v].data = parlay::tabulate(G[v].size(), [&] (T w) {
+            return &base_clusters[G[v][w]];
+        });
+    });
+
+    parlay::sequence<cluster<T>> internal_clusters = parlay::tabulate(G.size(), [&] (T v) {
+        cluster<T> base_cluster;
+        base_cluster.index = v;
+        base_cluster.state = empty_type;
+        return base_cluster;
+    });
+
+    return base_clusters;
+
+}
+
+
