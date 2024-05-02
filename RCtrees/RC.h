@@ -8,6 +8,15 @@
 #include <iostream>
 #include <mutex>
 
+
+#define ANSI_COLOR_RED     "\x1b[31m"
+#define ANSI_COLOR_GREEN   "\x1b[32m"
+#define ANSI_COLOR_YELLOW  "\x1b[33m"
+#define ANSI_COLOR_BLUE    "\x1b[34m"
+#define ANSI_COLOR_MAGENTA "\x1b[35m"
+#define ANSI_COLOR_CYAN    "\x1b[36m"
+#define ANSI_COLOR_RESET   "\x1b[0m"
+
 const short empty_type = 0;
 const short base_vertex = 1;
 const short base_edge = 2;
@@ -344,7 +353,7 @@ void set_MIS(parlay::sequence<cluster<T>*> clusters)
     These clusters must have a maximum degree of 2
 */
 template<typename T>
-void check_MIS(parlay::sequence<cluster<T>*> clusters)
+bool check_MIS(parlay::sequence<cluster<T>*> clusters)
 {
 
     bool is_valid_MIS = true;
@@ -403,6 +412,8 @@ void check_MIS(parlay::sequence<cluster<T>*> clusters)
         }
         std::cout << std::endl;
     }
+
+    return is_valid_MIS;
 
 }
 
@@ -472,6 +483,62 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
 }
 
 template <typename T>
+void print_cluster(parlay::sequence<cluster<T>*> clusters)
+{
+    static char cluster_colours = 0;
+    std::string colour_string;
+    switch(cluster_colours) {
+        case 0: colour_string = ANSI_COLOR_RED; break;
+        case 1: colour_string = ANSI_COLOR_GREEN; break;
+        case 2: colour_string = ANSI_COLOR_YELLOW; break;
+        case 3: colour_string = ANSI_COLOR_BLUE; break;
+        case 4: colour_string = ANSI_COLOR_MAGENTA; break;
+        case 5: colour_string = ANSI_COLOR_CYAN; break;
+        default: colour_string = ANSI_COLOR_RESET;
+    }
+
+    std::cout << colour_string;
+
+    for(uint i = 0; i < clusters.size(); i++)
+    {
+        std::cout << i<< " "<<clusters[i]->data.size() <<  " " << clusters[i]->final_colour << " " << " ";
+        if(clusters[i]->state & live)
+        {
+            std::cout << "live ";
+        }
+        else if (clusters[i]->state & nullary_cluster)
+        {
+            std::cout << "nullary ";
+        }
+        else if (clusters[i]->state & binary_cluster)
+        {
+            std::cout << "binary ";
+        }
+        else if (clusters[i]->state & unary_cluster)
+        {
+            std::cout << "unary ";
+        }
+        for(uint j = 0; j < clusters[i]->data.size(); j++)
+        {
+            if(clusters[i]->data[j] == NULL)
+                std::cout << "null ";
+            else
+                std::cout << clusters[i]->data[j]->index << " ";
+        }
+        if(clusters[i]->is_MIS)
+        {
+            std::cout << "\u2713";
+        }
+        std::cout << std::endl;
+        
+    }
+
+    std::cout << ANSI_COLOR_RESET;
+
+    cluster_colours = (cluster_colours + 1) % 6; 
+}
+
+template <typename T>
 void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
 {
     
@@ -494,12 +561,17 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
 
     set_MIS(candidates);
 
-    candidates = parlay::filter(all_cluster_ptrs, [&] (cluster<T>* C) {
+    candidates = parlay::filter(candidates, [&] (cluster<T>* C) {
         return (C->is_MIS);
     });
 
-    // check_MIS(candidates);
-
+    // bool valid_MIS = check_MIS(candidates);
+    // if(!valid_MIS)
+    // {
+    //     print_cluster(parlay::tabulate(base_clusters.size(), [&] (T v) {
+    //     return &base_clusters[v];
+    // }));
+    // }
     // do rake and compress
     parlay::parallel_for(0, candidates.size(), [&] (T v) {
         cluster<T>* cluster_ptr = candidates[v];
@@ -546,10 +618,11 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
 
             cluster_ptr->state|=unary_cluster;
         }
-        else if (cluster_ptr->data.size() == 2)
+        else 
+        if (cluster_ptr->data.size() == 2)
         {
-            auto left_edge_ptr = cluster_ptr->data[0];
-            auto right_edge_ptr = cluster_ptr->data[1];
+            auto left_edge_ptr = cluster_ptr->data[1];
+            auto right_edge_ptr = cluster_ptr->data[0];
 
             auto left_node_ptr = left_edge_ptr->data[0];
             if(left_node_ptr == cluster_ptr)
@@ -603,7 +676,8 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
 
     // find MIS amongst these
     tester+=1;
-    }while(tester < 3);
+    std::cout << "Candidates.size(): " << candidates.size() << std::endl;
+    }while(candidates.size());
     
 
 }
