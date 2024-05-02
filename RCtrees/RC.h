@@ -547,7 +547,12 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
         return &base_clusters[v];
     });
 
-    parlay::sequence<cluster<T>*> candidates;
+    parlay::sequence<cluster<T>*> forest, candidates;
+
+    forest = parlay::filter(all_cluster_ptrs, [&] (cluster<T>* C) {
+        return ((C->state & live));
+    });
+
 
     uint tester = 0;
 
@@ -555,13 +560,20 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
     {
     
     // TODO: Convert this to approximate compaction!!!
-    candidates = parlay::filter(all_cluster_ptrs, [&] (cluster<T>* C) {
-        return (C->data.size() <= 2 && (C->state & live));
+    forest = parlay::filter(forest, [&] (cluster<T>* C) {
+        return ((C->state & live));
     });
 
-    set_MIS(candidates);
+    // TODO: Convert this to approximate compaction!!!
+    auto eligible = parlay::filter(forest, [&] (cluster<T>* C) {
+        return (C->data.size() <= 2);
+    });
 
-    candidates = parlay::filter(candidates, [&] (cluster<T>* C) {
+    
+
+    set_MIS(eligible);
+
+    candidates = parlay::filter(eligible, [&] (cluster<T>* C) {
         return (C->is_MIS);
     });
 
@@ -679,5 +691,8 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
     std::cout << "Candidates.size(): " << candidates.size() << std::endl;
     }while(candidates.size());
     
+    print_cluster(parlay::tabulate(base_clusters.size(), [&] (T v) {
+        return &base_clusters[v];
+    }));
 
 }
