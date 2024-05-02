@@ -2,25 +2,25 @@
 #include "/scratch/parlaylib/include/parlay/primitives.h"
 #include "/scratch/parlaylib/include/parlay/sequence.h"
 #include "/scratch/parlaylib/examples/helper/graph_utils.h"
+#include <random>
 #include <set>
 #include <iostream>
+#include <mutex>
 
 static const short empty_type = 0;
-
-
-
 static const short base_vertex = 1;
 static const short base_edge = 2;
 static const short unary_cluster = 4;
 static const short binary_cluster = 8;
 static const short nullary_cluster = 16;
-
 static const short needs_colouring = 32;
-
 static const short unaffected = 64;
 static const short affected = 128;
 static const short live = 256;
 static const short eligible = 512;
+static const short dead = 1024;
+static const short uninitialized = 2048;
+static const short initialized = 4096;
 
 
 template <typename T>
@@ -29,9 +29,88 @@ struct cluster
     public:
         T index = -1;
         short state = empty_type; // unaffected, affected or update eligible
-        parlay::sequence<cluster*> data;
-        
+        parlay::sequence<cluster<T>*> data;
+        cluster<T>* parent;
+        T temp_colour;
+        T final_colour;
+        T is_MIS;
 };
+
+/*
+    Generate a simple, single rooted graph with each node having two children
+    Then, randomly, change the parent of each node with a certain probability such that it picks something on the left of it
+*/
+template <typename T>
+parlay::sequence<T> generate_tree_graph(T num_elements)
+{
+    assert(num_elements > 0);
+
+    parlay::sequence<T> dummy_initial_parents = parlay::tabulate(num_elements, [&] (T v) {return (T) 0;});
+
+    std::mt19937 gen(std::random_device{}());
+
+    parlay::parallel_for(0, num_elements, [&] (T v) {
+        double lambda = 1.0 / (((double) v) * 0.1);
+        std::exponential_distribution<double> dist(lambda);
+        double value = dist(gen);
+        T T_value = (T) value;
+        if (T_value > v)
+            T_value = v;
+        dummy_initial_parents[v] = T_value;
+    });  
+    
+    return dummy_initial_parents;
+}
+
+/*
+    Converts parents into a graph
+*/
+template <typename graph, typename T>
+graph convert_parents_to_graph(graph G, parlay::sequence<T> parents)
+{
+    parlay::sequence<T> vertices = parlay::tabulate(parents.size(), [&] (T v) {return v;});
+
+    G = parlay::map(vertices, [&] (T v) {
+        if(parents[v] == v) // root
+        {
+            parlay::sequence<T> empty;
+            return empty;
+        }
+        parlay::sequence<T> temp = parlay::tabulate(1, [&] (T i) {return i;});
+        temp[0] = parents[v];
+        return temp;
+    });
+
+    return G;
+}
+
+/**
+ * 
+*/
+template <typename T>
+void degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
+{
+    parlay::sequence<std::atomic<T>> counts = parlay::tabulate(parents.size(), [] (size_t) {
+       return std::atomic<T>(0); // Initialize each element with the value 0
+    });
+
+
+    parlay::parallel_for(0, parents.size(), [&] (T v) {
+        if(counts[parents[v]].load() >= (max_degree))
+        {
+            parents[v] = v;
+        }
+        T parent_count = counts[parents[v]].fetch_add(1);
+        if(parent_count >= (max_degree - 1))
+        {
+            parents[v] = v;
+        }
+    });
+
+}
+
+
+
 
 /*
     Basic workflow
@@ -81,25 +160,6 @@ void delete_assymetric_pairs(parlay::sequence<parlay::sequence<vertex>>& G)
 }
 
 
-/*
-    Only works on symmetric graphs with no redundancies
-    Like the one returned from rmat_symmetric_graph
-*/
-template <typename vertex>
-auto degree_cap_graph(parlay::sequence<parlay::sequence<vertex>>& G, const vertex max_degree)
-{   
-    vertex n = G.size();
-    auto vertices = parlay::tabulate<vertex>(n, [&] (vertex i) {return n;});
-
-    parlay::parallel_for(0, vertices.size(), [&] (vertex i) {
-        if(G[i].size() > max_degree)
-            G[i] = G[i].subseq(0, max_degree); // Does this result in gaps?
-    });
-
-    delete_assymetric_pairs(G);
-
-    return;
-}
 
 template <typename T>
 static inline bool extract_bit(T number, int offset_from_right)
@@ -171,121 +231,76 @@ void print_graph(graph G, parlay::sequence<T> colours)
 
 
 /*
-    Works on a CHAIN GRAPH
+    WARNING, ONLY WORKS ON CHAINS WITH 2 EDGES
 */
-template <typename T, typename graph>
-parlay::sequence<T> colour_chains_to_logn(graph G, const T max_degree = 2)
+template<typename T>
+void colour_clusters(parlay::sequence<cluster<T>>& clusters)
 {
     static const T local_maximum_colour = (T) 0;
-    static const T local_minimum_colour = (T) 1;
-    
+    static const T local_minimum_colour = (T) 1;    
 
-    parlay::sequence<T> colours = parlay::tabulate(G.size(), [&]  (T v) {
-        return v;
-    });
+    parlay::parallel_for(0, clusters.size(), [&] (T v) {
+        T local_maximum = clusters[v].temp_colour;
+        T local_minimum = clusters[v].temp_colour;
 
-    auto initial_colours = colours;
-
-      if(max_degree > 2)
-    {
-        std::cout << "Error: Need a chain" << std::endl;  
-        return colours;  
-    }
- 
-
-    parlay::parallel_for(0, G.size(), [&] (T v) {
-        // auto edgelist = G[v]; // TODO replace with G[v] to remove extra writes
-        T local_maximum = initial_colours[v];
-        T local_minimum = initial_colours[v];
-
-        for(uint i = 0; i < std::min(max_degree, (T) G[v].size()); i++)
+        for(uint i = 0; i < clusters[v].data.size(); i++)
         {
-            // T w = G[v][i];
-            if(initial_colours[G[v][i]] > local_maximum)
-            {
-                local_maximum = initial_colours[G[v][i]];
-            }
-            if (initial_colours[G[v][i]] < local_minimum)
-            {
-                local_minimum = initial_colours[G[v][i]];
-            }
+            T compared_colour = clusters[v].data[i]->temp_colour;
+            if(compared_colour > local_maximum)
+                local_maximum = compared_colour;
+            if(compared_colour < local_minimum)
+                compared_colour = local_minimum;   
         }
 
-        if(local_maximum == initial_colours[v]) // This node is a local maximum, give it a unique colour
+        if(local_maximum == clusters[v].temp_colour) // This node is a local maximum, give it a unique colour
         {
-            colours[v] = local_maximum_colour;
+            clusters[v].final_colour = local_maximum_colour;
         }
-        else if(local_minimum == initial_colours[v])
+        else if(local_minimum == clusters[v].temp_colour)
         {
-            colours[v] = local_minimum_colour;
+            clusters[v].final_colour = local_minimum_colour;
         }
         else
         {
-            colours[v] = 2 + (get_single_colour_contribution(initial_colours[v], local_maximum) / 2); // bit shifting right to eliminate that pesky indicator bit
+            clusters[v].final_colour = 2 + (get_single_colour_contribution(clusters[v].temp_colour, local_maximum) / 2); // bit shifting right to eliminate that pesky indicator bit
         }
 
     });
 
-    return colours;
-} 
-
-
-
-template <typename T, typename graph>
-bool is_valid_colouring(graph G, parlay::sequence<T> colours)
-{
-
-    parlay::sequence<T> wrongs = parlay::tabulate(G.size(), [&]  (T v) {
-        return (T) -1;
-    });
-
-    bool is_valid = true;
-
-
-    parlay::parallel_for(0, G.size(), [&] (T v) {
-        auto edgelist = G[v];
-        parlay::parallel_for(0, edgelist.size(), [&] (T ind) {
-            auto w = edgelist[ind];
-            if(colours[v] == colours[w])
-            {
-                is_valid = false;
-                wrongs[v] = w;
-            }
-        });
-    });
-
-    for(uint v = 0; v < G.size(); v++)
-    {
-        if (wrongs[v] != -1)
-        {
-            std::cout << "Vertex " << v <<" has a wrong colour: " << colours[v] << std::endl;
-            std::cout << v << "\'s neighbour colours are: ";
-            for(uint i = 0; i < G[v].size(); i++)
-                std::cout << "(" << G[v][i] << ")" << ":" << colours[G[v][i]] << " ";
-            std::cout << std::endl;  
-            std::cout << "Conflicting node's ID: " << wrongs[v] << std::endl;
-            std::cout << "Conflicting node's neighbour colours: ";
-            for(uint i = 0; i < G[wrongs[v]].size(); i++)
-                std::cout << "(" << G[wrongs[v]][i] << ")"  << ":" << colours[G[wrongs[v]][i]] << " ";
-            std::cout << std::endl << std::endl;
-        }
-    }
-    return is_valid;
+    return;
 
 }
 
-
-template <typename T, typename graph>
-parlay::sequence<bool> get_MIS(graph G, parlay::sequence<T> sorted_vertices, parlay::sequence<unsigned long> offsets)
+/*
+    sets a boolean flag in the clusters indicating that they're part of MIS
+    also may change the boolean flag of some other clusters, only consider the clusters in this
+    These clusters must have a maximum degree of 2
+*/
+template<typename T>
+void set_MIS(parlay::sequence<cluster<T>>& clusters)
 {
-    auto n = G.size();
 
-    parlay::sequence<bool> is_in_MIS = parlay::tabulate(n, [&] (T v) {
-        return false;
+    colour_clusters(clusters);
+
+    parlay::parallel_for(0, clusters.size(), [&] (T v) {
+        clusters[v].is_MIS = false;
+        for(uint i = 0; i < clusters[v].data.size(); i++)
+            clusters[v].data[i]->is_MIS = false;
     });
 
-    // iterate over the colours
-    for(T i = 0; i < offsets.size(); i++)
+    auto colours = parlay::tabulate(clusters.size(), [&] (T v) {
+        clusters[v].final_colour;
+    });
+
+    auto vertices = parlay::tabulate(clusters.size(), [&] (T v) {
+        return v;
+    });
+
+    auto result = vertices;
+
+    parlay::sequence<unsigned long> offsets = counting_sort(vertices.begin(), vertices.end(), result.begin(), colours.begin(), 8 * sizeof(T));
+
+    for(uint i = 0; i < offsets.size(); i++)
     {
         T start_index;
         if (i == 0)
@@ -294,108 +309,90 @@ parlay::sequence<bool> get_MIS(graph G, parlay::sequence<T> sorted_vertices, par
             start_index = offsets[i-1];
         T end_index = offsets[i];
 
+
         parlay::parallel_for(start_index, end_index, [&] (T v) {
             bool keep_this_node = true;
-
-            for(T w = 0; w < G[v].size(); w++)
+            for(uint w = 0; w < clusters[v].data.size(); w++)
             {
-                if(is_in_MIS[G[v][w]])
+                if(clusters[v].data[w]->is_MIS == true)
+                {
                     keep_this_node = false;
+                    break;
+                }
             }
-
-            is_in_MIS[v] = keep_this_node;
+            clusters[v].is_MIS = keep_this_node;
         });
     }
-    return is_in_MIS;
+
+
 }
 
-/*
-    Generate a simple, single rooted graph with each node having two children
-    Then, randomly, change the parent of each node with a certain probability such that it picks something on the left of it
+/**
+* Input: G, an ASSYMETRIC graph
 */
 template <typename T>
-parlay::sequence<T> generate_tree_graph(T num_elements, bool randomized = true, bool sequential = false)
-{
-    assert(num_elements > 0);
-
-    parlay::sequence<T> dummy_initial_parents = parlay::tabulate(num_elements, [&] (T v) {return (T) 0;});
-
-    if(sequential)
-    {
-       parlay::parallel_for(0, num_elements, [&] (T i) {
-            
-            if(i)
-                dummy_initial_parents[i] = i-1;
-            else 
-                dummy_initial_parents[0] = 0; // root's parent is itself
-
-        }); 
-        return dummy_initial_parents;
-    }
-
-    parlay::parallel_for(0, num_elements, [&] (T i) {
-        dummy_initial_parents[i] = i/2;
-    }); 
-    if(!randomized)
-        return dummy_initial_parents;
-
-    parlay::sequence<T> vertices = parlay::tabulate(num_elements, [&] (T v) {return v;});
-    parlay::sequence<T> random_index = parlay::random_shuffle(vertices);
-
-    parlay::parallel_for(0, num_elements, [&] (T v) {
-        T picked_parent = random_index[v];
-        if(picked_parent < v)
-            dummy_initial_parents[v] = picked_parent;
-    });
-    
-    return dummy_initial_parents;
-}
-
-/*
-    Converts parents into a graph
-*/
-template <typename graph, typename T>
-graph convert_parents_to_graph(graph G, parlay::sequence<T> parents)
-{
-    parlay::sequence<T> vertices = parlay::tabulate(parents.size(), [&] (T v) {return v;});
-
-    G = parlay::map(vertices, [&] (T v) {
-        parlay::sequence<T> temp = parlay::tabulate(1, [&] (T i) {return i;});
-        temp[0] = parents[v];
-        return temp;
-    });
-
-    G = graph_utils<T>::symmetrize(G);
-
-    return G;
-}
-
-template <typename T>
-parlay::sequence<cluster<T>> create_RC_Tree(parlay::sequence<parlay::sequence<T>> G, const T max_degree)
+parlay::sequence<cluster<T>> create_RC_Tree(parlay::sequence<parlay::sequence<T>> &G, const T max_degree)
 {
 
-    // create base clusters with no edges
-    parlay::sequence<cluster<T>> base_clusters = parlay::tabulate(G.size(), [&] (T v) {
+    T n = G.size();
+    auto [sums, m] = parlay::scan(parlay::tabulate(G.size(), [&] (T v) {
+        return G[v].size();
+    }));
+
+    parlay::sequence<cluster<T>> base_clusters = parlay::tabulate(n+m, [&] (T v) {
         cluster<T> base_cluster;
         base_cluster.index = v;
-        base_cluster.state = base_vertex | live;
+        base_cluster.temp_colour = v;
+        if(v < n)
+            base_cluster.state = base_vertex | live;
+        else
+            base_cluster.state = base_edge | live;
         return base_cluster;
     });
 
-    // add edges
-    // If a base_cluster directly pointers to another base_cluster, this represents an edge
-    parlay::parallel_for(0, base_clusters.size(), [&] (T v) {
-        base_clusters[v].data = parlay::tabulate(G[v].size(), [&] (T w) {
-            return &base_clusters[G[v][w]];
-        });
+
+    // populate base edge clusters
+    parlay::parallel_for(0, n, [&] (T v) {
+        
+        for(uint i = 0; i < G[v].size(); i++)
+        {
+            auto location = n + sums[v] + i;
+            base_clusters[location].data.push_back(&base_clusters[v]);
+            base_clusters[location].data.push_back(&base_clusters[G[v][i]]);
+        }
     });
 
-    parlay::sequence<cluster<T>> internal_clusters = parlay::tabulate(G.size(), [&] (T v) {
-        cluster<T> base_cluster;
-        base_cluster.index = v;
-        base_cluster.state = empty_type;
-        return base_cluster;
+
+    // connect outgoing edges
+    parlay::parallel_for(0, n, [&] (T v) {
+        for(uint i = 0; i < G[v].size(); i++) // It is fine because constant degree graph
+        {
+            auto edge_location = n + sums[v] + i;
+            base_clusters[v].data.push_back(&base_clusters[edge_location]);
+        }
     });
+
+
+    std::mutex* mutexes = new std::mutex[n];
+
+    // connect incoming edges
+    parlay::parallel_for(0, n, [&] (T v) {
+        for(uint i = 0; i < G[v].size(); i++) // It is fine because constant degree graph
+        {
+            auto edge_location = n + sums[v] + i;
+            auto w = G[v][i]; // destination
+            std::unique_lock<std::mutex> lock(mutexes[w]);
+            base_clusters[w].data.push_back(&base_clusters[edge_location]);
+            lock.unlock();
+        }
+    });
+
+    delete[] mutexes;
+
+
+
+
+
 
     return base_clusters;
 

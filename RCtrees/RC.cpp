@@ -51,7 +51,9 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Setting n to closest (lower) power of 2, so "  << old_n << " => " << n <<  std::endl;
 
-    auto parents = generate_tree_graph(n, true, false);
+    auto parents = generate_tree_graph(n);
+
+    degree_cap_parents(parents, max_degree);
 
     graph G;
 
@@ -59,7 +61,7 @@ int main(int argc, char* argv[]) {
 
     utils::print_graph_stats(G);
 
-    degree_cap_graph(G, max_degree);
+    // degree_cap_graph(G, max_degree);
 
     auto clusters = create_RC_Tree(G, max_degree);
 
