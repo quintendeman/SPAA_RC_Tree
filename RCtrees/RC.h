@@ -2,25 +2,26 @@
 #include "/scratch/parlaylib/include/parlay/primitives.h"
 #include "/scratch/parlaylib/include/parlay/sequence.h"
 #include "/scratch/parlaylib/examples/helper/graph_utils.h"
+#include "/scratch/parlaylib/examples/counting_sort.h"
 #include <random>
 #include <set>
 #include <iostream>
 #include <mutex>
 
-static const short empty_type = 0;
-static const short base_vertex = 1;
-static const short base_edge = 2;
-static const short unary_cluster = 4;
-static const short binary_cluster = 8;
-static const short nullary_cluster = 16;
-static const short needs_colouring = 32;
-static const short unaffected = 64;
-static const short affected = 128;
-static const short live = 256;
-static const short eligible = 512;
-static const short dead = 1024;
-static const short uninitialized = 2048;
-static const short initialized = 4096;
+const short empty_type = 0;
+const short base_vertex = 1;
+const short base_edge = 2;
+const short unary_cluster = 4;
+const short binary_cluster = 8;
+const short nullary_cluster = 16;
+const short needs_colouring = 32;
+const short unaffected = 64;
+const short affected = 128;
+const short live = 256;
+const short eligible = 512;
+const short uninitialized = 2048;
+const short initialized = 4096;
+const short internal = 8192;
 
 
 template <typename T>
@@ -32,8 +33,9 @@ struct cluster
         parlay::sequence<cluster<T>*> data;
         cluster<T>* parent;
         T temp_colour;
-        T final_colour;
-        T is_MIS;
+        T final_colour = -1;
+        T is_MIS = false;
+        
 };
 
 /*
@@ -234,35 +236,40 @@ void print_graph(graph G, parlay::sequence<T> colours)
     WARNING, ONLY WORKS ON CHAINS WITH 2 EDGES
 */
 template<typename T>
-void colour_clusters(parlay::sequence<cluster<T>>& clusters)
+void colour_clusters(parlay::sequence<cluster<T>*> clusters)
 {
     static const T local_maximum_colour = (T) 0;
     static const T local_minimum_colour = (T) 1;    
 
     parlay::parallel_for(0, clusters.size(), [&] (T v) {
-        T local_maximum = clusters[v].temp_colour;
-        T local_minimum = clusters[v].temp_colour;
+        T local_maximum = clusters[v]->temp_colour;
+        T local_minimum = clusters[v]->temp_colour;
 
-        for(uint i = 0; i < clusters[v].data.size(); i++)
+        for(uint i = 0; i < clusters[v]->data.size(); i++)
         {
-            T compared_colour = clusters[v].data[i]->temp_colour;
+            auto edge_ptr = clusters[v]->data[i];
+            auto other_node_ptr = edge_ptr->data[0];
+            if(other_node_ptr == clusters[v])
+                other_node_ptr = edge_ptr->data[1];
+
+            T compared_colour = other_node_ptr->temp_colour;
             if(compared_colour > local_maximum)
                 local_maximum = compared_colour;
             if(compared_colour < local_minimum)
-                compared_colour = local_minimum;   
+                local_minimum = compared_colour;   
         }
 
-        if(local_maximum == clusters[v].temp_colour) // This node is a local maximum, give it a unique colour
+        if(local_maximum == clusters[v]->temp_colour) // This node is a local maximum, give it a unique colour
         {
-            clusters[v].final_colour = local_maximum_colour;
+            clusters[v]->final_colour = local_maximum_colour;
         }
-        else if(local_minimum == clusters[v].temp_colour)
+        else if(local_minimum == clusters[v]->temp_colour)
         {
-            clusters[v].final_colour = local_minimum_colour;
+            clusters[v]->final_colour = local_minimum_colour;
         }
         else
         {
-            clusters[v].final_colour = 2 + (get_single_colour_contribution(clusters[v].temp_colour, local_maximum) / 2); // bit shifting right to eliminate that pesky indicator bit
+            clusters[v]->final_colour = 2 + (get_single_colour_contribution(clusters[v]->temp_colour, local_maximum) / 2); // bit shifting right to eliminate that pesky indicator bit
         }
 
     });
@@ -277,19 +284,22 @@ void colour_clusters(parlay::sequence<cluster<T>>& clusters)
     These clusters must have a maximum degree of 2
 */
 template<typename T>
-void set_MIS(parlay::sequence<cluster<T>>& clusters)
+void set_MIS(parlay::sequence<cluster<T>*> clusters)
 {
 
     colour_clusters(clusters);
 
     parlay::parallel_for(0, clusters.size(), [&] (T v) {
-        clusters[v].is_MIS = false;
-        for(uint i = 0; i < clusters[v].data.size(); i++)
-            clusters[v].data[i]->is_MIS = false;
+        clusters[v]->is_MIS = false;
+        for(uint i = 0; i < clusters[v]->data.size(); i++)
+        {
+            clusters[v]->data[i]->data[0]->is_MIS = false;
+            clusters[v]->data[i]->data[1]->is_MIS = false;
+        }
     });
 
     auto colours = parlay::tabulate(clusters.size(), [&] (T v) {
-        clusters[v].final_colour;
+       return clusters[v]->final_colour;
     });
 
     auto vertices = parlay::tabulate(clusters.size(), [&] (T v) {
@@ -310,28 +320,98 @@ void set_MIS(parlay::sequence<cluster<T>>& clusters)
         T end_index = offsets[i];
 
 
-        parlay::parallel_for(start_index, end_index, [&] (T v) {
+        parlay::parallel_for(start_index, end_index, [&] (T i) {
+            T v = result[i];
             bool keep_this_node = true;
-            for(uint w = 0; w < clusters[v].data.size(); w++)
+            for(uint w = 0; w < clusters[v]->data.size(); w++)
             {
-                if(clusters[v].data[w]->is_MIS == true)
+                if(clusters[v]->data[w]->data[0]->is_MIS == true || clusters[v]->data[w]->data[1]->is_MIS == true)
                 {
                     keep_this_node = false;
                     break;
                 }
             }
-            clusters[v].is_MIS = keep_this_node;
+            clusters[v]->is_MIS = keep_this_node;
         });
     }
 
+}
+
+
+/*
+    sets a boolean flag in the clusters indicating that they're part of MIS
+    also may change the boolean flag of some other clusters, only consider the clusters in this
+    These clusters must have a maximum degree of 2
+*/
+template<typename T>
+void check_MIS(parlay::sequence<cluster<T>*> clusters)
+{
+
+    bool is_valid_MIS = true;
+
+    T example_index;
+    cluster<T>* W;
+
+    for(T v = 0; v < clusters.size(); v++)
+    {
+        if(clusters[v]->is_MIS)
+        {
+            // check if any neighbours are valid MIS
+            for(uint i = 0; i < clusters[v]->data.size();i++)
+            {
+                auto edge_ptr = clusters[v]->data[i];
+                auto other_node = edge_ptr->data[0];
+                if (other_node->index == clusters[v]->index)
+                {
+                    other_node = edge_ptr->data[1];
+                }
+                
+                if(other_node->is_MIS && other_node->data.size()<=2)
+                {
+                    is_valid_MIS = false;
+                    example_index = v;
+                    W = other_node;
+                }
+            }
+        }
+    }
+
+    if(!is_valid_MIS)
+    {
+        std::cout << "Not a valid MIS: " << std::endl;
+        auto V = clusters[example_index];
+        std::cout << V->index << " " << V->final_colour << " ";
+        for(uint i = 0; i < V->data.size(); i++)
+        {
+            auto other_ptr = V->data[i]->data[0];
+            if(other_ptr == V)
+            {
+                other_ptr = V->data[i]->data[1];
+            }
+            std::cout << other_ptr->index << ":" << other_ptr->final_colour << " ";
+        }
+        std::cout << std::endl;
+        std::cout << W->index << " " << W->final_colour << " ";
+        for(uint i = 0; i < W->data.size(); i++)
+        {
+            auto other_ptr = W->data[i]->data[0];
+            if(other_ptr == W)
+            {
+                other_ptr = W->data[i]->data[1];
+            }
+            std::cout << other_ptr->index << ":" << other_ptr->final_colour << " ";
+        }
+        std::cout << std::endl;
+    }
 
 }
+
 
 /**
 * Input: G, an ASSYMETRIC graph
 */
 template <typename T>
-parlay::sequence<cluster<T>> create_RC_Tree(parlay::sequence<parlay::sequence<T>> &G, const T max_degree)
+void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequence<cluster<T> > &base_clusters)
 {
 
     T n = G.size();
@@ -339,7 +419,7 @@ parlay::sequence<cluster<T>> create_RC_Tree(parlay::sequence<parlay::sequence<T>
         return G[v].size();
     }));
 
-    parlay::sequence<cluster<T>> base_clusters = parlay::tabulate(n+m, [&] (T v) {
+    base_clusters = parlay::tabulate(n+m, [&] (T v) {
         cluster<T> base_cluster;
         base_cluster.index = v;
         base_cluster.temp_colour = v;
@@ -389,13 +469,136 @@ parlay::sequence<cluster<T>> create_RC_Tree(parlay::sequence<parlay::sequence<T>
 
     delete[] mutexes;
 
-
-
-
-
-
-    return base_clusters;
-
 }
 
+template <typename T>
+void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
+{
+    
 
+    parlay::sequence<cluster<T>*> all_cluster_ptrs = parlay::tabulate(n, [&] (T v) {
+        return &base_clusters[v];
+    });
+
+    parlay::sequence<cluster<T>*> candidates;
+
+    uint tester = 0;
+
+    do
+    {
+    
+    // TODO: Convert this to approximate compaction!!!
+    candidates = parlay::filter(all_cluster_ptrs, [&] (cluster<T>* C) {
+        return (C->data.size() <= 2 && (C->state & live));
+    });
+
+    set_MIS(candidates);
+
+    candidates = parlay::filter(all_cluster_ptrs, [&] (cluster<T>* C) {
+        return (C->is_MIS);
+    });
+
+    // check_MIS(candidates);
+
+    // do rake and compress
+    parlay::parallel_for(0, candidates.size(), [&] (T v) {
+        cluster<T>* cluster_ptr = candidates[v];
+        if(cluster_ptr->is_MIS == false)
+            return;
+        // rake
+        if(cluster_ptr->data.size() == 0)
+        {
+            cluster_ptr->state&=(~live);
+            cluster_ptr->state|=(nullary_cluster);
+        }
+        if(cluster_ptr->data.size() == 1)
+        {
+            cluster<T>* edge_ptr = cluster_ptr->data[0];
+            
+            // find the other side of the edge
+            cluster<T>* other_side = edge_ptr->data[0];
+            if(other_side == cluster_ptr)
+                other_side = edge_ptr->data[1];
+            
+            if(other_side == NULL)
+                std::cout << "This should never happen" << std::endl;
+            
+            // delete this edge in the other_side
+            for(uint i = 0; i < other_side->data.size(); i++)
+            {
+                if(other_side->data[i] == edge_ptr)
+                {
+                    other_side->data[i] = NULL;
+                    // break;
+                }
+            }
+
+            // make other_side be the parent for both
+            // TODO: replace with some other operation that could be performed here
+
+            edge_ptr->parent = cluster_ptr;
+            cluster_ptr->parent = other_side;
+
+            // mark both of these as not live
+
+            edge_ptr->state&=(~live);
+            cluster_ptr->state&=(~live);
+
+            cluster_ptr->state|=unary_cluster;
+        }
+        else if (cluster_ptr->data.size() == 2)
+        {
+            auto left_edge_ptr = cluster_ptr->data[0];
+            auto right_edge_ptr = cluster_ptr->data[1];
+
+            auto left_node_ptr = left_edge_ptr->data[0];
+            if(left_node_ptr == cluster_ptr)
+                left_node_ptr =  left_edge_ptr->data[1];
+
+            auto right_node_ptr = right_edge_ptr->data[0];
+            if(right_node_ptr == cluster_ptr)
+                cluster_ptr = right_edge_ptr->data[1];
+            
+            // realign left_edge_ptr in left_node_ptr
+            for(uint i = 0; i < left_node_ptr->data.size(); i++)
+            {
+                if(left_node_ptr->data[i] == left_edge_ptr)
+                {
+                    left_node_ptr->data[i] = cluster_ptr;
+                     break;
+                }
+            }
+            // realign right_edge_ptr in right_node_ptr
+            for(uint i = 0; i < right_node_ptr->data.size(); i++)
+            {
+                if(right_node_ptr->data[i] == right_edge_ptr)
+                {
+                    right_node_ptr->data[i] = cluster_ptr;
+                     break;
+                }
+            }
+
+            left_edge_ptr->parent = cluster_ptr;
+            right_edge_ptr->parent = cluster_ptr;
+
+            left_edge_ptr->state&=(~live);
+            right_edge_ptr->state&=(~live);
+
+            cluster_ptr->data[0] = left_edge_ptr;
+            cluster_ptr->data[1] = right_edge_ptr;
+
+            cluster_ptr->state&=(~live);
+
+            cluster_ptr->state|=binary_cluster;
+        }
+    });
+
+    // remove any extra NULLs
+    
+
+    // find MIS amongst these
+    tester+=1;
+    }while(tester < 3);
+    
+
+}

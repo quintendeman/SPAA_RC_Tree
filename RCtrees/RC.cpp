@@ -10,7 +10,6 @@
 #include "/scratch/parlaylib/include/parlay/internal/get_time.h"
 #include "RC.h"
 #include "/scratch/parlaylib/examples/samplesort.h"
-#include "/scratch/parlaylib/examples/counting_sort.h"
 
 #include <cmath>
 
@@ -62,8 +61,45 @@ int main(int argc, char* argv[]) {
     utils::print_graph_stats(G);
 
     // degree_cap_graph(G, max_degree);
+    parlay::sequence<cluster<vertex> > clusters;
 
-    auto clusters = create_RC_Tree(G, max_degree);
+    create_base_clusters(G, clusters);
+
+    create_RC_tree(clusters, n);
+
+    // for(uint i = 0; i < clusters.size(); i++)
+    // {
+    //     std::cout << i<< " "<<clusters[i].data.size() <<  " " << clusters[i].final_colour << " " << " ";
+    //     if(clusters[i].state & live)
+    //     {
+    //         std::cout << "live ";
+    //     }
+    //     else if (clusters[i].state & nullary_cluster)
+    //     {
+    //         std::cout << "nullary ";
+    //     }
+    //     else if (clusters[i].state & binary_cluster)
+    //     {
+    //         std::cout << "binary ";
+    //     }
+    //     else if (clusters[i].state & unary_cluster)
+    //     {
+    //         std::cout << "unary ";
+    //     }
+    //     for(uint j = 0; j < clusters[i].data.size(); j++)
+    //     {
+    //         if(clusters[i].data[j] == NULL)
+    //             std::cout << "null ";
+    //         else
+    //             std::cout << clusters[i].data[j]->index << " ";
+    //     }
+    //     if(clusters[i].is_MIS)
+    //     {
+    //         std::cout << "\u2713";
+    //     }
+    //     std::cout << std::endl;
+        
+    // }
 
     return 0;
 }
