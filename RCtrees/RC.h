@@ -529,7 +529,7 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
                 if(other_side->data[i] == edge_ptr)
                 {
                     other_side->data[i] = NULL;
-                    // break;
+                    break;
                 }
             }
 
@@ -557,7 +557,7 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
 
             auto right_node_ptr = right_edge_ptr->data[0];
             if(right_node_ptr == cluster_ptr)
-                cluster_ptr = right_edge_ptr->data[1];
+                right_node_ptr = right_edge_ptr->data[1];
             
             // realign left_edge_ptr in left_node_ptr
             for(uint i = 0; i < left_node_ptr->data.size(); i++)
@@ -584,17 +584,22 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
             left_edge_ptr->state&=(~live);
             right_edge_ptr->state&=(~live);
 
-            cluster_ptr->data[0] = left_edge_ptr;
-            cluster_ptr->data[1] = right_edge_ptr;
+            cluster_ptr->data[0] = left_node_ptr;
+            cluster_ptr->data[1] = right_node_ptr;
 
             cluster_ptr->state&=(~live);
 
             cluster_ptr->state|=binary_cluster;
+
         }
     });
 
     // remove any extra NULLs
-    
+    parlay::parallel_for(0, n, [&] (T v) {
+        base_clusters[v].data = parlay::filter(base_clusters[v].data, [&] (cluster<T>* C) {
+            return C!=NULL;
+        });
+    });
 
     // find MIS amongst these
     tester+=1;
