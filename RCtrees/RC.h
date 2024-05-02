@@ -680,8 +680,8 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
     });
 
     // remove any extra NULLs
-    parlay::parallel_for(0, n, [&] (T v) {
-        base_clusters[v].data = parlay::filter(base_clusters[v].data, [&] (cluster<T>* C) {
+    parlay::parallel_for(0, forest.size(), [&] (T v) {
+        forest[v]->data = parlay::filter(forest[v]->data, [&] (cluster<T>* C) {
             return C!=NULL;
         });
     });
@@ -691,8 +691,8 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
     std::cout << "Candidates.size(): " << candidates.size() << std::endl;
     }while(candidates.size());
     
-    print_cluster(parlay::tabulate(base_clusters.size(), [&] (T v) {
-        return &base_clusters[v];
-    }));
+    // print_cluster(parlay::tabulate(base_clusters.size(), [&] (T v) {
+    //     return &base_clusters[v];
+    // }));
 
 }
