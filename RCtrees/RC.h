@@ -23,33 +23,32 @@ const short base_edge = 2;
 const short unary_cluster = 4;
 const short binary_cluster = 8;
 const short nullary_cluster = 16;
-const short needs_colouring = 32;
-const short unaffected = 64;
-const short affected = 128;
 const short live = 256;
-const short eligible = 512;
-const short uninitialized = 2048;
-const short initialized = 4096;
 const short internal = 8192;
 
 
+/*
+    This represents a cluster in an RC tree.
+    All these variables might be excessive but these flags and such are necessary since will be relying on pointer chasing
+*/
 template <typename T>
 struct cluster
 {
     public:
         T index = -1;
-        short state = empty_type; // unaffected, affected or update eligible
         parlay::sequence<cluster<T>*> data;
         cluster<T>* parent;
         T temp_colour;
         T final_colour = -1;
-        T is_MIS = false;
-        
+        short state = empty_type; // unaffected, affected or update eligible
+        bool is_MIS = false;
 };
 
 /*
     Generate a simple, single rooted graph with each node having two children
     Then, randomly, change the parent of each node with a certain probability such that it picks something on the left of it
+
+    Returns an array of parents such that the parents of index V would be parents[V]
 */
 template <typename T>
 parlay::sequence<T> generate_tree_graph(T num_elements)
@@ -74,7 +73,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
 }
 
 /*
-    Converts parents into a graph
+    Converts the parents array into an assymetric graph
 */
 template <typename graph, typename T>
 graph convert_parents_to_graph(graph G, parlay::sequence<T> parents)
@@ -96,7 +95,9 @@ graph convert_parents_to_graph(graph G, parlay::sequence<T> parents)
 }
 
 /**
- * 
+ * Ensures that the degree is capped for the parents vector
+ * i.e. not too many nodes have the same parent
+ * Uses locking! Fortunately, we don't care about the performance for the graph generation too much
 */
 template <typename T>
 void degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
@@ -123,12 +124,8 @@ void degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
 
 
 
-/*
-    Basic workflow
-    1) Find edges that are assymetric (do a parfor on the edge list of the target array)
-    2) Mark them in a global, boolean graph
-    then
-    3) filter them out
+/**
+ * Deletes assymetric pairs in a nested sequence representing a graph
 */
 template <typename vertex>
 void delete_assymetric_pairs(parlay::sequence<parlay::sequence<vertex>>& G)
@@ -171,7 +168,9 @@ void delete_assymetric_pairs(parlay::sequence<parlay::sequence<vertex>>& G)
 }
 
 
-
+/**
+ * Extracts a particular bit (counted from the right) from an element
+*/
 template <typename T>
 static inline bool extract_bit(T number, int offset_from_right)
 {
@@ -223,26 +222,14 @@ static unsigned char get_single_colour_contribution(const T vcolour, const T wco
 }
 
 
-template<typename T, typename graph>
-void print_graph(graph G, parlay::sequence<T> colours)
-{
-    for(uint i = 0; i < G.size(); i++)
-    {
-        std::cout << i << ":" << colours[i] << std::endl << "   ";
-        for(uint j = 0; j < G[i].size(); j++)
-        {
-            std::cout << G[i][j] << ":" << colours[G[i][j]] << " ";
-        }
-        std::cout << std::endl;
-    }
 
-
-    return;
-}
 
 
 /*
-    WARNING, ONLY WORKS ON CHAINS WITH 2 EDGES
+    Given a set of clusters, colours them.
+    The clusters must have an initial valid colouring stored in their temp_colour folder
+    The clusters should be for "vertices" s.t. one hop from each vertex is a cluster representing an edge
+    and two hops away is a vertex representing a neighbouring node
 */
 template<typename T>
 void colour_clusters(parlay::sequence<cluster<T>*> clusters)
@@ -348,9 +335,7 @@ void set_MIS(parlay::sequence<cluster<T>*> clusters)
 
 
 /*
-    sets a boolean flag in the clusters indicating that they're part of MIS
-    also may change the boolean flag of some other clusters, only consider the clusters in this
-    These clusters must have a maximum degree of 2
+    Checks if clusters form an MIS
 */
 template<typename T>
 bool check_MIS(parlay::sequence<cluster<T>*> clusters)
@@ -419,7 +404,11 @@ bool check_MIS(parlay::sequence<cluster<T>*> clusters)
 
 
 /**
-* Input: G, an ASSYMETRIC graph
+ * Given an assymetric graph, creates a set of clusters
+ * In total, it creates n + m clusters in the array base_clusters
+ * The first n are base_vertex clusters
+ * And the last m are base_edge clusters
+ * These clusters are linked to point to each other appropriately
 */
 template <typename T>
 void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequence<cluster<T> > &base_clusters)
@@ -468,7 +457,7 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
 
     // connect incoming edges
     parlay::parallel_for(0, n, [&] (T v) {
-        for(uint i = 0; i < G[v].size(); i++) // It is fine because constant degree graph
+        for(uint i = 0; i < G[v].size(); i++) // It is fine because constant degree graph so the lock isn't too bad
         {
             auto edge_location = n + sums[v] + i;
             auto w = G[v][i]; // destination
@@ -482,6 +471,9 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
 
 }
 
+/**
+ * Just a printer for debugging, not terribly useful anymore
+*/
 template <typename T>
 void print_cluster(parlay::sequence<cluster<T>*> clusters)
 {
@@ -538,6 +530,19 @@ void print_cluster(parlay::sequence<cluster<T>*> clusters)
     cluster_colours = (cluster_colours + 1) % 6; 
 }
 
+/**
+ * The main workhorse, populates the set base_clusters with internal_clusters
+ * As base_vertices aren't useful, it replaces them in place
+ * 
+ * The accumulation is simple for now -- each child points to the parent cluster
+ * This can be used for connectivity tracking by starting at base_clusters[v] and base_clusters[w] and going to the parents
+ * until they overlap
+ * 
+ * A more complex accumulator may be but currently the edges have no weights
+ * This takes O(n) work and O(log n log n) span instead of O(log n log log n) span because the filter operatio is exact
+ * not an approximate compaction
+*/
+
 template <typename T>
 void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
 {
@@ -549,51 +554,43 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
 
     parlay::sequence<cluster<T>*> forest, candidates;
 
+    // Initially the forest of live nodes is all live nodes
     forest = parlay::filter(all_cluster_ptrs, [&] (cluster<T>* C) {
         return ((C->state & live));
     });
 
 
-    uint tester = 0;
 
     do
     {
-    
-    // TODO: Convert this to approximate compaction!!!
+    // Shrink the forst as live nodes decrease
     forest = parlay::filter(forest, [&] (cluster<T>* C) {
         return ((C->state & live));
     });
 
-    // TODO: Convert this to approximate compaction!!!
+    // Eligible nodes are those with degree 1 or 2 (or 0)
     auto eligible = parlay::filter(forest, [&] (cluster<T>* C) {
         return (C->data.size() <= 2);
     });
 
     
-
+    // Set the flag is_MIS amongst them
     set_MIS(eligible);
 
+    // Filter out an MIS of eligible nodes
     candidates = parlay::filter(eligible, [&] (cluster<T>* C) {
         return (C->is_MIS);
     });
 
-    // bool valid_MIS = check_MIS(candidates);
-    // if(!valid_MIS)
-    // {
-    //     print_cluster(parlay::tabulate(base_clusters.size(), [&] (T v) {
-    //     return &base_clusters[v];
-    // }));
-    // }
     // do rake and compress
     parlay::parallel_for(0, candidates.size(), [&] (T v) {
         cluster<T>* cluster_ptr = candidates[v];
-        if(cluster_ptr->is_MIS == false)
-            return;
         // rake
         if(cluster_ptr->data.size() == 0)
         {
             cluster_ptr->state&=(~live);
             cluster_ptr->state|=(nullary_cluster);
+            cluster_ptr->state|=internal;
         }
         if(cluster_ptr->data.size() == 1)
         {
@@ -618,21 +615,21 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
             }
 
             // make other_side be the parent for both
-            // TODO: replace with some other operation that could be performed here
-
             edge_ptr->parent = cluster_ptr;
             cluster_ptr->parent = other_side;
 
             // mark both of these as not live
-
             edge_ptr->state&=(~live);
             cluster_ptr->state&=(~live);
 
             cluster_ptr->state|=unary_cluster;
+            cluster_ptr->state|=internal;
         }
         else 
         if (cluster_ptr->data.size() == 2)
         {
+
+            // find left and right vertices/nodes
             auto left_edge_ptr = cluster_ptr->data[1];
             auto right_edge_ptr = cluster_ptr->data[0];
 
@@ -675,24 +672,19 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
             cluster_ptr->state&=(~live);
 
             cluster_ptr->state|=binary_cluster;
-
+            cluster_ptr->state|=internal;
+            
         }
     });
 
-    // remove any extra NULLs
+    // remove any extra NULLs in the forest for degree calculation
     parlay::parallel_for(0, forest.size(), [&] (T v) {
         forest[v]->data = parlay::filter(forest[v]->data, [&] (cluster<T>* C) {
             return C!=NULL;
         });
     });
 
-    // find MIS amongst these
-    tester+=1;
     std::cout << "Candidates.size(): " << candidates.size() << std::endl;
     }while(candidates.size());
-    
-    // print_cluster(parlay::tabulate(base_clusters.size(), [&] (T v) {
-    //     return &base_clusters[v];
-    // }));
 
 }

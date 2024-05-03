@@ -1,5 +1,5 @@
 /*
-  This code is a heavily modified version of the hotspots assignment
+  This code generates a tree and then creates an RC tree out of this tree.
 */
 
 
@@ -13,10 +13,6 @@
 
 #include <cmath>
 
-/*
-    MAXIMUM DEGREE
-    I will figure out how to make this dynamic later
-*/
 
 
 // **************************************************************
@@ -70,38 +66,3 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-
-// graph G = utils::rmat_symmetric_graph(n, 1*n);
-
-    // degree_cap_graph(G, max_degree);
-
-    // utils::print_graph_stats(G);
-
-    // auto colours = colour_chains_to_logn(G, max_degree);
-
-    // auto vertices = parlay::tabulate(n, [&] (vertex v) {return v;});
-
-    // is_valid_colouring(G, colours); // Takes a while but dw about it
-
-    // auto result = vertices;
-
-    // parlay::sequence<unsigned long> offsets = counting_sort(vertices.begin(), vertices.end(), result.begin(), colours.begin(), 8 * sizeof(vertex));
-
-    // std::cout << "offsets ";
-    // for(uint i = 1; i < offsets.size(); i++)
-    // {
-    //     std::cout << offsets[i] << " ";
-    // }
-    // std::cout << std::endl;
-
-    // parlay::sequence<bool> MIS = get_MIS(G, result, offsets);
-
-    // std::cout << "MIS ";
-    // for(uint i = 1; i < MIS.size(); i++)
-    // {
-    //     std::cout << MIS[i] << " ";
-    // }
-    // std::cout << std::endl;
-
-    // auto base_clusters = 
-
