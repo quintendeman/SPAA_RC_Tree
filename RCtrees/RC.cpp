@@ -10,6 +10,9 @@
 #include "/scratch/parlaylib/include/parlay/internal/get_time.h"
 #include "RC.h"
 #include "/scratch/parlaylib/examples/samplesort.h"
+#include <chrono>
+#include <iomanip>
+#include <fstream>
 
 #include <cmath>
 
@@ -44,7 +47,7 @@ int main(int argc, char* argv[]) {
 
     n = pow(2, floor(log2(n)));
 
-    std::cout << "Setting n to closest (lower) power of 2, so "  << old_n << " => " << n <<  std::endl;
+    // std::cout << "Setting n to closest (lower) power of 2, so "  << old_n << " => " << n <<  std::endl;
 
     auto parents = generate_tree_graph(n);
 
@@ -54,14 +57,31 @@ int main(int argc, char* argv[]) {
 
     G = convert_parents_to_graph(G, parents);
 
-    utils::print_graph_stats(G);
+    // utils::print_graph_stats(G);
 
     // degree_cap_graph(G, max_degree);
     parlay::sequence<cluster<vertex> > clusters;
 
     create_base_clusters(G, clusters);
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     create_RC_tree(clusters, n);
+
+    auto end = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<double> duration = end - start;
+
+    std::cout << std::fixed << std::setprecision(9) << n << "," << duration.count() << std::endl;
+    
+    // This writing code is borrowed from chatgpt
+    std::ofstream file("data.csv", std::ios_base::app);
+    if (file.is_open()) {
+        file << std::fixed << std::setprecision(9) << n << "," << duration.count() << std::endl;
+        file.close();
+    } else {
+        std::cerr << "Error opening file!" << std::endl;
+    }
 
 
     return 0;

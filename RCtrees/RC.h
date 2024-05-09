@@ -404,7 +404,7 @@ bool check_MIS(parlay::sequence<cluster<T>*> clusters)
 
 
 /**
- * Given an assymetric graph, creates a set of clusters
+ * Given an ASSYMETRIC graph, creates a set of clusters
  * In total, it creates n + m clusters in the array base_clusters
  * The first n are base_vertex clusters
  * And the last m are base_edge clusters
@@ -684,7 +684,7 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
         });
     });
 
-    std::cout << "Candidates.size(): " << candidates.size() << std::endl;
+    // std::cout << "Candidates.size(): " << candidates.size() << std::endl;
     }while(candidates.size());
 
 }
