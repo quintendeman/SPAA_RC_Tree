@@ -57,31 +57,28 @@ int main(int argc, char* argv[]) {
 
     G = convert_parents_to_graph(G, parents);
 
-    // utils::print_graph_stats(G);
-
-    // degree_cap_graph(G, max_degree);
     parlay::sequence<cluster<vertex> > clusters;
 
-    create_base_clusters(G, clusters);
+    create_base_clusters(G, clusters, max_degree);
 
-    auto start = std::chrono::high_resolution_clock::now();
+    // auto start = std::chrono::high_resolution_clock::now();
 
     create_RC_tree(clusters, n);
 
-    auto end = std::chrono::high_resolution_clock::now();
+    // auto end = std::chrono::high_resolution_clock::now();
 
-    std::chrono::duration<double> duration = end - start;
+    // std::chrono::duration<double> duration = end - start;
 
-    std::cout << std::fixed << std::setprecision(9) << n << "," << duration.count() << std::endl;
+    // std::cout << std::fixed << std::setprecision(9) << n << "," << duration.count() << std::endl;
     
-    // This writing code is borrowed from chatgpt
-    std::ofstream file("data.csv", std::ios_base::app);
-    if (file.is_open()) {
-        file << std::fixed << std::setprecision(9) << n << "," << duration.count() << std::endl;
-        file.close();
-    } else {
-        std::cerr << "Error opening file!" << std::endl;
-    }
+    // // This writing code is borrowed from chatgpt
+    // std::ofstream file("data.csv", std::ios_base::app);
+    // if (file.is_open()) {
+    //     file << std::fixed << std::setprecision(9) << n << "," << duration.count() << std::endl;
+    //     file.close();
+    // } else {
+    //     std::cerr << "Error opening file!" << std::endl;
+    // }
 
 
     return 0;

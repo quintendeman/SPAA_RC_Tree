@@ -36,12 +36,208 @@ struct cluster
 {
     public:
         T index = -1;
-        parlay::sequence<cluster<T>*> data;
-        cluster<T>* parent;
-        T temp_colour;
-        T final_colour = -1;
+        parlay::sequence<std::atomic<cluster<T>*>> neighbours;
+        parlay::sequence<std::atomic<cluster<T>*>> children;
+        cluster<T>* parent = nullptr;
+        T colour = -1;
         short state = empty_type; // unaffected, affected or update eligible
         bool is_MIS = false;
+        T data = 0;
+
+        unsigned long get_colour(void)
+        {
+            return reinterpret_cast<T>(this);
+        }
+
+        T get_neighbour_count(void)
+        {
+            T ret_count = 0;
+            for(T j = 0; j < this->neighbours.size(); j++)
+            {
+                if(this->neighbours[j].load() != nullptr)
+                {
+                   ret_count++;
+                }
+            }
+            return ret_count;
+        }
+
+        /**
+         * Should be async safe
+         * sets "neighbour" to be anywhere in the neighbours array that was previously null
+        */
+        bool add_neighbour(cluster<T>* neighbour)
+        {
+            for(T j = 0; j < this->neighbours.size(); j++)
+            {
+                if(this->neighbours[j].load() == nullptr)
+                {
+                    cluster<T>* expected = nullptr;
+                    bool swapped = this->neighbours[j].compare_exchange_strong(expected, neighbour);
+                    if(swapped)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        /**
+         * Not guaranteed to remove!
+         * Race conditions can cause this to "skip" a count
+         * Put it while(!remove_neighbour(neighbour))
+         * to ensure it removes
+        */
+        bool remove_neighbour(cluster<T>* neighbour)
+        {
+            for(T j = 0; j < this->neighbours.size(); j++)
+            {
+                if(this->neighbours[j].load() == neighbour)
+                {
+                    cluster<T>* expected = neighbour;
+                    bool swapped = this->neighbours[j].compare_exchange_strong(expected, nullptr);
+                    if(swapped)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        T get_children_count(void)
+        {
+            T ret_count = 0;
+            for(T j = 0; j < this->children.size(); j++)
+            {
+                if(this->children[j].load() != nullptr)
+                {
+                   ret_count++;
+                }
+            }
+            return ret_count;
+        }
+
+        /**
+         * Should be async safe
+         * sets "child" to be anywhere in the child array that was previously null
+        */
+        bool add_child(cluster<T>* child)
+        {
+            for(T j = 0; j < this->children.size(); j++)
+            {
+                if(this->children[j].load() == nullptr)
+                {
+                    cluster<T>* expected = nullptr;
+                    bool swapped = this->children[j].compare_exchange_strong(expected, child);
+                    if(swapped)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        /**
+         * Not guaranteed to remove!
+         * Race conditions can cause this to "skip" a value
+        */
+        bool remove_child(cluster<T>* child)
+        {
+            for(T j = 0; j < this->children.size(); j++)
+            {
+                if(this->children[j].load() == child)
+                {
+                    cluster<T>* expected = child;
+                    bool swapped = this->children[j].compare_exchange_strong(expected, nullptr);
+                    if(swapped)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Get first edge in neighbours array that isn't equal to this_side and not null
+         * Suffers from race conditions but MIS should keep it safe
+        */
+        cluster<T>* get_other_side(cluster<T>* this_side)
+        {
+            cluster<T>* ret_ptr = NULL;
+            for(T j = 0; j < this->neighbours.size(); j++)
+            {
+                if(this->neighbours[j].load() != nullptr && this->neighbours[j].load() != this_side)
+                {
+                    return this->neighbours[j].load();
+                }
+            }
+            return ret_ptr;
+        }
+        /**
+         * Set all 2 hop neighbour's is_MIS as MIS
+        */
+        void set_neighbour_mis(bool MIS)
+        {
+            for(T i = 0; i < this->neighbours.size(); i++)
+            {
+                if(this->neighbours[i] == nullptr)
+                    continue;
+                auto edge = this->neighbours[i].load();
+                for(T j = 0; j < edge->neighbours.size(); j++)
+                {
+                    if(edge->neighbours[j].load() != nullptr && edge->neighbours[j].load() != this)
+                        edge->neighbours[j].load()->is_MIS = MIS;
+                }
+            }
+        }
+
+        /**
+         * if any of 2 hop neighbours i.e. after edge are true, return true
+        */
+        bool get_neighbour_MIS(void)
+        {
+            for(T i = 0; i < this->neighbours.size(); i++)
+            {
+                if(this->neighbours[i] == nullptr)
+                    continue;
+                auto edge = this->neighbours[i].load();
+                for(T j = 0; j < edge->neighbours.size(); j++)
+                {
+                    if(edge->neighbours[j].load() != nullptr && edge->neighbours[j].load() != this && edge->neighbours[j].load()->is_MIS == true)
+                        return true;
+
+                }
+            }
+
+            return false;
+        }
+
+        void get_two_neighbouring_edges(cluster<T>** left, cluster<T>** right)
+        {
+            bool left_found = false;
+
+            for(T i = 0; i < this->neighbours.size(); i++)
+            {
+                if(this->neighbours[i].load() != nullptr)
+                {
+                    
+                    if(left_found == false)
+                    {
+                        *left = this->neighbours[i].load();
+                        left_found = true;
+                    }
+                    else
+                    {
+                        *right = this->neighbours[i].load();
+                        break;
+                    }
+                }    
+            }
+        }
+
+        
 };
 
 /*
@@ -225,12 +421,12 @@ static unsigned char get_single_colour_contribution(const T vcolour, const T wco
 
 
 
-/*
-    Given a set of clusters, colours them.
-    The clusters must have an initial valid colouring stored in their temp_colour folder
-    The clusters should be for "vertices" s.t. one hop from each vertex is a cluster representing an edge
-    and two hops away is a vertex representing a neighbouring node
-*/
+// /*
+//     Given a set of clusters, colours them.
+//     The clusters must have an initial valid colouring stored in their temp_colour folder
+//     The clusters should be for "vertices" s.t. one hop from each vertex is a cluster representing an edge
+//     and two hops away is a vertex representing a neighbouring node
+// */
 template<typename T>
 void colour_clusters(parlay::sequence<cluster<T>*> clusters)
 {
@@ -238,34 +434,37 @@ void colour_clusters(parlay::sequence<cluster<T>*> clusters)
     static const T local_minimum_colour = (T) 1;    
 
     parlay::parallel_for(0, clusters.size(), [&] (T v) {
-        T local_maximum = clusters[v]->temp_colour;
-        T local_minimum = clusters[v]->temp_colour;
+        unsigned long local_maximum = clusters[v]->get_colour();
+        unsigned long local_minimum = clusters[v]->get_colour();
 
-        for(uint i = 0; i < clusters[v]->data.size(); i++)
+        for(uint i = 0; i < clusters[v]->neighbours.size(); i++)
         {
-            auto edge_ptr = clusters[v]->data[i];
-            auto other_node_ptr = edge_ptr->data[0];
-            if(other_node_ptr == clusters[v])
-                other_node_ptr = edge_ptr->data[1];
 
-            T compared_colour = other_node_ptr->temp_colour;
+            auto edge_ptr = clusters[v]->neighbours[i].load();
+            
+            if (edge_ptr == nullptr)
+                continue;
+            
+            auto other_node_ptr = edge_ptr->get_other_side(clusters[v]);
+
+            unsigned long compared_colour = other_node_ptr->get_colour();
             if(compared_colour > local_maximum)
                 local_maximum = compared_colour;
             if(compared_colour < local_minimum)
                 local_minimum = compared_colour;   
         }
 
-        if(local_maximum == clusters[v]->temp_colour) // This node is a local maximum, give it a unique colour
+        if(local_maximum == clusters[v]->get_colour()) // This node is a local maximum, give it a unique colour
         {
-            clusters[v]->final_colour = local_maximum_colour;
+            clusters[v]->colour = local_maximum_colour;
         }
-        else if(local_minimum == clusters[v]->temp_colour)
+        else if(local_minimum == clusters[v]->get_colour())
         {
-            clusters[v]->final_colour = local_minimum_colour;
+            clusters[v]->colour = local_minimum_colour;
         }
         else
         {
-            clusters[v]->final_colour = 2 + (get_single_colour_contribution(clusters[v]->temp_colour, local_maximum) / 2); // bit shifting right to eliminate that pesky indicator bit
+            clusters[v]->colour = 2 + (get_single_colour_contribution(clusters[v]->get_colour(), local_maximum) / 2); // bit shifting right to eliminate that pesky indicator bit
         }
 
     });
@@ -274,11 +473,11 @@ void colour_clusters(parlay::sequence<cluster<T>*> clusters)
 
 }
 
-/*
-    sets a boolean flag in the clusters indicating that they're part of MIS
-    also may change the boolean flag of some other clusters, only consider the clusters in this
-    These clusters must have a maximum degree of 2
-*/
+// /*
+//     sets a boolean flag in the clusters indicating that they're part of MIS
+//     also may change the boolean flag of some other clusters, only consider the clusters in this
+//     These clusters must have a maximum degree of 2
+// */
 template<typename T>
 void set_MIS(parlay::sequence<cluster<T>*> clusters)
 {
@@ -287,15 +486,11 @@ void set_MIS(parlay::sequence<cluster<T>*> clusters)
 
     parlay::parallel_for(0, clusters.size(), [&] (T v) {
         clusters[v]->is_MIS = false;
-        for(uint i = 0; i < clusters[v]->data.size(); i++)
-        {
-            clusters[v]->data[i]->data[0]->is_MIS = false;
-            clusters[v]->data[i]->data[1]->is_MIS = false;
-        }
+        clusters[v]->set_neighbour_mis(false);
     });
 
     auto colours = parlay::tabulate(clusters.size(), [&] (T v) {
-       return clusters[v]->final_colour;
+       return clusters[v]->colour;
     });
 
     auto vertices = parlay::tabulate(clusters.size(), [&] (T v) {
@@ -304,7 +499,7 @@ void set_MIS(parlay::sequence<cluster<T>*> clusters)
 
     auto result = vertices;
 
-    parlay::sequence<unsigned long> offsets = counting_sort(vertices.begin(), vertices.end(), result.begin(), colours.begin(), 8 * sizeof(T));
+    parlay::sequence<unsigned long> offsets = counting_sort(vertices.begin(), vertices.end(), result.begin(), colours.begin(), 8 * sizeof(unsigned long));
 
     for(uint i = 0; i < offsets.size(); i++)
     {
@@ -315,92 +510,87 @@ void set_MIS(parlay::sequence<cluster<T>*> clusters)
             start_index = offsets[i-1];
         T end_index = offsets[i];
 
-
         parlay::parallel_for(start_index, end_index, [&] (T i) {
             T v = result[i];
-            bool keep_this_node = true;
-            for(uint w = 0; w < clusters[v]->data.size(); w++)
+            if(clusters[v]->get_neighbour_MIS() == true)
             {
-                if(clusters[v]->data[w]->data[0]->is_MIS == true || clusters[v]->data[w]->data[1]->is_MIS == true)
-                {
-                    keep_this_node = false;
-                    break;
-                }
+                clusters[v]->is_MIS = false;
+                return;
             }
-            clusters[v]->is_MIS = keep_this_node;
+            clusters[v]->is_MIS = true;
         });
     }
 
 }
 
 
-/*
-    Checks if clusters form an MIS
-*/
-template<typename T>
-bool check_MIS(parlay::sequence<cluster<T>*> clusters)
-{
+// /*
+//     Checks if clusters form an MIS
+// */
+// template<typename T>
+// bool check_MIS(parlay::sequence<cluster<T>*> clusters)
+// {
 
-    bool is_valid_MIS = true;
+//     bool is_valid_MIS = true;
 
-    T example_index;
-    cluster<T>* W;
+//     T example_index;
+//     cluster<T>* W;
 
-    for(T v = 0; v < clusters.size(); v++)
-    {
-        if(clusters[v]->is_MIS)
-        {
-            // check if any neighbours are valid MIS
-            for(uint i = 0; i < clusters[v]->data.size();i++)
-            {
-                auto edge_ptr = clusters[v]->data[i];
-                auto other_node = edge_ptr->data[0];
-                if (other_node->index == clusters[v]->index)
-                {
-                    other_node = edge_ptr->data[1];
-                }
+//     for(T v = 0; v < clusters.size(); v++)
+//     {
+//         if(clusters[v]->is_MIS)
+//         {
+//             // check if any neighbours are valid MIS
+//             for(uint i = 0; i < clusters[v]->data.size();i++)
+//             {
+//                 auto edge_ptr = clusters[v]->data[i];
+//                 auto other_node = edge_ptr->data[0];
+//                 if (other_node->index == clusters[v]->index)
+//                 {
+//                     other_node = edge_ptr->data[1];
+//                 }
                 
-                if(other_node->is_MIS && other_node->data.size()<=2)
-                {
-                    is_valid_MIS = false;
-                    example_index = v;
-                    W = other_node;
-                }
-            }
-        }
-    }
+//                 if(other_node->is_MIS && other_node->data.size()<=2)
+//                 {
+//                     is_valid_MIS = false;
+//                     example_index = v;
+//                     W = other_node;
+//                 }
+//             }
+//         }
+//     }
 
-    if(!is_valid_MIS)
-    {
-        std::cout << "Not a valid MIS: " << std::endl;
-        auto V = clusters[example_index];
-        std::cout << V->index << " " << V->final_colour << " ";
-        for(uint i = 0; i < V->data.size(); i++)
-        {
-            auto other_ptr = V->data[i]->data[0];
-            if(other_ptr == V)
-            {
-                other_ptr = V->data[i]->data[1];
-            }
-            std::cout << other_ptr->index << ":" << other_ptr->final_colour << " ";
-        }
-        std::cout << std::endl;
-        std::cout << W->index << " " << W->final_colour << " ";
-        for(uint i = 0; i < W->data.size(); i++)
-        {
-            auto other_ptr = W->data[i]->data[0];
-            if(other_ptr == W)
-            {
-                other_ptr = W->data[i]->data[1];
-            }
-            std::cout << other_ptr->index << ":" << other_ptr->final_colour << " ";
-        }
-        std::cout << std::endl;
-    }
+//     if(!is_valid_MIS)
+//     {
+//         std::cout << "Not a valid MIS: " << std::endl;
+//         auto V = clusters[example_index];
+//         std::cout << V->index << " " << V->final_colour << " ";
+//         for(uint i = 0; i < V->data.size(); i++)
+//         {
+//             auto other_ptr = V->data[i]->data[0];
+//             if(other_ptr == V)
+//             {
+//                 other_ptr = V->data[i]->data[1];
+//             }
+//             std::cout << other_ptr->index << ":" << other_ptr->final_colour << " ";
+//         }
+//         std::cout << std::endl;
+//         std::cout << W->index << " " << W->final_colour << " ";
+//         for(uint i = 0; i < W->data.size(); i++)
+//         {
+//             auto other_ptr = W->data[i]->data[0];
+//             if(other_ptr == W)
+//             {
+//                 other_ptr = W->data[i]->data[1];
+//             }
+//             std::cout << other_ptr->index << ":" << other_ptr->final_colour << " ";
+//         }
+//         std::cout << std::endl;
+//     }
 
-    return is_valid_MIS;
+//     return is_valid_MIS;
 
-}
+// }
 
 
 /**
@@ -409,126 +599,117 @@ bool check_MIS(parlay::sequence<cluster<T>*> clusters)
  * The first n are base_vertex clusters
  * And the last m are base_edge clusters
  * These clusters are linked to point to each other appropriately
+ * it returns an array of n clusters corresponding to the original n vertices.
+ * The edge clusters are present as edges.
 */
 template <typename T>
-void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequence<cluster<T> > &base_clusters)
+void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequence<cluster<T> > &base_clusters, const T max_size)
 {
 
     T n = G.size();
-    auto [sums, m] = parlay::scan(parlay::tabulate(G.size(), [&] (T v) {
-        return G[v].size();
-    }));
 
-    base_clusters = parlay::tabulate(n+m, [&] (T v) {
+    base_clusters = parlay::tabulate(n, [&] (T v) {
         cluster<T> base_cluster;
         base_cluster.index = v;
-        base_cluster.temp_colour = v;
-        if(v < n)
-            base_cluster.state = base_vertex | live;
-        else
-            base_cluster.state = base_edge | live;
+        base_cluster.state = base_vertex | live;
+        base_cluster.neighbours = parlay::sequence<std::atomic<cluster<T>*>>(max_size);
+        base_cluster.children = parlay::sequence<std::atomic<cluster<T>*>>(2*max_size);
+        parlay::parallel_for(0, max_size, [&] (T d){
+            base_cluster.neighbours[d] = nullptr;
+            base_cluster.children[d] = nullptr;
+        });
         return base_cluster;
     });
 
 
-    // populate base edge clusters
-    parlay::parallel_for(0, n, [&] (T v) {
-        
+    // // populate base edge clusters
+    parlay::parallel_for(0, n, [&] (T v) {    
         for(uint i = 0; i < G[v].size(); i++)
         {
-            auto location = n + sums[v] + i;
-            base_clusters[location].data.push_back(&base_clusters[v]);
-            base_clusters[location].data.push_back(&base_clusters[G[v][i]]);
+            cluster<T>* edge_cluster = new cluster<T>;
+            edge_cluster->index = -1;
+            edge_cluster->state = base_edge | live;
+            edge_cluster->neighbours = parlay::sequence<std::atomic<cluster<T>*>>(2);
+            edge_cluster->neighbours[0] = &base_clusters[v];
+            edge_cluster->neighbours[1] = &base_clusters[G[v][i]];
+            base_clusters[v].neighbours[i] = edge_cluster;
+            
         }
     });
 
 
-    // connect outgoing edges
-    parlay::parallel_for(0, n, [&] (T v) {
-        for(uint i = 0; i < G[v].size(); i++) // It is fine because constant degree graph
-        {
-            auto edge_location = n + sums[v] + i;
-            base_clusters[v].data.push_back(&base_clusters[edge_location]);
-        }
-    });
-
-
-    std::mutex* mutexes = new std::mutex[n];
-
-    // connect incoming edges
+    
     parlay::parallel_for(0, n, [&] (T v) {
         for(uint i = 0; i < G[v].size(); i++) // It is fine because constant degree graph so the lock isn't too bad
         {
-            auto edge_location = n + sums[v] + i;
-            auto w = G[v][i]; // destination
-            std::unique_lock<std::mutex> lock(mutexes[w]);
-            base_clusters[w].data.push_back(&base_clusters[edge_location]);
-            lock.unlock();
+            auto edge_cluster = base_clusters[v].neighbours[i].load();
+            auto other_side = edge_cluster->neighbours[1].load();
+            other_side->add_neighbour(edge_cluster);
+            
         }
     });
 
-    delete[] mutexes;
-
+    
 }
 
-/**
- * Just a printer for debugging, not terribly useful anymore
-*/
-template <typename T>
-void print_cluster(parlay::sequence<cluster<T>*> clusters)
-{
-    static char cluster_colours = 0;
-    std::string colour_string;
-    switch(cluster_colours) {
-        case 0: colour_string = ANSI_COLOR_RED; break;
-        case 1: colour_string = ANSI_COLOR_GREEN; break;
-        case 2: colour_string = ANSI_COLOR_YELLOW; break;
-        case 3: colour_string = ANSI_COLOR_BLUE; break;
-        case 4: colour_string = ANSI_COLOR_MAGENTA; break;
-        case 5: colour_string = ANSI_COLOR_CYAN; break;
-        default: colour_string = ANSI_COLOR_RESET;
-    }
+// /**
+//  * Just a printer for debugging, not terribly useful anymore
+// */
+// template <typename T>
+// void print_cluster(parlay::sequence<cluster<T>*> clusters)
+// {
+//     static char cluster_colours = 0;
+//     std::string colour_string;
+//     switch(cluster_colours) {
+//         case 0: colour_string = ANSI_COLOR_RED; break;
+//         case 1: colour_string = ANSI_COLOR_GREEN; break;
+//         case 2: colour_string = ANSI_COLOR_YELLOW; break;
+//         case 3: colour_string = ANSI_COLOR_BLUE; break;
+//         case 4: colour_string = ANSI_COLOR_MAGENTA; break;
+//         case 5: colour_string = ANSI_COLOR_CYAN; break;
+//         default: colour_string = ANSI_COLOR_RESET;
+//     }
 
-    std::cout << colour_string;
+//     std::cout << colour_string;
 
-    for(uint i = 0; i < clusters.size(); i++)
-    {
-        std::cout << i<< " "<<clusters[i]->data.size() <<  " " << clusters[i]->final_colour << " " << " ";
-        if(clusters[i]->state & live)
-        {
-            std::cout << "live ";
-        }
-        else if (clusters[i]->state & nullary_cluster)
-        {
-            std::cout << "nullary ";
-        }
-        else if (clusters[i]->state & binary_cluster)
-        {
-            std::cout << "binary ";
-        }
-        else if (clusters[i]->state & unary_cluster)
-        {
-            std::cout << "unary ";
-        }
-        for(uint j = 0; j < clusters[i]->data.size(); j++)
-        {
-            if(clusters[i]->data[j] == NULL)
-                std::cout << "null ";
-            else
-                std::cout << clusters[i]->data[j]->index << " ";
-        }
-        if(clusters[i]->is_MIS)
-        {
-            std::cout << "\u2713";
-        }
-        std::cout << std::endl;
+//     for(uint i = 0; i < clusters.size(); i++)
+//     {
+//         std::cout << i<< " "<<clusters[i]->data.size() <<  " " << clusters[i]->final_colour << " " << " ";
+//         if(clusters[i]->state & live)
+//         {
+//             std::cout << "live ";
+//         }
+//         else if (clusters[i]->state & nullary_cluster)
+//         {
+//             std::cout << "nullary ";
+//         }
+//         else if (clusters[i]->state & binary_cluster)
+//         {
+//             std::cout << "binary ";
+//         }
+//         else if (clusters[i]->state & unary_cluster)
+//         {
+//             std::cout << "unary ";
+//         }
+//         for(uint j = 0; j < clusters[i]->data.size(); j++)
+//         {
+//             if(clusters[i]->data[j] == NULL)
+//                 std::cout << "null ";
+//             else
+//                 std::cout << clusters[i]->data[j]->index << " ";
+//         }
+//         if(clusters[i]->is_MIS)
+//         {
+//             std::cout << "\u2713";
+//         }
+//         std::cout << std::endl;
         
-    }
+//     }
 
-    std::cout << ANSI_COLOR_RESET;
+//     std::cout << ANSI_COLOR_RESET;
 
-    cluster_colours = (cluster_colours + 1) % 6; 
-}
+//     cluster_colours = (cluster_colours + 1) % 6; 
+// }
 
 /**
  * The main workhorse, populates the set base_clusters with internal_clusters
@@ -559,8 +740,6 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
         return ((C->state & live));
     });
 
-
-
     do
     {
     // Shrink the forst as live nodes decrease
@@ -568,11 +747,14 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
         return ((C->state & live));
     });
 
-    // Eligible nodes are those with degree 1 or 2 (or 0)
+    std::cout << "forest.size(): " << forest.size() << std::endl;
+
+    // Eligible nodes are those with 0, 1 or 2 neighbours
     auto eligible = parlay::filter(forest, [&] (cluster<T>* C) {
-        return (C->data.size() <= 2);
+        return (C->get_neighbour_count() <= 2);
     });
 
+    std::cout << "eligible size is " << eligible.size() << std::endl;
     
     // Set the flag is_MIS amongst them
     set_MIS(eligible);
@@ -582,37 +764,44 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
         return (C->is_MIS);
     });
 
+    std::cout << "candidates.size(): " << candidates.size() << std::endl;
+
     // do rake and compress
     parlay::parallel_for(0, candidates.size(), [&] (T v) {
         cluster<T>* cluster_ptr = candidates[v];
         // rake
-        if(cluster_ptr->data.size() == 0)
+        if(cluster_ptr->get_neighbour_count() == 0)
         {
             cluster_ptr->state&=(~live);
             cluster_ptr->state|=(nullary_cluster);
             cluster_ptr->state|=internal;
         }
-        if(cluster_ptr->data.size() == 1)
+        if(cluster_ptr->get_neighbour_count() == 1)
         {
-            cluster<T>* edge_ptr = cluster_ptr->data[0];
+            cluster<T>* edge_ptr = nullptr;
+            for(T i = 0; i < cluster_ptr->neighbours.size(); i++)
+            {
+                if(cluster_ptr->neighbours[i] != nullptr)
+                    edge_ptr = cluster_ptr->neighbours[i];
+            }
             
             // find the other side of the edge
-            cluster<T>* other_side = edge_ptr->data[0];
-            if(other_side == cluster_ptr)
-                other_side = edge_ptr->data[1];
+            cluster<T>* other_side = edge_ptr->get_other_side(cluster_ptr);
             
-            if(other_side == NULL)
-                std::cout << "This should never happen" << std::endl;
-            
-            // delete this edge in the other_side
-            for(uint i = 0; i < other_side->data.size(); i++)
-            {
-                if(other_side->data[i] == edge_ptr)
-                {
-                    other_side->data[i] = NULL;
-                    break;
-                }
-            }
+            // delete neighbours of edgeptr
+            edge_ptr->remove_neighbour(cluster_ptr);
+            edge_ptr->remove_neighbour(other_side);
+
+            // delete edge_ptr as a neighbour of this
+            cluster_ptr->remove_neighbour(edge_ptr);
+
+            // delete edge_ptr as a neighbour for the other side
+            other_side->remove_neighbour(edge_ptr);
+
+            // now add these two as children
+
+            other_side->add_child(edge_ptr);
+            other_side->add_child(cluster_ptr);
 
             // make other_side be the parent for both
             edge_ptr->parent = cluster_ptr;
@@ -626,48 +815,43 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
             cluster_ptr->state|=internal;
         }
         else 
-        if (cluster_ptr->data.size() == 2)
+        if (cluster_ptr->get_neighbour_count() == 2)
         {
-
             // find left and right vertices/nodes
-            auto left_edge_ptr = cluster_ptr->data[1];
-            auto right_edge_ptr = cluster_ptr->data[0];
+            cluster<T>* left_edge_ptr;
+            cluster<T>* right_edge_ptr;
 
-            auto left_node_ptr = left_edge_ptr->data[0];
-            if(left_node_ptr == cluster_ptr)
-                left_node_ptr =  left_edge_ptr->data[1];
+            cluster_ptr->get_two_neighbouring_edges(&left_edge_ptr, &right_edge_ptr);
 
-            auto right_node_ptr = right_edge_ptr->data[0];
-            if(right_node_ptr == cluster_ptr)
-                right_node_ptr = right_edge_ptr->data[1];
+            if(left_edge_ptr == NULL || right_edge_ptr == NULL)
+            {
+                std::cout << "This should never happen" << std::endl;
+            }
             
-            // realign left_edge_ptr in left_node_ptr
-            for(uint i = 0; i < left_node_ptr->data.size(); i++)
-            {
-                if(left_node_ptr->data[i] == left_edge_ptr)
-                {
-                    left_node_ptr->data[i] = cluster_ptr;
-                     break;
-                }
-            }
-            // realign right_edge_ptr in right_node_ptr
-            for(uint i = 0; i < right_node_ptr->data.size(); i++)
-            {
-                if(right_node_ptr->data[i] == right_edge_ptr)
-                {
-                    right_node_ptr->data[i] = cluster_ptr;
-                     break;
-                }
-            }
+            auto left_node_ptr = left_edge_ptr->get_other_side(cluster_ptr);
+            auto right_node_ptr = right_edge_ptr->get_other_side(cluster_ptr);
+            
+            left_node_ptr->remove_neighbour(left_edge_ptr);
+            left_node_ptr->add_neighbour(cluster_ptr);
 
+            right_node_ptr->remove_neighbour(right_edge_ptr);
+            right_node_ptr->add_neighbour(cluster_ptr);
+            
             left_edge_ptr->parent = cluster_ptr;
             right_edge_ptr->parent = cluster_ptr;
+
+            cluster_ptr->add_child(left_edge_ptr);
+            cluster_ptr->add_child(right_edge_ptr);
 
             left_edge_ptr->state&=(~live);
             right_edge_ptr->state&=(~live);
 
-            cluster_ptr->data[0] = left_node_ptr;
-            cluster_ptr->data[1] = right_node_ptr;
+            cluster_ptr->remove_neighbour(left_edge_ptr);
+            cluster_ptr->add_neighbour(left_node_ptr);
+
+            cluster_ptr->remove_neighbour(right_edge_ptr);
+            cluster_ptr->add_neighbour(right_node_ptr);
+
 
             cluster_ptr->state&=(~live);
 
@@ -676,15 +860,6 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
             
         }
     });
-
-    // remove any extra NULLs in the forest for degree calculation
-    parlay::parallel_for(0, forest.size(), [&] (T v) {
-        forest[v]->data = parlay::filter(forest[v]->data, [&] (cluster<T>* C) {
-            return C!=NULL;
-        });
-    });
-
-    // std::cout << "Candidates.size(): " << candidates.size() << std::endl;
     }while(candidates.size());
 
 }
