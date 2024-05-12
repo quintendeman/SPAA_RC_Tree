@@ -529,8 +529,8 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
  * Make sure edges are undirected
 */
 
-template <typename T>
-void adjust_weights(parlay::sequence<cluster<T> > &clusters, parlay::sequence<std::tuple<T, T, T>> weighted_edges)
+template <typename T, typename func>
+void adjust_weights(parlay::sequence<cluster<T> > &clusters, parlay::sequence<std::tuple<T, T, T>> weighted_edges, func lambdafunc)
 {
 
     parlay::sequence<cluster<T>*> relevant_edges = parlay::sequence<cluster<T>*>(weighted_edges.size(), nullptr);
@@ -607,9 +607,7 @@ void adjust_weights(parlay::sequence<cluster<T> > &clusters, parlay::sequence<st
         T ret_val;
         while(node->parent != nullptr && (ret_val = node->parent->counter[0].fetch_add(-1)) == 1)
         {
-            /**
-             * Do the child thing
-            */
+            lambdafunc(node);
             node = node->parent;
         }
     });

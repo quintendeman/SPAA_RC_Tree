@@ -73,7 +73,9 @@ int main(int argc, char* argv[]) {
 
     create_RC_tree(clusters, n);
 
-    adjust_weights(clusters, weighted_edges);
+    adjust_weights(clusters, weighted_edges, [] (cluster<vertex>* clstr) {
+        return;
+    });
 
 
     delete_RC_Tree_edges(clusters);
