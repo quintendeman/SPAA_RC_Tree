@@ -35,14 +35,17 @@ template <typename T>
 struct cluster
 {
     public:
-        T index = -1;
         parlay::sequence<std::atomic<cluster<T>*>> neighbours;
         parlay::sequence<std::atomic<cluster<T>*>> children;
+        parlay::sequence<std::atomic<T>> counter = parlay::sequence<std::atomic<T>>(1);
         cluster<T>* parent = nullptr;
+        T index = -1;
         T colour = -1;
-        short state = empty_type; // unaffected, affected or update eligible
-        bool is_MIS = false;
         T data = 0;
+        bool is_MIS = false;
+        short state = empty_type; // unaffected, affected or update eligible
+
+        
 
         unsigned long get_colour(void)
         {
@@ -617,6 +620,7 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
         parlay::parallel_for(0, max_size, [&] (T d){
             base_cluster.neighbours[d] = nullptr;
             base_cluster.children[d] = nullptr;
+            base_cluster.counter[0] = 0;
         });
         return base_cluster;
     });
@@ -632,6 +636,7 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
             edge_cluster->neighbours = parlay::sequence<std::atomic<cluster<T>*>>(2);
             edge_cluster->neighbours[0] = &base_clusters[v];
             edge_cluster->neighbours[1] = &base_clusters[G[v][i]];
+            edge_cluster->counter[0] = 0;
             base_clusters[v].neighbours[i] = edge_cluster;
             
         }
@@ -861,5 +866,61 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
         }
     });
     }while(candidates.size());
+
+}
+
+
+/**
+ * Since edges are dynamically allocated, delete them
+ * takes the vertices! 
+*/
+template<typename T>
+void delete_RC_Tree_edges(parlay::sequence<cluster<T> > &base_clusters)
+{
+
+    parlay::parallel_for(0, base_clusters.size(), [&] (T v) {
+        for(T i = 0; i < base_clusters[v].neighbours.size(); i++)
+        {
+            
+            if(base_clusters[v].neighbours[i].load() != nullptr && base_clusters[v].neighbours[i].load()->state & base_edge)
+                base_clusters[v].neighbours[i].load()->counter[0].fetch_add(1);
+        }
+        for(T i = 0; i < base_clusters[v].children.size(); i++)
+        {
+            
+            if(base_clusters[v].children[i].load() != nullptr && base_clusters[v].children[i].load()->state & base_edge)
+                base_clusters[v].children[i].load()->counter[0].fetch_add(1);
+        }
+    });
+
+    parlay::parallel_for(0, base_clusters.size(), [&] (T v) {
+        for(T i = 0; i < base_clusters[v].neighbours.size(); i++)
+        {
+            
+            if(base_clusters[v].neighbours[i].load() != nullptr && base_clusters[v].neighbours[i].load()->state & base_edge)
+            {
+
+                auto ret_count = base_clusters[v].neighbours[i].load()->counter[0].fetch_add(-1);
+                if(ret_count == 1)
+                {
+                    delete base_clusters[v].neighbours[i].load();
+                }
+            }
+        }
+        for(T i = 0; i < base_clusters[v].children.size(); i++)
+        {
+            
+            if(base_clusters[v].children[i].load() != nullptr && base_clusters[v].children[i].load()->state & base_edge)
+            {
+
+                auto ret_count = base_clusters[v].children[i].load()->counter[0].fetch_add(-1);
+                if(ret_count == 1)
+                {
+                    delete base_clusters[v].children[i].load();
+                }
+            }
+        }
+    });
+    
 
 }

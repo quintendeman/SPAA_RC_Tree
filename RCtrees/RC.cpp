@@ -65,6 +65,8 @@ int main(int argc, char* argv[]) {
 
     create_RC_tree(clusters, n);
 
+    delete_RC_Tree_edges(clusters);
+
     // auto end = std::chrono::high_resolution_clock::now();
 
     // std::chrono::duration<double> duration = end - start;
