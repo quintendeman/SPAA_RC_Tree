@@ -1,12 +1,9 @@
 #include <atomic>
-#include "/scratch/parlaylib/include/parlay/primitives.h"
-#include "/scratch/parlaylib/include/parlay/sequence.h"
-#include "/scratch/parlaylib/examples/helper/graph_utils.h"
-#include "/scratch/parlaylib/examples/counting_sort.h"
 #include <random>
 #include <set>
 #include <iostream>
 #include <mutex>
+#include "cluster.h"
 
 
 #define ANSI_COLOR_RED     "\x1b[31m"
@@ -24,224 +21,10 @@ const short unary_cluster = 4;
 const short binary_cluster = 8;
 const short nullary_cluster = 16;
 const short live = 256;
+const short carrying_weight = 512;
 const short internal = 8192;
 
 
-/*
-    This represents a cluster in an RC tree.
-    All these variables might be excessive but these flags and such are necessary since will be relying on pointer chasing
-*/
-template <typename T>
-struct cluster
-{
-    public:
-        parlay::sequence<std::atomic<cluster<T>*>> neighbours;
-        parlay::sequence<std::atomic<cluster<T>*>> children;
-        parlay::sequence<std::atomic<T>> counter = parlay::sequence<std::atomic<T>>(1);
-        cluster<T>* parent = nullptr;
-        T index = -1;
-        T colour = -1;
-        T data = 0;
-        bool is_MIS = false;
-        short state = empty_type; // unaffected, affected or update eligible
-
-        
-
-        unsigned long get_colour(void)
-        {
-            return reinterpret_cast<T>(this);
-        }
-
-        T get_neighbour_count(void)
-        {
-            T ret_count = 0;
-            for(T j = 0; j < this->neighbours.size(); j++)
-            {
-                if(this->neighbours[j].load() != nullptr)
-                {
-                   ret_count++;
-                }
-            }
-            return ret_count;
-        }
-
-        /**
-         * Should be async safe
-         * sets "neighbour" to be anywhere in the neighbours array that was previously null
-        */
-        bool add_neighbour(cluster<T>* neighbour)
-        {
-            for(T j = 0; j < this->neighbours.size(); j++)
-            {
-                if(this->neighbours[j].load() == nullptr)
-                {
-                    cluster<T>* expected = nullptr;
-                    bool swapped = this->neighbours[j].compare_exchange_strong(expected, neighbour);
-                    if(swapped)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-        /**
-         * Not guaranteed to remove!
-         * Race conditions can cause this to "skip" a count
-         * Put it while(!remove_neighbour(neighbour))
-         * to ensure it removes
-        */
-        bool remove_neighbour(cluster<T>* neighbour)
-        {
-            for(T j = 0; j < this->neighbours.size(); j++)
-            {
-                if(this->neighbours[j].load() == neighbour)
-                {
-                    cluster<T>* expected = neighbour;
-                    bool swapped = this->neighbours[j].compare_exchange_strong(expected, nullptr);
-                    if(swapped)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        T get_children_count(void)
-        {
-            T ret_count = 0;
-            for(T j = 0; j < this->children.size(); j++)
-            {
-                if(this->children[j].load() != nullptr)
-                {
-                   ret_count++;
-                }
-            }
-            return ret_count;
-        }
-
-        /**
-         * Should be async safe
-         * sets "child" to be anywhere in the child array that was previously null
-        */
-        bool add_child(cluster<T>* child)
-        {
-            for(T j = 0; j < this->children.size(); j++)
-            {
-                if(this->children[j].load() == nullptr)
-                {
-                    cluster<T>* expected = nullptr;
-                    bool swapped = this->children[j].compare_exchange_strong(expected, child);
-                    if(swapped)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-        /**
-         * Not guaranteed to remove!
-         * Race conditions can cause this to "skip" a value
-        */
-        bool remove_child(cluster<T>* child)
-        {
-            for(T j = 0; j < this->children.size(); j++)
-            {
-                if(this->children[j].load() == child)
-                {
-                    cluster<T>* expected = child;
-                    bool swapped = this->children[j].compare_exchange_strong(expected, nullptr);
-                    if(swapped)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        /**
-         * Get first edge in neighbours array that isn't equal to this_side and not null
-         * Suffers from race conditions but MIS should keep it safe
-        */
-        cluster<T>* get_other_side(cluster<T>* this_side)
-        {
-            cluster<T>* ret_ptr = NULL;
-            for(T j = 0; j < this->neighbours.size(); j++)
-            {
-                if(this->neighbours[j].load() != nullptr && this->neighbours[j].load() != this_side)
-                {
-                    return this->neighbours[j].load();
-                }
-            }
-            return ret_ptr;
-        }
-        /**
-         * Set all 2 hop neighbour's is_MIS as MIS
-        */
-        void set_neighbour_mis(bool MIS)
-        {
-            for(T i = 0; i < this->neighbours.size(); i++)
-            {
-                if(this->neighbours[i] == nullptr)
-                    continue;
-                auto edge = this->neighbours[i].load();
-                for(T j = 0; j < edge->neighbours.size(); j++)
-                {
-                    if(edge->neighbours[j].load() != nullptr && edge->neighbours[j].load() != this)
-                        edge->neighbours[j].load()->is_MIS = MIS;
-                }
-            }
-        }
-
-        /**
-         * if any of 2 hop neighbours i.e. after edge are true, return true
-        */
-        bool get_neighbour_MIS(void)
-        {
-            for(T i = 0; i < this->neighbours.size(); i++)
-            {
-                if(this->neighbours[i] == nullptr)
-                    continue;
-                auto edge = this->neighbours[i].load();
-                for(T j = 0; j < edge->neighbours.size(); j++)
-                {
-                    if(edge->neighbours[j].load() != nullptr && edge->neighbours[j].load() != this && edge->neighbours[j].load()->is_MIS == true)
-                        return true;
-
-                }
-            }
-
-            return false;
-        }
-
-        void get_two_neighbouring_edges(cluster<T>** left, cluster<T>** right)
-        {
-            bool left_found = false;
-
-            for(T i = 0; i < this->neighbours.size(); i++)
-            {
-                if(this->neighbours[i].load() != nullptr)
-                {
-                    
-                    if(left_found == false)
-                    {
-                        *left = this->neighbours[i].load();
-                        left_found = true;
-                    }
-                    else
-                    {
-                        *right = this->neighbours[i].load();
-                        break;
-                    }
-                }    
-            }
-        }
-
-        
-};
 
 /*
     Generate a simple, single rooted graph with each node having two children
@@ -527,75 +310,6 @@ void set_MIS(parlay::sequence<cluster<T>*> clusters)
 }
 
 
-// /*
-//     Checks if clusters form an MIS
-// */
-// template<typename T>
-// bool check_MIS(parlay::sequence<cluster<T>*> clusters)
-// {
-
-//     bool is_valid_MIS = true;
-
-//     T example_index;
-//     cluster<T>* W;
-
-//     for(T v = 0; v < clusters.size(); v++)
-//     {
-//         if(clusters[v]->is_MIS)
-//         {
-//             // check if any neighbours are valid MIS
-//             for(uint i = 0; i < clusters[v]->data.size();i++)
-//             {
-//                 auto edge_ptr = clusters[v]->data[i];
-//                 auto other_node = edge_ptr->data[0];
-//                 if (other_node->index == clusters[v]->index)
-//                 {
-//                     other_node = edge_ptr->data[1];
-//                 }
-                
-//                 if(other_node->is_MIS && other_node->data.size()<=2)
-//                 {
-//                     is_valid_MIS = false;
-//                     example_index = v;
-//                     W = other_node;
-//                 }
-//             }
-//         }
-//     }
-
-//     if(!is_valid_MIS)
-//     {
-//         std::cout << "Not a valid MIS: " << std::endl;
-//         auto V = clusters[example_index];
-//         std::cout << V->index << " " << V->final_colour << " ";
-//         for(uint i = 0; i < V->data.size(); i++)
-//         {
-//             auto other_ptr = V->data[i]->data[0];
-//             if(other_ptr == V)
-//             {
-//                 other_ptr = V->data[i]->data[1];
-//             }
-//             std::cout << other_ptr->index << ":" << other_ptr->final_colour << " ";
-//         }
-//         std::cout << std::endl;
-//         std::cout << W->index << " " << W->final_colour << " ";
-//         for(uint i = 0; i < W->data.size(); i++)
-//         {
-//             auto other_ptr = W->data[i]->data[0];
-//             if(other_ptr == W)
-//             {
-//                 other_ptr = W->data[i]->data[1];
-//             }
-//             std::cout << other_ptr->index << ":" << other_ptr->final_colour << " ";
-//         }
-//         std::cout << std::endl;
-//     }
-
-//     return is_valid_MIS;
-
-// }
-
-
 /**
  * Given an ASSYMETRIC graph, creates a set of clusters
  * In total, it creates n + m clusters in the array base_clusters
@@ -657,64 +371,6 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
     
 }
 
-// /**
-//  * Just a printer for debugging, not terribly useful anymore
-// */
-// template <typename T>
-// void print_cluster(parlay::sequence<cluster<T>*> clusters)
-// {
-//     static char cluster_colours = 0;
-//     std::string colour_string;
-//     switch(cluster_colours) {
-//         case 0: colour_string = ANSI_COLOR_RED; break;
-//         case 1: colour_string = ANSI_COLOR_GREEN; break;
-//         case 2: colour_string = ANSI_COLOR_YELLOW; break;
-//         case 3: colour_string = ANSI_COLOR_BLUE; break;
-//         case 4: colour_string = ANSI_COLOR_MAGENTA; break;
-//         case 5: colour_string = ANSI_COLOR_CYAN; break;
-//         default: colour_string = ANSI_COLOR_RESET;
-//     }
-
-//     std::cout << colour_string;
-
-//     for(uint i = 0; i < clusters.size(); i++)
-//     {
-//         std::cout << i<< " "<<clusters[i]->data.size() <<  " " << clusters[i]->final_colour << " " << " ";
-//         if(clusters[i]->state & live)
-//         {
-//             std::cout << "live ";
-//         }
-//         else if (clusters[i]->state & nullary_cluster)
-//         {
-//             std::cout << "nullary ";
-//         }
-//         else if (clusters[i]->state & binary_cluster)
-//         {
-//             std::cout << "binary ";
-//         }
-//         else if (clusters[i]->state & unary_cluster)
-//         {
-//             std::cout << "unary ";
-//         }
-//         for(uint j = 0; j < clusters[i]->data.size(); j++)
-//         {
-//             if(clusters[i]->data[j] == NULL)
-//                 std::cout << "null ";
-//             else
-//                 std::cout << clusters[i]->data[j]->index << " ";
-//         }
-//         if(clusters[i]->is_MIS)
-//         {
-//             std::cout << "\u2713";
-//         }
-//         std::cout << std::endl;
-        
-//     }
-
-//     std::cout << ANSI_COLOR_RESET;
-
-//     cluster_colours = (cluster_colours + 1) % 6; 
-// }
 
 /**
  * The main workhorse, populates the set base_clusters with internal_clusters
@@ -794,8 +450,8 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
             cluster<T>* other_side = edge_ptr->get_other_side(cluster_ptr);
             
             // delete neighbours of edgeptr
-            edge_ptr->remove_neighbour(cluster_ptr);
-            edge_ptr->remove_neighbour(other_side);
+            // edge_ptr->remove_neighbour(cluster_ptr);
+            // edge_ptr->remove_neighbour(other_side);
 
             // delete edge_ptr as a neighbour of this
             cluster_ptr->remove_neighbour(edge_ptr);
@@ -869,6 +525,107 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
 
 }
 
+/**
+ * Make sure edges are undirected
+*/
+
+template <typename T>
+void adjust_weights(parlay::sequence<cluster<T> > &clusters, parlay::sequence<std::tuple<T, T, T>> weighted_edges)
+{
+
+    parlay::sequence<cluster<T>*> relevant_edges = parlay::sequence<cluster<T>*>(weighted_edges.size(), nullptr);
+
+    parlay::parallel_for(0, weighted_edges.size(), [&] (T i) {
+        T v = std::get<0>(weighted_edges[i]);
+        T w = std::get<1>(weighted_edges[i]);
+        T weight = std::get<2>(weighted_edges[i]);
+
+        if(v > w)
+            std::swap(v, w);
+    
+        cluster<T>* v_cluster = &clusters[v];
+        cluster<T>* w_cluster = &clusters[w];
+
+        // either v or w will have the v-w edge as a child
+        cluster<T>* v_w_edge = nullptr;
+
+        for(T i = 0; i < v_cluster->children.size(); i++)
+        {
+            if(v_cluster->children[i].load() != nullptr)
+            {
+                if(v_cluster->children[i].load()->is_neighbour(v_cluster) && v_cluster->children[i].load()->is_neighbour(w_cluster))
+                {
+                    v_w_edge = v_cluster->children[i].load();
+                    break;
+                }
+            }
+        }
+        if(v_w_edge == nullptr)
+        {
+            for(T i = 0; i < w_cluster->children.size(); i++)
+            {
+                if(w_cluster->children[i].load() != nullptr)
+                {
+                    if(w_cluster->children[i].load()->is_neighbour(v_cluster) && w_cluster->children[i].load()->is_neighbour(w_cluster))
+                    {
+                        v_w_edge = w_cluster->children[i].load();
+                        break;
+                    }
+                }
+            }
+        }
+        if(v_w_edge == nullptr)
+        {
+            std::cout << "This shouldn't happen, did you feed an invalid edge? " << v <<  " " << w <<std::endl;
+            v_cluster->print();
+            w_cluster->print();
+            relevant_edges[i] = nullptr;
+            return;
+        }
+        v_w_edge->data = weight;
+        relevant_edges[i] = v_w_edge;
+    });
+
+    parlay::parallel_for(0, relevant_edges.size(), [&] (T v){
+        auto node = relevant_edges[v];
+        T ret_val;
+        while(node->parent != nullptr && (ret_val = node->parent->counter[0].fetch_add(1)) == 0)
+        {
+            node = node->parent;
+        }
+    });
+
+    std::cout << "counts: " << std::endl; 
+    for(uint i = 0; i < clusters.size(); i++)
+    {
+        std::cout << clusters[i].index << ":" << clusters[i].counter[0].load() << std::endl;
+    }
+    std::cout << std::endl;
+
+    parlay::parallel_for(0, relevant_edges.size(), [&] (T v){
+        auto node = relevant_edges[v];
+        T ret_val;
+        while(node->parent != nullptr && (ret_val = node->parent->counter[0].fetch_add(-1)) == 1)
+        {
+            /**
+             * Do the child thing
+            */
+            node = node->parent;
+        }
+    });
+
+    std::cout << "counts: " << std::endl; 
+    for(uint i = 0; i < clusters.size(); i++)
+    {
+        std::cout << clusters[i].index << ":" << clusters[i].counter[0].load() << std::endl;
+    }
+    std::cout << std::endl;
+
+    
+
+
+
+}
 
 /**
  * Since edges are dynamically allocated, delete them
@@ -922,5 +679,5 @@ void delete_RC_Tree_edges(parlay::sequence<cluster<T> > &base_clusters)
         }
     });
     
-
 }
+

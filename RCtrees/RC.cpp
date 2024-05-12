@@ -57,13 +57,24 @@ int main(int argc, char* argv[]) {
 
     G = convert_parents_to_graph(G, parents);
 
+    parlay::sequence<std::tuple<vertex, vertex, vertex>> weighted_edges = parlay::tabulate(parents.size(), [&] (vertex i) {
+        return std::tuple<vertex, vertex, vertex> (i, parents[i], i+123210*i % 12312);
+    });
+    weighted_edges = parlay::filter(weighted_edges, [&] (std::tuple<vertex, vertex, vertex> wedge) {
+        return std::get<0>(wedge) != std::get<1>(wedge);
+    });
+
     parlay::sequence<cluster<vertex> > clusters;
 
     create_base_clusters(G, clusters, max_degree);
 
+    
     // auto start = std::chrono::high_resolution_clock::now();
 
     create_RC_tree(clusters, n);
+
+    adjust_weights(clusters, weighted_edges);
+
 
     delete_RC_Tree_edges(clusters);
 
