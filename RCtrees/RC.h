@@ -608,7 +608,7 @@ void adjust_weights(parlay::sequence<cluster<T> > &clusters, parlay::sequence<st
         while(node->parent != nullptr && (ret_val = node->parent->counter[0].fetch_add(-1)) == 1)
         {
             
-            // All the children are ready
+            // All the children are ready 
             
 
             node = node->parent;
