@@ -73,8 +73,8 @@ int main(int argc, char* argv[]) {
 
     create_RC_tree(clusters, n);
 
-    adjust_weights(clusters, weighted_edges, [] (cluster<vertex>* clstr) {
-        return;
+    adjust_weights(clusters, weighted_edges, [] (T a, T b) {
+        return a < b ? a : b;
     });
 
 
