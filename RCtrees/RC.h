@@ -609,6 +609,26 @@ void adjust_weights(parlay::sequence<cluster<T> > &clusters, parlay::sequence<st
         {
             
             // All the children are ready 
+            if(node->state & binary_cluster)
+            {
+                bool first_child = true;
+                for(uint i = 0; i < node->children.size(); i++)
+                {
+                    auto child = node->children[i].load();
+                    if(child == nullptr)
+                        continue;
+                    if(first_child)
+                    {
+                        first_child = false;
+                        node->data = child->data;
+                    }
+                    else
+                    {
+                        node->data = lambdafunc(node->data, child->data);
+                    }
+            
+                }
+            }
             
 
             node = node->parent;
