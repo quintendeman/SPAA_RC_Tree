@@ -47,7 +47,10 @@ int main(int argc, char* argv[]) {
 
     n = pow(2, floor(log2(n)));
 
-    // std::cout << "Setting n to closest (lower) power of 2, so "  << old_n << " => " << n <<  std::endl;
+    if (n < 16)
+        n = 16;
+
+    std::cout << "Setting n to closest (lower) power of 2 greater than 8, so "  << old_n << " => " << n <<  std::endl;
 
     auto parents = generate_tree_graph(n);
 
@@ -74,26 +77,33 @@ int main(int argc, char* argv[]) {
     create_RC_tree(clusters, n);
 
     adjust_weights(clusters, weighted_edges, [] (vertex a, vertex b) {
-        return a < b ? a : b;
+        return a < b ? b : a;
     });
 
+    vertex max_vals = n;
+
+    for(vertex i = 0; i < max_vals; i++)
+    {
+        queryPath( (vertex) ((i + max_vals/10) % max_vals),  i, (vertex) -1, clusters, [] (vertex a, vertex b) {
+        return a < b ? b : a;
+        });
+    }
+
+    vertex total_binary = 0;
+
+    for(vertex i = 0; i < clusters.size(); i++)
+    {
+        if(clusters[i].state & binary_cluster)
+            total_binary++;
+
+    }
+
+    std::cout << "There were " << total_binary << " binary clusters" << std::endl;
+
+    printTree(clusters);
 
     delete_RC_Tree_edges(clusters);
 
-    // auto end = std::chrono::high_resolution_clock::now();
-
-    // std::chrono::duration<double> duration = end - start;
-
-    // std::cout << std::fixed << std::setprecision(9) << n << "," << duration.count() << std::endl;
-    
-    // // This writing code is borrowed from chatgpt
-    // std::ofstream file("data.csv", std::ios_base::app);
-    // if (file.is_open()) {
-    //     file << std::fixed << std::setprecision(9) << n << "," << duration.count() << std::endl;
-    //     file.close();
-    // } else {
-    //     std::cerr << "Error opening file!" << std::endl;
-    // }
 
 
     return 0;

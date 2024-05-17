@@ -14,16 +14,6 @@
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
-const short empty_type = 0;
-const short base_vertex = 1;
-const short base_edge = 2;
-const short unary_cluster = 4;
-const short binary_cluster = 8;
-const short nullary_cluster = 16;
-const short live = 256;
-const short carrying_weight = 512;
-const short internal = 8192;
-
 
 
 /*
@@ -39,16 +29,29 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
 
     parlay::sequence<T> dummy_initial_parents = parlay::tabulate(num_elements, [&] (T v) {return (T) 0;});
 
+    
+    // parlay::parallel_for(0, num_elements, [&] (T v) {
+    //     dummy_initial_parents[v] = v/2;
+    // }); 
+
     std::mt19937 gen(std::random_device{}());
+    
 
     parlay::parallel_for(0, num_elements, [&] (T v) {
-        double lambda = 1.0 / (((double) v) * 0.1);
-        std::exponential_distribution<double> dist(lambda);
-        double value = dist(gen);
-        T T_value = (T) value;
-        if (T_value > v)
-            T_value = v;
-        dummy_initial_parents[v] = T_value;
+        std::uniform_real_distribution<> dis(0, 1);
+        auto random_val = dis(gen);
+        if (random_val <= 0.4 && v > 0)
+        {
+            std::uniform_int_distribution<> disint(0, v-1);
+
+            dummy_initial_parents[v] = disint(gen);
+        }
+        else if (random_val < 0.41)
+        {
+            dummy_initial_parents[v] = v;
+        }
+        else
+            dummy_initial_parents[v] = v == 0 ? 0 : v - 1;
     });  
     
     return dummy_initial_parents;
@@ -335,6 +338,7 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
             base_cluster.neighbours[d] = nullptr;
             base_cluster.children[d] = nullptr;
             base_cluster.counter[0] = 0;
+            base_cluster.height[0] = -1;
         });
         return base_cluster;
     });
@@ -351,6 +355,7 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
             edge_cluster->neighbours[0] = &base_clusters[v];
             edge_cluster->neighbours[1] = &base_clusters[G[v][i]];
             edge_cluster->counter[0] = 0;
+            edge_cluster->height[0] = -1;
             base_clusters[v].neighbours[i] = edge_cluster;
             
         }
@@ -371,6 +376,35 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
     
 }
 
+template <typename T>
+void set_heights(parlay::sequence<cluster<T> > &base_clusters)
+{
+
+    parlay::parallel_for(0, base_clusters.size(), [&] (T v) {
+        auto cluster = &base_clusters[v];
+        T my_height = 0;
+
+        while(cluster != nullptr)
+        {
+            bool swapped = false;
+            while(swapped == false)
+            {                
+                T height = cluster->height[0].load();
+                if(height >= my_height)
+                {
+                    return;
+                }
+                swapped = cluster->height[0].compare_exchange_strong(height, my_height);
+            }            
+
+            my_height++;
+            cluster = cluster->parent;
+        }
+
+    });
+
+
+}
 
 /**
  * The main workhorse, populates the set base_clusters with internal_clusters
@@ -408,15 +442,14 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
         return ((C->state & live));
     });
 
-    std::cout << "forest.size(): " << forest.size() << std::endl;
+    // std::cout << "forest.size(): " << forest.size() << std::endl;
 
     // Eligible nodes are those with 0, 1 or 2 neighbours
     auto eligible = parlay::filter(forest, [&] (cluster<T>* C) {
         return (C->get_neighbour_count() <= 2);
     });
 
-    std::cout << "eligible size is " << eligible.size() << std::endl;
-    
+ 
     // Set the flag is_MIS amongst them
     set_MIS(eligible);
 
@@ -425,7 +458,14 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
         return (C->is_MIS);
     });
 
-    std::cout << "candidates.size(): " << candidates.size() << std::endl;
+    // auto two_count = parlay::filter(candidates, [&] (cluster<T>* C) {
+    //     return (C->get_neighbour_count() == 2);
+    // });
+
+    // std::cout << "two_count size is " << two_count.size() << std::endl;
+    
+
+    // std::cout << "candidates.size(): " << candidates.size() << std::endl;
 
     // do rake and compress
     parlay::parallel_for(0, candidates.size(), [&] (T v) {
@@ -523,6 +563,8 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
     });
     }while(candidates.size());
 
+    set_heights(base_clusters);
+
 }
 
 /**
@@ -595,12 +637,6 @@ void adjust_weights(parlay::sequence<cluster<T> > &clusters, parlay::sequence<st
         }
     });
 
-    std::cout << "counts: " << std::endl; 
-    for(uint i = 0; i < clusters.size(); i++)
-    {
-        std::cout << clusters[i].index << ":" << clusters[i].counter[0].load() << std::endl;
-    }
-    std::cout << std::endl;
 
     parlay::parallel_for(0, relevant_edges.size(), [&] (T v){
         auto node = relevant_edges[v];
@@ -611,39 +647,28 @@ void adjust_weights(parlay::sequence<cluster<T> > &clusters, parlay::sequence<st
             // All the children are ready 
             if(node->state & binary_cluster)
             {
-                bool first_child = true;
-                for(uint i = 0; i < node->children.size(); i++)
+                bool first_neighbour = true;
+                for(uint i = 0; i < node->neighbours.size(); i++)
                 {
-                    auto child = node->children[i].load();
-                    if(child == nullptr)
+                    auto neighbour = node->neighbours[i].load();
+                    if(neighbour == nullptr)
                         continue;
-                    if(first_child)
+                    if(first_neighbour)
                     {
-                        first_child = false;
-                        node->data = child->data;
+                        first_neighbour = false;
+                        node->data = neighbour->data;
                     }
                     else
                     {
-                        node->data = lambdafunc(node->data, child->data);
+                        node->data = lambdafunc(node->data, neighbour->data);
                     }
             
                 }
             }
-            
 
             node = node->parent;
         }
     });
-
-    std::cout << "counts: " << std::endl; 
-    for(uint i = 0; i < clusters.size(); i++)
-    {
-        std::cout << clusters[i].index << ":" << clusters[i].counter[0].load() << std::endl;
-    }
-    std::cout << std::endl;
-
-    
-
 
 
 }
@@ -702,3 +727,63 @@ void delete_RC_Tree_edges(parlay::sequence<cluster<T> > &base_clusters)
     
 }
 
+
+
+template<typename T, typename lambdafunc>
+T queryPath(T v, T w, T def, parlay::sequence<cluster<T> > &base_clusters, lambdafunc func)
+{
+    auto v_cluster = &base_clusters[v];
+    auto w_cluster = &base_clusters[w];
+
+    cluster<T>* vl = nullptr;
+    cluster<T>* vr = nullptr;
+    cluster<T>* wl = nullptr;
+    cluster<T>* wr = nullptr;
+
+     
+
+    cluster<T>* LCA = nullptr;
+
+    bool use_v = true;
+
+    while(v_cluster != nullptr && w_cluster != nullptr)
+    {
+        if(v_cluster->height[0].load() < w_cluster->height[0].load())
+            use_v = true;
+        else if (v_cluster->height[0].load() > w_cluster->height[0].load())
+            use_v = false;
+
+        if(v_cluster == w_cluster)
+            LCA = v_cluster;
+
+        if(use_v)
+            v_cluster = v_cluster->parent;
+        else
+            w_cluster = w_cluster->parent;
+    }
+
+    if(LCA)
+    {
+        std::cout << "LCA FOUND: " <<  LCA->index << "!" << std::endl;
+    }
+    else
+        std::cout << "NO LCA" << std::endl;
+
+    base_clusters[v].print_ancestory();
+    base_clusters[w].print_ancestory();
+    std::cout << std::endl;
+
+
+    
+    return def;
+}
+
+
+template<typename T>
+void printTree(parlay::sequence<cluster<T> > &base_clusters)
+{
+    for(uint i = 0; i < base_clusters.size(); i++)
+    {
+        base_clusters[i].print();
+    }   
+}
