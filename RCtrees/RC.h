@@ -377,11 +377,11 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
 }
 
 template <typename T>
-void set_heights(parlay::sequence<cluster<T> > &base_clusters)
+void set_heights(parlay::sequence<cluster<T>*> &all_cluster_ptrs)
 {
 
-    parlay::parallel_for(0, base_clusters.size(), [&] (T v) {
-        auto cluster = &base_clusters[v];
+    parlay::parallel_for(0, all_cluster_ptrs.size(), [&] (T v) {
+        auto cluster = all_cluster_ptrs[v];
         T my_height = 0;
 
         while(cluster != nullptr)
@@ -563,7 +563,7 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n)
     });
     }while(candidates.size());
 
-    set_heights(base_clusters);
+    set_heights(all_cluster_ptrs);
 
 }
 
@@ -735,16 +735,29 @@ T queryPath(T v, T w, T def, parlay::sequence<cluster<T> > &base_clusters, lambd
     auto v_cluster = &base_clusters[v];
     auto w_cluster = &base_clusters[w];
 
+    if(v_cluster == w_cluster)
+    {
+        return def;
+    }
+
     cluster<T>* vl = nullptr;
     cluster<T>* vr = nullptr;
     cluster<T>* wl = nullptr;
     cluster<T>* wr = nullptr;
 
-     
+    T vl_value;
+    T wl_value;
+    T vr_value;
+    T wr_value;
+
+    bool vl_valid = false;
+    bool v_path_picked = false;
+    bool wl_valid = false;
+    bool w_path_picked = false;
 
     cluster<T>* LCA = nullptr;
 
-    bool use_v = true;
+    bool use_v = true; // ascend with the V cluster
 
     while(v_cluster != nullptr && w_cluster != nullptr)
     {
@@ -754,26 +767,405 @@ T queryPath(T v, T w, T def, parlay::sequence<cluster<T> > &base_clusters, lambd
             use_v = false;
 
         if(v_cluster == w_cluster)
+        {
+            //LCA found
             LCA = v_cluster;
 
-        if(use_v)
-            v_cluster = v_cluster->parent;
+            break;
+        }
         else
-            w_cluster = w_cluster->parent;
+        {
+            if(use_v)
+            {
+                    if(vl == nullptr || vr == nullptr) // starting case
+                    {
+                        if(v_cluster->state & unary_cluster || v_cluster->state & nullary_cluster)
+                        {
+                            vl = vr = v_cluster;
+                            vl_value = vr_value = v_cluster->get_children_contribution(func, def);
+                        }
+                        else // binary_cluster case
+                        {
+                            uint l_index = 0;
+                            for(uint i = 0; i < v_cluster->children.size(); i++)
+                            {
+                                auto child = v_cluster->children[i].load();
+                                if(child != nullptr && child->state & base_edge)
+                                {
+                                    l_index = i;
+                                    vl = child->get_other_side(v_cluster);
+                                    vl_value = child->data;
+                                    break;
+                                }
+                            }
+                            for(uint i = l_index+1; i < v_cluster->children.size(); i++)
+                            {
+                                auto child = v_cluster->children[i].load();
+                                if(child != nullptr && child->state & base_edge)
+                                {
+                                    vr = child->get_other_side(v_cluster);
+                                    vr_value = child->data;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    else // non-starting case
+                    {
+                        if(v_cluster->state & unary_cluster || v_cluster->state & nullary_cluster)
+                        {
+                            if(vl == vr)
+                            {
+                                vl = vr = v_cluster;
+                                T v_cluster_children_contribution = v_cluster->get_children_contribution(func, def);
+                                vl_value = vr_value = func(vl_value, v_cluster_children_contribution);
+                            }
+                            else
+                            {
+                                if(v_path_picked == false)
+                                {
+                                    if(v_cluster == vl)
+                                    {
+                                        vl_valid = true; // going to the left
+                                        T v_cluster_children_contribution = v_cluster->get_children_contribution(func, def);
+                                        vl_value = func(vl_value, v_cluster_children_contribution);
+                                    }
+                                    else // it must be either vl or vr
+                                    {
+                                        vl_valid = false;
+                                        T v_cluster_children_contribution = v_cluster->get_children_contribution(func, def);
+                                        vr_value = func(vr_value, v_cluster_children_contribution);
+                                    }
+                                    v_path_picked = true; // we have committed
+                                }
+                                else // v_path_picked is true
+                                {
+                                    // we have committed to a path
+                                    if(vl_valid == true) // we committed to the left path
+                                    {
+                                        if(v_cluster == vr) // but we found the right instead
+                                        {
+                                            vl_valid = false;
+                                            vr = vl = v_cluster;
+                                            T v_cluster_children_contribution = v_cluster->get_children_contribution(func, def);
+                                            vl_value = vr_value = func(vr_value, v_cluster_children_contribution);
+                                        }
+                                        else
+                                        {
+                                            T v_cluster_children_contribution = v_cluster->get_children_contribution(func, def);
+                                            vl_value = func(vl_value, v_cluster_children_contribution);
+                                        }
+                                    }
+                                    else // we committed to the right path
+                                    {
+                                        if(v_cluster == vl) // but we found the left instead
+                                        {
+                                            vl_valid = true;
+                                            vr = vl = v_cluster;
+                                            T v_cluster_children_contribution = v_cluster->get_children_contribution(func, def);
+                                            vl_value = vr_value = func(vl_value, v_cluster_children_contribution);
+                                        }
+                                        else
+                                        {
+                                            T v_cluster_children_contribution = v_cluster->get_children_contribution(func, def);
+                                            vr_value = func(vr_value, v_cluster_children_contribution);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else if (v_cluster->state & binary_cluster)
+                        {
+                            if(vl == vr)
+                            {
+                                // find the two neighbours of the binary cluster -- these are vl and vr
+                                v_cluster->get_two_neighbouring_edges(&vl, &vr);
+                                vl_value = func(vl_value, v_cluster->get_children_contribution(
+                                    func, def, vr
+                                ));
+                                // also add any children of v_cluster that don't go to the right
+                                for(uint i = 0; i < v_cluster->children.size(); i++)
+                                {
+                                    auto child = v_cluster->children[i].load();
+                                    if(child != nullptr && child->state & binary_cluster)
+                                    {
+                                        if(!child->is_neighbour(vr))
+                                        {
+                                            vl_value = func(vl_value, child->data);
+                                        }
+                                    }
+                                }
+
+                                vr_value = func(vr_value, v_cluster->get_children_contribution(
+                                    func, def, vl
+                                ));
+                                // also add any children of v_cluster that don't go to the left
+                                for(uint i = 0; i < v_cluster->children.size(); i++)
+                                {
+                                    auto child = v_cluster->children[i].load();
+                                    if(child != nullptr && child->state & binary_cluster)
+                                    {
+                                        if(!child->is_neighbour(vl))
+                                        {
+                                            vr_value = func(vr_value, child->data);
+                                        }
+                                    }
+                                }
+                                v_path_picked = false;
+                            }
+                            else //vl != vr
+                            {
+                                // we are enterting a binary cluster whilst split
+                                //if we have not committed to a path
+                                if(v_path_picked == false || v_path_picked == true)
+                                {   
+                                    if(v_cluster == vl)
+                                    {
+                                        vl_value = func(vl_value, v_cluster->get_children_contribution(
+                                            func, def, vl
+                                        ));
+                                        auto local_left = vl, local_right = vl;
+                                        v_cluster->get_two_neighbouring_edges(&local_left, &local_right);
+                                        if(local_left == vl)
+                                            vl = local_right;
+                                        else
+                                            vl = local_left;
+
+
+                                        vl = v_cluster;
+                                    }
+                                    else if(v_cluster == vr)
+                                    {
+                                        vr_value = func(vr_value, v_cluster->get_children_contribution(
+                                            func, def, vr
+                                        ));
+
+                                        auto local_left = vr, local_right = vr;
+                                        v_cluster->get_two_neighbouring_edges(&local_left, &local_right);
+                                        if(local_left == vr)
+                                            vr = local_right;
+                                        else
+                                            vr = local_left;
+                                        vr = v_cluster;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+
+
+                    v_cluster = v_cluster->parent;
+            }
+            else
+            {
+                    if(wl == nullptr || wr == nullptr) // starting case
+                    {
+                        if(w_cluster->state & unary_cluster || w_cluster->state & nullary_cluster)
+                        {
+                            wl = wr = w_cluster;
+                            wl_value = wr_value = w_cluster->get_children_contribution(func, def);
+                        }
+                        else // binary_cluster case
+                        {
+                            uint l_index = 0;
+                            for(uint i = 0; i < w_cluster->children.size(); i++)
+                            {
+                                auto child = w_cluster->children[i].load();
+                                if(child != nullptr && child->state & base_edge)
+                                {
+                                    l_index = i;
+                                    wl = child->get_other_side(w_cluster);
+                                    wl_value = child->data;
+                                    break;
+                                }
+                            }
+                            for(uint i = l_index+1; i < w_cluster->children.size(); i++)
+                            {
+                                auto child = w_cluster->children[i].load();
+                                if(child != nullptr && child->state & base_edge)
+                                {
+                                    wr = child->get_other_side(w_cluster);
+                                    wr_value = child->data;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    else // non-starting case
+                    {
+                        if(w_cluster->state & unary_cluster || w_cluster->state & nullary_cluster)
+                        {
+                            if(wl == wr)
+                            {
+                                wl = wr = w_cluster;
+                                T w_cluster_children_contribution = w_cluster->get_children_contribution(func, def);
+                                wl_value = wr_value = func(wl_value, w_cluster_children_contribution);
+                            }
+                            else
+                            {
+                                if(w_path_picked == false)
+                                {
+                                    if(w_cluster == wl)
+                                    {
+                                        wl_valid = true; // going to the left
+                                        T w_cluster_children_contribution = w_cluster->get_children_contribution(func, def);
+                                        wl_value = func(wl_value, w_cluster_children_contribution);
+                                    }
+                                    else // it must be either wl or wr
+                                    {
+                                        wl_valid = false;
+                                        T w_cluster_children_contribution = w_cluster->get_children_contribution(func, def);
+                                        wr_value = func(wr_value, w_cluster_children_contribution);
+                                    }
+                                    w_path_picked = true; // we have committed
+                                }
+                                else // w_path_picked is true
+                                {
+                                    // we have committed to a path
+                                    if(wl_valid == true) // we committed to the left path
+                                    {
+                                        if(w_cluster == wr) // but we found the right instead
+                                        {
+                                            wl_valid = false;
+                                            wr = wl = w_cluster;
+                                            T w_cluster_children_contribution = w_cluster->get_children_contribution(func, def);
+                                            wl_value = wr_value = func(wr_value, w_cluster_children_contribution);
+                                        }
+                                        else
+                                        {
+                                            T w_cluster_children_contribution = w_cluster->get_children_contribution(func, def);
+                                            wl_value = func(wl_value, w_cluster_children_contribution);
+                                        }
+                                    }
+                                    else // we committed to the right path
+                                    {
+                                        if(w_cluster == wl) // but we found the left instead
+                                        {
+                                            wl_valid = true;
+                                            wr = wl = w_cluster;
+                                            T w_cluster_children_contribution = w_cluster->get_children_contribution(func, def);
+                                            wl_value = wr_value = func(wl_value, w_cluster_children_contribution);
+                                        }
+                                        else
+                                        {
+                                            T w_cluster_children_contribution = w_cluster->get_children_contribution(func, def);
+                                            wr_value = func(wr_value, w_cluster_children_contribution);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else if (w_cluster->state & binary_cluster)
+                        {
+                            if(wl == wr)
+                            {
+                                // find the two neighbours of the binary cluster -- these are wl and wr
+                                w_cluster->get_two_neighbouring_edges(&wl, &wr);
+                                wl_value = func(wl_value, w_cluster->get_children_contribution(
+                                    func, def, wr
+                                ));
+                                // also add any children of w_cluster that don't go to the right
+                                for(uint i = 0; i < w_cluster->children.size(); i++)
+                                {
+                                    auto child = w_cluster->children[i].load();
+                                    if(child != nullptr && child->state & binary_cluster)
+                                    {
+                                        if(!child->is_neighbour(wr))
+                                        {
+                                            wl_value = func(wl_value, child->data);
+                                        }
+                                    }
+                                }
+
+                                wr_value = func(wr_value, w_cluster->get_children_contribution(
+                                    func, def, wl
+                                ));
+                                // also add any children of w_cluster that don't go to the left
+                                for(uint i = 0; i < w_cluster->children.size(); i++)
+                                {
+                                    auto child = w_cluster->children[i].load();
+                                    if(child != nullptr && child->state & binary_cluster)
+                                    {
+                                        if(!child->is_neighbour(wl))
+                                        {
+                                            wr_value = func(wr_value, child->data);
+                                        }
+                                    }
+                                }
+                                w_path_picked = false;
+                            }
+                            else //wl != wr
+                            {
+                                // we are entering a binary cluster whilst split
+                                //if we have not committed to a path
+                                if(w_path_picked == false || w_path_picked == true)
+                                {   
+                                    if(w_cluster == wl)
+                                    {
+                                        wl_value = func(wl_value, w_cluster->get_children_contribution(
+                                            func, def, wl
+                                        ));
+                                        auto local_left = wl, local_right = wl;
+                                        w_cluster->get_two_neighbouring_edges(&local_left, &local_right);
+                                        if(local_left == wl)
+                                            wl = local_right;
+                                        else
+                                            wl = local_left;
+
+                                        wl = w_cluster;
+                                    }
+                                    else if(w_cluster == wr)
+                                    {
+                                        wr_value = func(wr_value, w_cluster->get_children_contribution(
+                                            func, def, wr
+                                        ));
+
+                                        auto local_left = wr, local_right = wr;
+                                        w_cluster->get_two_neighbouring_edges(&local_left, &local_right);
+                                        if(local_left == wr)
+                                            wr = local_right;
+                                        else
+                                            wr = local_left;
+                                        wr = w_cluster;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    w_cluster = w_cluster->parent;
+
+            }
+        }
+
+
     }
 
     if(LCA)
     {
-        std::cout << "LCA FOUND: " <<  LCA->index << "!" << std::endl;
+        // std::cout << "LCA FOUND: " <<  LCA->index << "!" << std::endl;
     }
     else
-        std::cout << "NO LCA" << std::endl;
+    {
+            // std::cout << "NO LCA" << std::endl;
+            return def;
+    }
 
-    base_clusters[v].print_ancestory();
-    base_clusters[w].print_ancestory();
-    std::cout << std::endl;
+    T v_value, w_value;
+    if(vl_valid)
+        v_value = vl_value;
+    else
+        v_value = vr_value;
+    
+    if(wl_valid)
+        w_value = wl_value;
+    else
+        w_value = wr_value;
 
-
+    // base_clusters[v].print_ancestory();
+    // base_clusters[w].print_ancestory();
+    // std::cout << std::endl;
     
     return def;
 }
