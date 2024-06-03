@@ -1,55 +1,93 @@
+import subprocess
+import os
 import matplotlib.pyplot as plt
-import csv
-import sys
+import numpy as np
+import argparse
 
-# Function to read and sort data from CSV file
-def read_and_sort_data(filename):
-    data = []
-    with open(filename, 'r') as file:
-        reader = csv.reader(file)
-        next(reader)  # Skip header row
-        for row in reader:
-            data.append((int(row[0]), float(row[1])))
-    sorted_data = sorted(data, key=lambda x: x[0])  # Sort by num_vertices
-    return zip(*sorted_data)
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Run RC program and plot results.')
+parser.add_argument('--randomized', type=str, choices=['true', 'false'], default='false', help='Set randomized flag for RC.')
+parser.add_argument('--do-height', type=str, choices=['true', 'false'], default='true', help='Set do-height flag for RC.')
+args = parser.parse_args()
 
-# Main function to plot the data
-def plot_data(input_file, plot_title, log_x=False, log_y=False):
-    # Read and sort data from CSV file
-    num_vertices, time = read_and_sort_data(input_file)
-    
-    # Plot sorted data
-    plt.plot(num_vertices, time, marker='o', linestyle='-')
-    
-    # Extract the last word from the plot title for the x-axis label
-    x_label = plot_title.split()[-1]
-    plt.xlabel(x_label)
-    
-    plt.ylabel('Time (seconds)')
-    plt.title(plot_title)
-    plt.grid(True)
+# Constants
+graph_sizes = [100, 1000, 10000, 100000, 1000000, 5000000, 10000000, 50000000, 100000000]
+num_threads_list = [144, 100, 72, 60, 48, 36, 24, 16, 8, 4, 2, 1]
+time_output_filename = f'creation_time_vs_graph_size_randomized_{args.randomized}_do_height_{args.do_height} max_deg=3.png'
+speedup_output_filename = f'speedup_vs_graph_size_randomized_{args.randomized}_do_height_{args.do_height} max_deg=3.png'
 
-    # Set x-axis to logarithmic scale if log_x is True
-    if log_x:
-        plt.xscale('log')
+# Prepare to collect results
+results = {threads: [] for threads in num_threads_list}
 
-    # Set y-axis to logarithmic scale if log_y is True
-    if log_y:
-        plt.yscale('log')
+# Function to run the C++ program with a given number of threads and graph size
+def run_rc_with_threads(graph_size, num_threads):
+    env = os.environ.copy()
+    env['PARLAY_NUM_THREADS'] = str(num_threads)
+    env['LD_PRELOAD'] = '/usr/local/lib/libjemalloc.so'
+    try:
+        cmd = ['./RC', '--print-creation', f'--randomized', args.randomized, '--do-height', args.do_height, '-n', str(graph_size)]
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        output = result.stdout.strip()
+        if output:
+            size, time = output.split(',')
+            return int(size), float(time)
+    except Exception as e:
+        print(f"Failed to run ./RC for graph size {graph_size} with {num_threads} threads: {e}")
+    return None
 
-    # Save plot as an image file
-    output_file = f'{plot_title}.png'
-    plt.savefig(output_file)
 
-    # Show plot
-    plt.show()
+# Collect results for each configuration
+for num_threads in num_threads_list:
+    for graph_size in graph_sizes:
+        result = run_rc_with_threads(graph_size, num_threads)
+        if result:
+            results[num_threads].append(result)
+            print(f"Graph size: {result[0]}, Time: {result[1]} seconds with {num_threads} threads")
 
-if __name__ == "__main__":
-    if len(sys.argv) not in [3, 4, 5]:
-        print("Usage: python script.py <input_file> <plot_title> [--log-x] [--log-y]")
-    else:
-        input_file = sys.argv[1]
-        plot_title = sys.argv[2]
-        log_x = '--log-x' in sys.argv
-        log_y = '--log-y' in sys.argv
-        plot_data(input_file, plot_title, log_x, log_y)
+# Prepare data for plotting
+plot_data = {threads: {'sizes': [], 'times': []} for threads in num_threads_list}
+for num_threads, data in results.items():
+    for size, time in data:
+        plot_data[num_threads]['sizes'].append(size)
+        plot_data[num_threads]['times'].append(time)
+
+# Calculate speedup relative to single-threaded execution
+speedup_data = {threads: [] for threads in num_threads_list if threads != 1}
+single_thread_times = {size: time for size, time in results[1]}
+
+for num_threads, data in results.items():
+    if num_threads == 1:
+        continue
+    for size, time in data:
+        if size in single_thread_times:
+            speedup_data[num_threads].append(single_thread_times[size] / time)
+
+# Plot creation times vs graph sizes
+plt.figure(figsize=(12, 8))
+for num_threads in num_threads_list:
+    plt.plot(plot_data[num_threads]['sizes'], plot_data[num_threads]['times'], marker='o', label=f'{num_threads} threads')
+plt.xlabel('Graph Size (n)')
+plt.ylabel('Creation Time (seconds)')
+plt.title(f'Graph Creation Time vs Graph Size (randomized={args.randomized}, do-height={args.do_height}) max_deg=3')
+plt.legend()
+plt.savefig(time_output_filename)
+print(f'Creation time plot saved as {time_output_filename}')
+
+# Plot speedup vs graph sizes
+plt.figure(figsize=(12, 8))
+
+# Generate constant spacing for the x-axis
+x_positions = np.arange(len(num_threads_list) - 1)  # Exclude single thread from speedup plot
+
+# Plot speedup with constant spacing
+for i, num_threads in enumerate(num_threads_list):
+    if num_threads != 1:
+        plt.plot(plot_data[num_threads]['sizes'], speedup_data[num_threads], marker='x', linestyle='--', label=f'Speedup {num_threads} threads')
+
+plt.xlabel('Graph size')
+plt.xscale('log')
+plt.ylabel(f'Speedup (relative to 1 thread) (randomized={args.randomized}, do-height={args.do_height})')
+plt.title(f'Speedup vs Graph Size (randomized={args.randomized}, do-height={args.do_height}) max_deg=3')
+plt.legend()
+plt.savefig(speedup_output_filename)
+print(f'Speedup plot saved as {speedup_output_filename}')

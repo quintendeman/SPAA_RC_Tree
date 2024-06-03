@@ -1,7 +1,7 @@
 # Variables
 CXX = g++
 CXXFLAGS = -O3 -std=c++17 -pthread -g
-INCLUDES = -I /scratch/parlaylib/include/
+INCLUDES = -I ../include/
 TARGET = RC
 SRC = RC.cpp
 

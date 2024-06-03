@@ -1,7 +1,6 @@
 #include <atomic>
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
-#include "../examples/helper/graph_utils.h"
 #include "../examples/counting_sort.h"
 
 const short empty_type = 0;
@@ -14,335 +13,299 @@ const short live = 256;
 const short carrying_weight = 512;
 const short internal = 8192;
 
+const char neighbour_type = 1;
+const char parent_type = 2;
+const char child_type = 4;
+const char edge_type = 8;
 
+const int max_neighbours = 3;
 
 /*
     This represents a cluster in an RC tree.
     All these variables might be excessive but these flags and such are necessary since will be relying on pointer chasing
 */
+#include <atomic>
+#include <cstring> // for std::memcpy if needed
+
 template <typename T>
 struct cluster
 {
-    public:
-        parlay::sequence<std::atomic<cluster<T>*>> neighbours;
-        parlay::sequence<std::atomic<cluster<T>*>> children;
-        parlay::sequence<std::atomic<T>> counter = parlay::sequence<std::atomic<T>>(1);
-        parlay::sequence<std::atomic<T>> height = parlay::sequence<std::atomic<T>>(1);
-        cluster<T>* parent = nullptr;
-        T index = -1;
-        T colour = -1;
-        T data = 0;
-        bool is_MIS = false;
-        short state = 0; // unaffected, affected or update eligible
+public:
+    cluster<T>* ptrs[max_neighbours * 2]; 
+    T index = -1;
+    T colour = -1;
+    T data = 0;
+    std::atomic<T> height;
+    static const short size = max_neighbours*2;
+    short state = 0; // unaffected, affected or update eligible
+    bool is_MIS = false;
+    char types[max_neighbours * 2] = {};
 
-        unsigned long get_colour(void)
+    // Default constructor
+    cluster() : height(0) {}
+
+    // Copy constructor only for initialization when creating a sequence
+    cluster(const cluster& other)
+        : index(other.index),
+          colour(other.colour),
+          data(other.data),
+          height(other.height.load()), // Load the atomic value
+          state(other.state),
+          is_MIS(other.is_MIS)
+    {    
+        for(uint i = 0; i < this->size; i++)
         {
-            return reinterpret_cast<T>(this);
+            ptrs[i] = nullptr;
+            types[i] = 0;
+        }
+        return;
+    }
+
+    // Method to get colour based off memory address
+    unsigned long get_default_colour(void) const
+    {
+        return reinterpret_cast<T>(this);
+    }
+
+    // To be used only for connecting the base_edges to base_nodes
+    void add_initial_neighbours(cluster<T>* V,  cluster<T>* W)
+    {
+        this->ptrs[0] = V;
+        this->ptrs[1] = W;
+        this->types[0] =neighbour_type;
+        this->types[1] =neighbour_type;
+    }
+
+    // index of neighbour if successful, -1 if not
+    // Note, if that pointer already exists, set its type to neighbour
+    // and returns that index
+    // index i+1 will contain edge for easier management
+    short add_neighbour(cluster<T>* neighbour, cluster<T>* edge)
+    {
+        for(short i = 0; i < this->size; i+=2)
+        {
+            if(this->ptrs[i] == nullptr || this->ptrs[i] == neighbour)
+            {
+                this->ptrs[i] = neighbour;
+                this->ptrs[i+1] = edge;
+                this->types[i] |= neighbour_type;
+                this->types[i+1] |= edge_type;
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Removes a node as a neighbour and returns the index
+    */
+    short remove_neighbour(cluster<T>* neighbour)
+    {
+        for(short i = 0; i < this->size; i++)
+        {
+            if(this->ptrs[i] == neighbour)
+            {
+                this->types[i]&=(~neighbour_type);
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    short change_to_neighbour(cluster<T>* neighbour)
+    {
+        for(short i = 0; i < this->size; i++)
+        {
+            if(this->ptrs[i] == neighbour)
+            {
+                this->types[i]&=(~child_type);
+                this->types[i]&=(~edge_type);
+                this->types[i]|=neighbour_type;
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    // changes a ptr from neighbour_type or edge_type to child_type
+    short change_to_child(cluster<T>* child)
+    {
+        for(short i = 0; i < this->size; i++)
+        {
+            if(this->ptrs[i] == child)
+            {
+                this->types[i]&=(~neighbour_type);
+                this->types[i]&=(~edge_type);
+                this->types[i]|=child_type;
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * designates a neighbour as a parent
+    */
+    short set_parent(cluster<T>* node)
+    {
+        for(short i = 0; i < this->size; i++)
+        {
+            if(this->ptrs[i] == node)
+            {
+                this->types[i]=parent_type;
+                this->types[i]&=(~neighbour_type);
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    cluster<T>* get_parent(void)
+    {
+        for(short i = 0; i < this->size; i++)
+        {
+            if(this->types[i]&parent_type)
+            {
+                return this->ptrs[i];
+            }
+        }
+        return nullptr;
+    }
+
+    // set the neighbours MIS to val
+    // useful when colouring
+    void set_neighbour_mis(bool val)
+    {
+        for(short i = 0; i < this->size; i+=2)
+        {
+            if(this->ptrs[i])
+                this->ptrs[i]->is_MIS = val;
+        }
+    }
+
+    void set_neighbour_colour(T input_colour)
+    {
+        for(short i = 0; i < this->size; i+=2)
+        {
+            if(this->ptrs[i])
+                this->ptrs[i]->colour = input_colour;
+        }   
+    }
+
+    bool is_max_neighbour_colour(void)
+    {
+        T max_colour = this->colour;
+        for(short i = 0; i < this->size; i+=2)
+        {
+            if(this->ptrs[i] && this->ptrs[i]->colour > max_colour)
+                max_colour = this->ptrs[i]->colour;
+        }
+        if(max_colour == this->colour)
+            return true;
+        return false;
+    }
+
+    /*
+        return true if any neighbours are in MIS
+        else return false
+    */
+    bool get_neighbour_MIS(void)
+    {
+        for(short i = 0; i < this->size; i+=2)
+        {
+            if(this->ptrs[i] && this->ptrs[i]->is_MIS)
+                return true;
+        }
+        return false;
+    }
+
+    short get_neighbour_count(void)
+    {
+        short num_neighbours = 0;
+        for(short i = 0; i < this->size; i++)
+        {
+            if(this->types[i] & neighbour_type)
+                num_neighbours++;
         }
 
-        T get_neighbour_count(void)
+        return num_neighbours;
+    }
+
+    void get_two_neighbours_edges(cluster<T>*& neighbour1, cluster<T>*& edge1, cluster<T>*& neighbour2, cluster<T>*& edge2)
+    {
+        bool first_neighbour_found = false;
+        for(short i = 0; i < this->size; i+=2)
         {
-            T ret_count = 0;
-            for(T j = 0; j < this->neighbours.size(); j++)
+            if(this->types[i]&neighbour_type)
             {
-                if(this->neighbours[j].load() != nullptr)
+                if(first_neighbour_found == false)
                 {
-                   ret_count++;
+                    first_neighbour_found = true;
+                    neighbour1 = this->ptrs[i];
+                    edge1 = this->ptrs[i+1];
+                }
+                else
+                {
+                    neighbour2 = this->ptrs[i];
+                    edge2 = this->ptrs[i+1];
+                    return;   
                 }
             }
-            return ret_count;
         }
+    }
 
-        /**
-         * Should be async safe
-         * sets "neighbour" to be anywhere in the neighbours array that was previously null
-        */
-        bool add_neighbour(cluster<T>* neighbour)
+    /*
+        Mainly used when doing compress
+
+    */
+    short overwrite_neighbour(cluster<T>* old_neighbour, cluster<T>* new_neighbour, cluster<T>* new_edge)
+    {
+
+        for(short i = 0; i < this->size; i++)
         {
-            for(T j = 0; j < this->neighbours.size(); j++)
+            if(this->ptrs[i] == old_neighbour)
             {
-                if(this->neighbours[j].load() == nullptr)
-                {
-                    cluster<T>* expected = nullptr;
-                    bool swapped = this->neighbours[j].compare_exchange_strong(expected, neighbour);
-                    if(swapped)
-                    {
-                        return true;
-                    }
-                }
+                this->ptrs[i] = new_neighbour;
+                this->types[i]|=neighbour_type;
+                
+                this->ptrs[i+1] = new_edge;
+                this->types[i+1]|= edge_type;
+                this->types[i+1]&= (~neighbour_type);
+                
+                return i;
             }
-            return false;
         }
-        /**
-         * Not guaranteed to remove!
-         * Race conditions can cause this to "skip" a count
-         * Put it while(!remove_neighbour(neighbour))
-         * to ensure it removes
-        */
-        bool remove_neighbour(cluster<T>* neighbour)
+
+        return -1;
+    }
+
+    void print(void)
+    {
+        std::cout << "Index: " << this->index;
+        std::cout << "  ";
+        if(this->state&live)
+            std::cout << "live ";
+        else
+            std::cout << "dead ";
+        for(uint i = 0; i < this->size; i+=2)
         {
-            for(T j = 0; j < this->neighbours.size(); j++)
-            {
-                if(this->neighbours[j].load() == neighbour)
-                {
-                    cluster<T>* expected = neighbour;
-                    bool swapped = this->neighbours[j].compare_exchange_strong(expected, nullptr);
-                    if(swapped)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
+            auto cluster = this->ptrs[i];
+            if(cluster == nullptr)
+                continue;
+            std::cout << cluster->index;
+            std::cout << " ";
+            auto ptr_type = this->types[i];
+            if(ptr_type & neighbour_type)
+                std::cout << "N";
+            if(ptr_type & edge_type)
+                std::cout << "C";
+            if(ptr_type & parent_type)
+                std::cout << "P";
+            if(ptr_type & child_type)
+                std::cout << "C";
+            std::cout << "   ";
         }
-
-        T get_children_count(void)
-        {
-            T ret_count = 0;
-            for(T j = 0; j < this->children.size(); j++)
-            {
-                if(this->children[j].load() != nullptr)
-                {
-                   ret_count++;
-                }
-            }
-            return ret_count;
-        }
-
-        /**
-         * Should be async safe
-         * sets "child" to be anywhere in the child array that was previously null
-        */
-        bool add_child(cluster<T>* child)
-        {
-            for(T j = 0; j < this->children.size(); j++)
-            {
-                if(this->children[j].load() == nullptr)
-                {
-                    cluster<T>* expected = nullptr;
-                    bool swapped = this->children[j].compare_exchange_strong(expected, child);
-                    if(swapped)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-        /**
-         * Not guaranteed to remove!
-         * Race conditions can cause this to "skip" a value
-        */
-        bool remove_child(cluster<T>* child)
-        {
-            for(T j = 0; j < this->children.size(); j++)
-            {
-                if(this->children[j].load() == child)
-                {
-                    cluster<T>* expected = child;
-                    bool swapped = this->children[j].compare_exchange_strong(expected, nullptr);
-                    if(swapped)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        /**
-         * Get first edge in neighbours array that isn't equal to this_side and not null
-         * Suffers from race conditions but MIS should keep it safe
-        */
-        cluster<T>* get_other_side(cluster<T>* this_side)
-        {
-            cluster<T>* ret_ptr = NULL;
-            for(T j = 0; j < this->neighbours.size(); j++)
-            {
-                if(this->neighbours[j].load() != nullptr && this->neighbours[j].load() != this_side)
-                {
-                    return this->neighbours[j].load();
-                }
-            }
-            return ret_ptr;
-        }
-        /**
-         * Set all 2 hop neighbour's is_MIS as MIS
-        */
-        void set_neighbour_mis(bool MIS)
-        {
-            for(T i = 0; i < this->neighbours.size(); i++)
-            {
-                if(this->neighbours[i] == nullptr)
-                    continue;
-                auto edge = this->neighbours[i].load();
-                for(T j = 0; j < edge->neighbours.size(); j++)
-                {
-                    if(edge->neighbours[j].load() != nullptr && edge->neighbours[j].load() != this)
-                        edge->neighbours[j].load()->is_MIS = MIS;
-                }
-            }
-        }
-
-        /**
-         * if any of 2 hop neighbours i.e. after edge are true, return true
-        */
-        bool get_neighbour_MIS(void)
-        {
-            for(T i = 0; i < this->neighbours.size(); i++)
-            {
-                if(this->neighbours[i] == nullptr)
-                    continue;
-                auto edge = this->neighbours[i].load();
-                for(T j = 0; j < edge->neighbours.size(); j++)
-                {
-                    if(edge->neighbours[j].load() != nullptr && edge->neighbours[j].load() != this && edge->neighbours[j].load()->is_MIS == true)
-                        return true;
-
-                }
-            }
-
-            return false;
-        }
-
-        void get_two_neighbouring_edges(cluster<T>** left, cluster<T>** right)
-        {
-            bool left_found = false;
-
-            for(T i = 0; i < this->neighbours.size(); i++)
-            {
-                if(this->neighbours[i].load() != nullptr)
-                {
-                    
-                    if(left_found == false)
-                    {
-                        *left = this->neighbours[i].load();
-                        left_found = true;
-                    }
-                    else
-                    {
-                        *right = this->neighbours[i].load();
-                        break;
-                    }
-                }    
-            }
-        }
-
-        bool is_neighbour(cluster<T>* neighbour)
-        {
-            for(T i = 0; i < this->neighbours.size(); i++)
-            {
-                if(this->neighbours[i].load() == neighbour)
-                    return true;
-            }
-            return false;
-        }
-        
-        bool is_child(cluster<T>* child)
-        {
-            for(T i = 0; i < this->children.size(); i++)
-            {
-                if(this->children[i].load() == child)
-                    return true;
-            }
-            return false;
-        }
-
-        template <typename lambdafunc>
-        T get_children_contribution(lambdafunc func, T def, cluster<T>* exclude = nullptr)
-        {
-            if(this->get_children_count() == 0)
-            {
-                return def;
-            }
-            bool atleast_one = false;
-            T accumulated;
-            for(uint i = 0; i < this->children.size(); i++)
-            {
-                auto child_ptr = this->children[i].load();
-                if(child_ptr != nullptr && child_ptr != exclude
-                    && (child_ptr->state & binary_cluster || child_ptr->state & base_edge))
-                {
-                    if(atleast_one == false)
-                    {
-                        accumulated = child_ptr->data;
-                        atleast_one = true;
-                    }
-                    else
-                    {
-                        accumulated = func(child_ptr->data, accumulated);
-                    }
-                }
-            }
-
-            if(atleast_one == false)
-                return def;
-
-            return accumulated;
-        }
-
-
-
-
-        void print()
-        {
-            if(this == NULL)
-            {
-                std::cout << "ID: NULL" << std::endl;
-            }
-            std::cout << "ID:" << this->index; 
-            if(this->state & binary_cluster)
-                std::cout << " binary";
-            else if (this->state & unary_cluster)
-                std::cout << " unary";
-            else if (this->state & nullary_cluster)
-                std::cout << " nullary";
-            std::cout << std::endl;
-            if(this->parent)
-                std::cout << "parent: " << parent->index << std::endl;
-            std::cout << "neighbours: ";
-            for(uint i = 0; i < this->neighbours.size(); i++)
-            {
-                if(this->neighbours[i].load() != nullptr)
-                    std::cout << this->neighbours[i].load()->index << " ";
-            }
-            std::cout << std::endl;
-            std::cout << "children: ";
-            for(uint i = 0; i < this->children.size(); i++)
-            {
-                if(this->children[i].load() != nullptr)
-                {
-                    std::cout << this->children[i].load()->index;
-                    this->children[i].load()->simple_print_neighbours();
-                }
-            }
-            std::cout << std::endl;
-            std::cout << std::endl;
-        }
-
-        void simple_print_neighbours()
-        {
-            std::cout << "(";
-            for(uint i = 0; i < this->neighbours.size(); i++)
-                if(this->neighbours[i].load() != nullptr)
-                    std::cout << this->neighbours[i].load()->index << " ";
-            std::cout << ") ";
-        }
-
-        void print_ancestory()
-        {
-            if(this == nullptr)
-            {
-                std::cout << "NULL " << std::endl;
-                return;
-            }
-            auto cluster_ptr = this;
-
-            while(cluster_ptr)
-            {
-                std::cout << cluster_ptr->index << " ";
-                cluster_ptr=cluster_ptr->parent;
-            }
-            std::cout << std::endl;
-        }
+        std::cout << " colour(" << this->colour << ") ";
+        std::cout << std::endl;
+    }
 };
