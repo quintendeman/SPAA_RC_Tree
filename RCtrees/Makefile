@@ -9,7 +9,7 @@ SRC = RC.cpp
 all: $(TARGET)
 
 # Rule to build the target
-$(TARGET): $(SRC)
+$(TARGET): $(SRC) RC.h cluster.h
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $(TARGET) $(SRC)
 
 # Clean up build files

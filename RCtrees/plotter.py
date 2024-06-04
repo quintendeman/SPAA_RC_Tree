@@ -11,7 +11,7 @@ parser.add_argument('--do-height', type=str, choices=['true', 'false'], default=
 args = parser.parse_args()
 
 # Constants
-graph_sizes = [100, 1000, 10000, 100000, 1000000, 5000000, 10000000, 50000000, 100000000]
+graph_sizes = [100, 1000, 10000, 100000, 1000000, 5000000, 10000000, 50000000, 100000000,  500000000, 1000000000]
 num_threads_list = [144, 100, 72, 60, 48, 36, 24, 16, 8, 4, 2, 1]
 time_output_filename = f'creation_time_vs_graph_size_randomized_{args.randomized}_do_height_{args.do_height} max_deg=3.png'
 speedup_output_filename = f'speedup_vs_graph_size_randomized_{args.randomized}_do_height_{args.do_height} max_deg=3.png'

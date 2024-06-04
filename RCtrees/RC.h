@@ -36,13 +36,13 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
     parlay::parallel_for(0, num_elements, [&] (T v) {
         std::uniform_real_distribution<> dis(0, 1);
         auto random_val = dis(gen);
-        if (random_val <= 0.4 && v > 0)
+        if (random_val <= 0.9 && v > 0)
         {
             std::uniform_int_distribution<> disint(0, v-1);
 
             dummy_initial_parents[v] = disint(gen);
         }
-        else if (random_val < 0.41)
+        else if (random_val < 0.905)
         {
             dummy_initial_parents[v] = v;
         }
@@ -287,7 +287,7 @@ void set_MIS(parlay::sequence<cluster<T>*> clusters, bool randomized = false)
 
 
 /**
- * Given an ASSYMETRIC graph, creates a set of clusters
+ * Given an symmetric graph, creates a set of clusters
  * In total, it creates n + m clusters in the array base_clusters
  * The first n are base_vertex clusters
  * And the last m are base_edge clusters
@@ -307,30 +307,26 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
         return base_cluster;
     });
 
-    parlay::parallel_for(0, total_num_clusters, [&] (T v) {
+    parlay::parallel_for(0, n, [&] (T v) {
         auto cluster = &base_clusters[v];
         cluster->index = v;
-        if (v < n)
-        {
-            cluster->state = base_vertex | live;
+        cluster->state = base_vertex | live;
 
-            for(short i = 0; i < G[v].size(); i++) //TODO: Assumes ordering i.e. root is towards zero
+        for(short i = 0; i < G[v].size(); i++) //TODO: Assumes ordering i.e. root is towards zero
+        {
+            if(G[v][i] < v)
             {
-                if(G[v][i] < v)
-                {
-                    base_clusters[v+n].add_initial_neighbours(&base_clusters[G[v][i]], cluster);
-                    base_clusters[v].add_neighbour(&base_clusters[G[v][i]], &base_clusters[v+n]);
-                }
-                else
-                {
-                    base_clusters[v].add_neighbour(&base_clusters[G[v][i]], &base_clusters[G[v][i]+n]);
-                }
+                base_clusters[v+n].add_initial_neighbours(&base_clusters[G[v][i]], cluster);
+                base_clusters[v+n].state = base_edge;
+                base_clusters[v+n].index = v+n;
+                base_clusters[v].add_neighbour(&base_clusters[G[v][i]], &base_clusters[v+n]);
+            }
+            else
+            {
+                base_clusters[v].add_neighbour(&base_clusters[G[v][i]], &base_clusters[G[v][i]+n]);
             }
         }
-        else
-        {
-            cluster->state = base_edge;
-        }
+
     });
 
 }
@@ -393,13 +389,23 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
         return ((C->state & live));
     });
 
+    bool first_time = true;
+
     do
     {
         // Shrink the forst as live nodes decrease
-        forest = parlay::filter(forest, [&] (cluster<T>* C) {
-            return ((C->state & live));
-        });
-
+        if(first_time == true)
+        {
+            
+            first_time = false;
+        }
+        else
+        {
+            forest = parlay::filter(forest, [&] (cluster<T>* C) {
+                return ((C->state & live));
+            });
+        }
+        
         // std::cout << "forest.size(): " << forest.size() << std::endl;
 
         // Eligible nodes are those with 0, 1 or 2 neighbours

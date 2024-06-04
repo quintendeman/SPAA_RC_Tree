@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Constants
-graph_size = 100000000
+graph_size = 1000000000
 num_threads_list = [1, 2] + [i for i in range(4, 145, 4)]
 print(f'testing for {num_threads_list=}')
 randomized_values = ['true', 'false']
@@ -40,6 +40,8 @@ for randomized in randomized_values:
         if result:
             results[randomized][num_threads] = result
             print(f"Threads: {num_threads}, Randomized: {randomized}, Time: {result} seconds")
+
+print(results)
 
 # Plot creation times vs number of threads
 plt.figure(figsize=(12, 8))
