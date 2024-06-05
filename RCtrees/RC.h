@@ -35,14 +35,16 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
 
     parlay::parallel_for(0, num_elements, [&] (T v) {
         std::uniform_real_distribution<> dis(0, 1);
+        static const float nullary = 0.01;
+        static const float anywhere = 0.95;
         auto random_val = dis(gen);
-        if (random_val <= 0.9 && v > 0)
+        if (random_val <= anywhere && v > 0)
         {
             std::uniform_int_distribution<> disint(0, v-1);
 
             dummy_initial_parents[v] = disint(gen);
         }
-        else if (random_val < 0.905)
+        else if (random_val < (anywhere + nullary))
         {
             dummy_initial_parents[v] = v;
         }
@@ -171,22 +173,24 @@ static unsigned char get_single_colour_contribution(const T vcolour, const T wco
 //     and two hops away is a vertex representing a neighbouring node
 // */
 template<typename T>
-void colour_clusters(parlay::sequence<cluster<T>*> clusters)
+void colour_clusters(parlay::sequence<T>& cluster_indices, parlay::sequence<cluster<T>>& all_clusters)
 {
     static const T local_maximum_colour = (T) 0;
     static const T local_minimum_colour = (T) 1;    
 
-    parlay::parallel_for(0, clusters.size(), [&] (T v) {
-        unsigned long local_maximum = clusters[v]->get_default_colour();
-        unsigned long local_minimum = clusters[v]->get_default_colour();
+    parlay::parallel_for(0, cluster_indices.size(), [&] (T v) {
+        cluster<T>& my_cluster = all_clusters[cluster_indices[v]];
 
-        for(uint i = 0; i < clusters[v]->size; i+=2)
+        unsigned long local_maximum = my_cluster.get_default_colour();
+        unsigned long local_minimum = my_cluster.get_default_colour();
+
+        for(uint i = 0; i < my_cluster.size; i+=2)
         {
 
-            if(clusters[v]->ptrs[i] == nullptr || (clusters[v]->types[i]&neighbour_type) == 0)
+            if(my_cluster.indices[i] == -1 || (my_cluster.types[i]&neighbour_type) == 0)
                 continue;
 
-            unsigned long compared_colour = clusters[v]->ptrs[i]->get_default_colour();
+            unsigned long compared_colour = all_clusters[my_cluster.indices[i]].get_default_colour();
 
             if(compared_colour > local_maximum)
                 local_maximum = compared_colour;
@@ -194,17 +198,17 @@ void colour_clusters(parlay::sequence<cluster<T>*> clusters)
                 local_minimum = compared_colour;   
         }
 
-        if(local_maximum == clusters[v]->get_default_colour()) // This node is a local maximum, give it a unique colour
+        if(local_maximum == my_cluster.get_default_colour()) // This node is a local maximum, give it a unique colour
         {
-            clusters[v]->colour = local_maximum_colour;
+            my_cluster.colour = local_maximum_colour;
         }
-        else if(local_minimum == clusters[v]->get_default_colour())
+        else if(local_minimum == my_cluster.get_default_colour())
         {
-            clusters[v]->colour = local_minimum_colour;
+            my_cluster.colour = local_minimum_colour;
         }
         else
         {
-            clusters[v]->colour = 2 + (get_single_colour_contribution(clusters[v]->get_default_colour(), local_maximum) / 2); // adding 2 and removing indicator bit
+            my_cluster.colour = 2 + (get_single_colour_contribution(my_cluster.get_default_colour(), local_maximum) / 2); // adding 2 and removing indicator bit
         }
 
     });
@@ -219,22 +223,20 @@ void colour_clusters(parlay::sequence<cluster<T>*> clusters)
 //     These clusters must have a maximum degree of 2
 // */
 template<typename T>
-void set_MIS(parlay::sequence<cluster<T>*> clusters, bool randomized = false)
+void set_MIS(parlay::sequence<T>& cluster_indices,  parlay::sequence<cluster<T>>& all_clusters, bool randomized = false)
 {
     if(!randomized)
     {
-        colour_clusters(clusters);
+        colour_clusters(cluster_indices, all_clusters);
 
-        parlay::parallel_for(0, clusters.size(), [&] (T v) {
-            clusters[v]->is_MIS = false;
-            clusters[v]->set_neighbour_mis(false);
+
+        auto colours = parlay::tabulate(cluster_indices.size(), [&] (T v) {
+            all_clusters[cluster_indices[v]].is_MIS = false;
+            all_clusters[cluster_indices[v]].is_candidate = true;
+            return all_clusters[cluster_indices[v]].colour;
         });
 
-        auto colours = parlay::tabulate(clusters.size(), [&] (T v) {
-        return clusters[v]->colour;
-        });
-
-        auto vertices = parlay::tabulate(clusters.size(), [&] (T v) {
+        auto vertices = parlay::tabulate(cluster_indices.size(), [&] (T v) {
             return v;
         });
 
@@ -253,34 +255,41 @@ void set_MIS(parlay::sequence<cluster<T>*> clusters, bool randomized = false)
 
             parlay::parallel_for(start_index, end_index, [&] (T i) {
                 T v = result[i];
-                if(clusters[v]->get_neighbour_MIS() == true)
+                if(all_clusters[cluster_indices[v]].get_neighbour_MIS(all_clusters) == true)
                 {
-                    clusters[v]->is_MIS = false;
+                    all_clusters[cluster_indices[v]].is_MIS = false;
                     return;
                 }
-                clusters[v]->is_MIS = true;
+                all_clusters[cluster_indices[v]].is_MIS = true;
             });
         }
+
+        parlay::parallel_for(0, cluster_indices.size(), [&] (T v) {
+            all_clusters[cluster_indices[v]].is_candidate = false;
+        });
     }
     else
     {
-        // set initial colour to zero
-        parlay::parallel_for(0, clusters.size(), [&] (T v) {
-            clusters[v]->set_neighbour_colour(0);
+        // set as is_candidate
+        parlay::parallel_for(0, cluster_indices.size(), [&] (T v) {
+            all_clusters[cluster_indices[v]].is_candidate = true;
         });
 
         parlay::random_generator gen;
-        std::uniform_int_distribution<T> dis(1, clusters.size());
-        parlay::parallel_for(0, clusters.size(), [&] (T v) {
+        std::uniform_int_distribution<T> dis(1, cluster_indices.size());
+        parlay::parallel_for(0, cluster_indices.size(), [&] (T v) {
             auto r = gen[v];
-            clusters[v]->colour = dis(r);
+            all_clusters[cluster_indices[v]].colour = dis(r);
         });
 
-        parlay::parallel_for(0, clusters.size(), [&] (T v) {
-            clusters[v]->is_MIS=clusters[v]->is_max_neighbour_colour();
+        parlay::parallel_for(0, cluster_indices.size(), [&] (T v) {
+            all_clusters[cluster_indices[v]].is_MIS=all_clusters[cluster_indices[v]].is_max_neighbour_colour(all_clusters);
         });
 
-        
+        parlay::parallel_for(0, cluster_indices.size(), [&] (T v) {
+            all_clusters[cluster_indices[v]].is_candidate = false;
+        });
+
     }
 
 }
@@ -308,22 +317,22 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
     });
 
     parlay::parallel_for(0, n, [&] (T v) {
-        auto cluster = &base_clusters[v];
-        cluster->index = v;
-        cluster->state = base_vertex | live;
+        cluster<T>& cluster = base_clusters[v];
+        cluster.index = v;
+        cluster.state = base_vertex | live;
 
         for(short i = 0; i < G[v].size(); i++) //TODO: Assumes ordering i.e. root is towards zero
         {
             if(G[v][i] < v)
             {
-                base_clusters[v+n].add_initial_neighbours(&base_clusters[G[v][i]], cluster);
+                base_clusters[v+n].add_initial_neighbours(G[v][i], v);
                 base_clusters[v+n].state = base_edge;
                 base_clusters[v+n].index = v+n;
-                base_clusters[v].add_neighbour(&base_clusters[G[v][i]], &base_clusters[v+n]);
+                base_clusters[v].add_neighbour(G[v][i], v+n);
             }
             else
             {
-                base_clusters[v].add_neighbour(&base_clusters[G[v][i]], &base_clusters[G[v][i]+n]);
+                base_clusters[v].add_neighbour(G[v][i], G[v][i]+n);
             }
         }
 
@@ -332,14 +341,16 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
 }
 
 template <typename T>
-void set_heights(parlay::sequence<cluster<T>*> &all_cluster_ptrs)
+void set_heights(parlay::sequence<T> &all_cluster_indices, parlay::sequence<cluster<T>>& all_clusters)
 {
 
-    parlay::parallel_for(0, all_cluster_ptrs.size(), [&] (T v) {
-        auto cluster = all_cluster_ptrs[v];
+    parlay::parallel_for(0, all_cluster_indices.size(), [&] (T v) {
+        auto cluster = &all_clusters[all_cluster_indices[v]];
         T my_height = 0;
+        T parent_index = cluster->get_parent();
+        cluster->height = 0;
 
-        while(cluster != nullptr)
+        while(parent_index != -1)
         {
             bool swapped = false;
             while(swapped == false)
@@ -353,7 +364,8 @@ void set_heights(parlay::sequence<cluster<T>*> &all_cluster_ptrs)
             }            
 
             my_height++;
-            cluster = cluster->get_parent();
+            parent_index = cluster->get_parent();
+            cluster = &all_clusters[parent_index];
         }
 
     });
@@ -374,19 +386,20 @@ void set_heights(parlay::sequence<cluster<T>*> &all_cluster_ptrs)
 */
 
 template <typename T>
-void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_height = true, bool randomized = false)
+void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_height = true, bool randomized = false, bool print_forest = false)
 {
     // std::cout << "create RC tree called" << std::endl;
     
-    parlay::sequence<cluster<T>*> all_cluster_ptrs = parlay::tabulate(n, [&] (T v) {
-        return &base_clusters[v];
+    parlay::sequence<T> all_cluster_indices = parlay::tabulate(n, [&] (T v) {
+        return v;
     });
 
-    parlay::sequence<cluster<T>*> forest, candidates;
+    parlay::sequence<T> forest, candidates;
 
     // Initially the forest of live nodes is all live nodes
-    forest = parlay::filter(all_cluster_ptrs, [&] (cluster<T>* C) {
-        return ((C->state & live));
+    forest = parlay::filter(all_cluster_indices, [&] (T C) {
+        
+        return base_clusters[C].state & live;
     });
 
     bool first_time = true;
@@ -401,26 +414,26 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
         }
         else
         {
-            forest = parlay::filter(forest, [&] (cluster<T>* C) {
-                return ((C->state & live));
+            forest = parlay::filter(forest, [&] (T C) {
+                return base_clusters[C].state & live;
             });
         }
         
         // std::cout << "forest.size(): " << forest.size() << std::endl;
 
         // Eligible nodes are those with 0, 1 or 2 neighbours
-        auto eligible = parlay::filter(forest, [&] (cluster<T>* C) {
-            return (C->get_neighbour_count() <= 2);
+        auto eligible = parlay::filter(forest, [&] (T C) {
+            return base_clusters[C].get_neighbour_count() <= 2;
         });
 
         // std::cout << "eligible.size(): " << eligible.size() << std::endl;
 
         // Set the flag is_MIS amongst them
-        set_MIS(eligible, randomized = randomized);
+        set_MIS(eligible, base_clusters, randomized = randomized);
 
         // Filter out an MIS of eligible nodes
-        candidates = parlay::filter(eligible, [&] (cluster<T>* C) {
-            return (C->is_MIS);
+        candidates = parlay::filter(eligible, [&] (T C) {
+            return base_clusters[C].is_MIS;
         });
 
         // std::cout << "candidates.size(): " << candidates.size() << std::endl;
@@ -429,80 +442,85 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
 
         // do rake and compress
         parlay::parallel_for(0, candidates.size(), [&] (T v) {
-            cluster<T>* cluster_ptr = candidates[v];
+            cluster<T>& cluster = base_clusters[candidates[v]];
+            T cluster_index = candidates[v];
             // rake
-            if(cluster_ptr->get_neighbour_count() == 0)
+            if(cluster.get_neighbour_count() == 0)
             {
-                cluster_ptr->state&=(~live);
-                cluster_ptr->state|=(nullary_cluster);
-                cluster_ptr->state|=internal;
+                cluster.state&=(~live);
+                cluster.state|=(nullary_cluster);
+                cluster.state|=internal;
             }
-            if(cluster_ptr->get_neighbour_count() == 1)
+            if(cluster.get_neighbour_count() == 1)
             {
-                cluster<T>* edge_ptr = nullptr;
-                cluster<T>* other_side = nullptr;
+                T edge_idx = -1;
+                T other_side = -1;
                 short neighbour_index = -1;
                 
-                for(short i = 0; i < cluster_ptr->size; i+=2)
+                for(short i = 0; i < cluster.size; i+=2) // TODO: replace with a get_first_neighbour functions?
                 {
-                    if(cluster_ptr->types[i] & neighbour_type)
+                    if(cluster.types[i] & neighbour_type)
                     {
-                        other_side = cluster_ptr->ptrs[i];
-                        edge_ptr = cluster_ptr->ptrs[i+1];
+                        other_side = cluster.indices[i];
+                        edge_idx = cluster.indices[i+1];
                         neighbour_index = i;
                     }
                 }
+                assert(edge_idx != -1 && other_side != -1);
 
                 // now add these two as children and remove as neighbours if neighbours
-                other_side->change_to_child(edge_ptr);
-                other_side->change_to_child(cluster_ptr);
+                base_clusters[other_side].change_to_child(edge_idx);
+                base_clusters[other_side].change_to_child(cluster_index);
 
                 // // make other_side be the parent for both
-                edge_ptr->set_parent(cluster_ptr);
-                cluster_ptr->set_parent(other_side);
+                base_clusters[edge_idx].set_parent(cluster_index);
+                cluster.set_parent(other_side);
 
                 // // mark both of these as not live
-                edge_ptr->state&=(~live);
-                cluster_ptr->state&=(~live);
-
-                cluster_ptr->state|=unary_cluster;
-                cluster_ptr->state|=internal;
+                base_clusters[edge_idx].state&=(~live);
+                cluster.state&=(~live);
+                cluster.state|=unary_cluster;
+                cluster.state|=internal;
             }
             else 
-            if (cluster_ptr->get_neighbour_count() == 2)
+            if (cluster.get_neighbour_count() == 2)
             {
                 // find left and right vertices/nodes
-                cluster<T>* left_edge_ptr = nullptr;
-                cluster<T>* right_edge_ptr = nullptr;
-                cluster<T>* left_node_ptr = nullptr;
-                cluster<T>* right_node_ptr = nullptr;
+                T left_edge_idx = -1;
+                T right_edge_idx = -1;
+                T left_node_idx = -1;
+                T right_node_idx = -1;
 
-                cluster_ptr->get_two_neighbours_edges(left_node_ptr, left_edge_ptr, right_node_ptr, right_edge_ptr);
+                cluster.get_two_neighbours_edges(left_node_idx, left_edge_idx, right_node_idx, right_edge_idx);
 
-                left_node_ptr->overwrite_neighbour(cluster_ptr, right_node_ptr, cluster_ptr);
-
-                right_node_ptr->overwrite_neighbour(cluster_ptr, left_node_ptr, cluster_ptr);
+                assert(left_edge_idx != -1);
+                assert(right_edge_idx != -1);
                 
-                left_edge_ptr->set_parent(cluster_ptr);
-                right_edge_ptr->set_parent(cluster_ptr);
+                base_clusters[left_node_idx].overwrite_neighbour(cluster_index, right_node_idx, cluster_index);
 
-                cluster_ptr->change_to_child(left_edge_ptr);
-                cluster_ptr->change_to_child(right_edge_ptr);
+                base_clusters[right_node_idx].overwrite_neighbour(cluster_index, left_node_idx, cluster_index);
+                
+                base_clusters[left_edge_idx].set_parent(cluster_index);
+                base_clusters[right_edge_idx].set_parent(cluster_index);
 
-                left_edge_ptr->state&=(~live);
-                right_edge_ptr->state&=(~live);
+                cluster.change_to_child(left_edge_idx);
+                cluster.change_to_child(right_edge_idx);
 
-                cluster_ptr->state&=(~live);
+                base_clusters[left_edge_idx].state&=(~live);
+                base_clusters[right_edge_idx].state&=(~live);
 
-                cluster_ptr->state|=binary_cluster;
-                cluster_ptr->state|=internal;
+                cluster.state&=(~live);
+
+                cluster.state|=binary_cluster;
+                cluster.state|=internal;
                 
             }
         });
+
     }while(candidates.size());
 
     if(do_height == true)
-        set_heights(all_cluster_ptrs);
+        set_heights(all_cluster_indices, base_clusters);
 
 }
 

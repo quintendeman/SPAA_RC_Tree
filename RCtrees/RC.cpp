@@ -13,11 +13,11 @@
 // **************************************************************
 // Driver
 // **************************************************************
-using vertex = long;
+using vertex = int;
 using utils = graph_utils<vertex>;
 using graph = parlay::sequence<parlay::sequence<vertex> >;
 
-const vertex max_degree = 3;
+const vertex max_degree = max_neighbours;
 
 int main(int argc, char* argv[]) {
     auto usage = "Usage: RC [--graph-size <graph-size>] [-n <graph-size>] [--num-queries <num-queries>] [--print-creation] [--do-height <true|false>] [--randomized <true|false>]";

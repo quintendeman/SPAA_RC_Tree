@@ -31,7 +31,7 @@ template <typename T>
 struct cluster
 {
 public:
-    cluster<T>* ptrs[max_neighbours * 2]; 
+    T indices[max_neighbours * 2]; 
     T index = -1;
     T colour = -1;
     T data = 0;
@@ -39,6 +39,7 @@ public:
     static const short size = max_neighbours*2;
     short state = 0; // unaffected, affected or update eligible
     bool is_MIS = false;
+    bool is_candidate = false;
     char types[max_neighbours * 2] = {};
 
     // Default constructor
@@ -55,7 +56,7 @@ public:
     {    
         for(uint i = 0; i < this->size; i++)
         {
-            ptrs[i] = nullptr;
+            indices[i] = -1;
             types[i] = 0;
         }
         return;
@@ -64,14 +65,14 @@ public:
     // Method to get colour based off memory address
     unsigned long get_default_colour(void) const
     {
-        return reinterpret_cast<T>(this);
+        return this->index;
     }
 
     // To be used only for connecting the base_edges to base_nodes
-    void add_initial_neighbours(cluster<T>* V,  cluster<T>* W)
+    void add_initial_neighbours(T V,  T W)
     {
-        this->ptrs[0] = V;
-        this->ptrs[1] = W;
+        this->indices[0] = V;
+        this->indices[1] = W;
         this->types[0] =neighbour_type;
         this->types[1] =neighbour_type;
     }
@@ -80,14 +81,14 @@ public:
     // Note, if that pointer already exists, set its type to neighbour
     // and returns that index
     // index i+1 will contain edge for easier management
-    short add_neighbour(cluster<T>* neighbour, cluster<T>* edge)
+    short add_neighbour(T neighbour, T edge)
     {
         for(short i = 0; i < this->size; i+=2)
         {
-            if(this->ptrs[i] == nullptr || this->ptrs[i] == neighbour)
+            if(this->indices[i] == -1 || this->indices[i] == neighbour)
             {
-                this->ptrs[i] = neighbour;
-                this->ptrs[i+1] = edge;
+                this->indices[i] = neighbour;
+                this->indices[i+1] = edge;
                 this->types[i] |= neighbour_type;
                 this->types[i+1] |= edge_type;
                 return i;
@@ -99,11 +100,11 @@ public:
     /**
      * Removes a node as a neighbour and returns the index
     */
-    short remove_neighbour(cluster<T>* neighbour)
+    short remove_neighbour(T neighbour)
     {
         for(short i = 0; i < this->size; i++)
         {
-            if(this->ptrs[i] == neighbour)
+            if(this->indices[i] == neighbour)
             {
                 this->types[i]&=(~neighbour_type);
                 return i;
@@ -112,11 +113,11 @@ public:
         return -1;
     }
 
-    short change_to_neighbour(cluster<T>* neighbour)
+    short change_to_neighbour(T neighbour)
     {
         for(short i = 0; i < this->size; i++)
         {
-            if(this->ptrs[i] == neighbour)
+            if(this->indices[i] == neighbour)
             {
                 this->types[i]&=(~child_type);
                 this->types[i]&=(~edge_type);
@@ -128,11 +129,11 @@ public:
     }
 
     // changes a ptr from neighbour_type or edge_type to child_type
-    short change_to_child(cluster<T>* child)
+    short change_to_child(T child)
     {
         for(short i = 0; i < this->size; i++)
         {
-            if(this->ptrs[i] == child)
+            if(this->indices[i] == child)
             {
                 this->types[i]&=(~neighbour_type);
                 this->types[i]&=(~edge_type);
@@ -146,11 +147,11 @@ public:
     /**
      * designates a neighbour as a parent
     */
-    short set_parent(cluster<T>* node)
+    short set_parent(T node)
     {
         for(short i = 0; i < this->size; i++)
         {
-            if(this->ptrs[i] == node)
+            if(this->indices[i] == node)
             {
                 this->types[i]=parent_type;
                 this->types[i]&=(~neighbour_type);
@@ -160,45 +161,45 @@ public:
         return -1;
     }
 
-    cluster<T>* get_parent(void)
+    T get_parent(void)
     {
         for(short i = 0; i < this->size; i++)
         {
             if(this->types[i]&parent_type)
             {
-                return this->ptrs[i];
+                return this->indices[i];
             }
         }
-        return nullptr;
+        return -1;
     }
 
     // set the neighbours MIS to val
     // useful when colouring
-    void set_neighbour_mis(bool val)
+    void set_neighbour_mis(bool val, parlay::sequence<cluster<T>>& all_clusters)
     {
         for(short i = 0; i < this->size; i+=2)
         {
-            if(this->ptrs[i])
-                this->ptrs[i]->is_MIS = val;
+            if(this->indices[i] > -1)
+                all_clusters[this->indices[i]].is_MIS = val;
         }
     }
 
-    void set_neighbour_colour(T input_colour)
+    void set_neighbour_colour(T input_colour,  parlay::sequence<cluster<T>>& all_clusters)
     {
         for(short i = 0; i < this->size; i+=2)
         {
-            if(this->ptrs[i])
-                this->ptrs[i]->colour = input_colour;
+            if(this->indices[i] > -1)
+                all_clusters[this->indices[i]].colour = input_colour;
         }   
     }
 
-    bool is_max_neighbour_colour(void)
+    bool is_max_neighbour_colour( parlay::sequence<cluster<T>>& all_clusters)
     {
         T max_colour = this->colour;
         for(short i = 0; i < this->size; i+=2)
         {
-            if(this->ptrs[i] && this->ptrs[i]->colour > max_colour)
-                max_colour = this->ptrs[i]->colour;
+            if(this->indices[i] > -1 && all_clusters[this->indices[i]].colour > max_colour && all_clusters[this->indices[i]].is_candidate)
+                max_colour = all_clusters[this->indices[i]].colour;
         }
         if(max_colour == this->colour)
             return true;
@@ -209,11 +210,11 @@ public:
         return true if any neighbours are in MIS
         else return false
     */
-    bool get_neighbour_MIS(void)
+    bool get_neighbour_MIS( parlay::sequence<cluster<T>>& all_clusters)
     {
         for(short i = 0; i < this->size; i+=2)
         {
-            if(this->ptrs[i] && this->ptrs[i]->is_MIS)
+            if(this->indices[i] > -1 && all_clusters[this->indices[i]].is_MIS && all_clusters[this->indices[i]].is_candidate)
                 return true;
         }
         return false;
@@ -231,7 +232,7 @@ public:
         return num_neighbours;
     }
 
-    void get_two_neighbours_edges(cluster<T>*& neighbour1, cluster<T>*& edge1, cluster<T>*& neighbour2, cluster<T>*& edge2)
+    void get_two_neighbours_edges(T& neighbour1, T& edge1, T& neighbour2, T& edge2)
     {
         bool first_neighbour_found = false;
         for(short i = 0; i < this->size; i+=2)
@@ -241,13 +242,13 @@ public:
                 if(first_neighbour_found == false)
                 {
                     first_neighbour_found = true;
-                    neighbour1 = this->ptrs[i];
-                    edge1 = this->ptrs[i+1];
+                    neighbour1 = this->indices[i];
+                    edge1 = this->indices[i+1];
                 }
                 else
                 {
-                    neighbour2 = this->ptrs[i];
-                    edge2 = this->ptrs[i+1];
+                    neighbour2 = this->indices[i];
+                    edge2 = this->indices[i+1];
                     return;   
                 }
             }
@@ -258,18 +259,18 @@ public:
         Mainly used when doing compress
 
     */
-    short overwrite_neighbour(cluster<T>* old_neighbour, cluster<T>* new_neighbour, cluster<T>* new_edge)
+    short overwrite_neighbour(T old_neighbour, T new_neighbour, T new_edge)
     {
 
-        for(short i = 0; i < this->size; i++)
+        for(short i = 0; i < this->size; i+=2)
         {
-            if(this->ptrs[i] == old_neighbour)
+            if(this->indices[i] == old_neighbour)
             {
-                this->ptrs[i] = new_neighbour;
+                this->indices[i] = new_neighbour;
                 this->types[i]|=neighbour_type;
                 
-                this->ptrs[i+1] = new_edge;
-                this->types[i+1]|= edge_type;
+                this->indices[i+1] = new_edge;
+                this->indices[i+1]|= edge_type;
                 this->types[i+1]&= (~neighbour_type);
                 
                 return i;
@@ -279,7 +280,7 @@ public:
         return -1;
     }
 
-    void print(void)
+    void print( parlay::sequence<cluster<T>>& all_clusters)
     {
         std::cout << "Index: " << this->index;
         std::cout << "  ";
@@ -289,9 +290,9 @@ public:
             std::cout << "dead ";
         for(uint i = 0; i < this->size; i+=2)
         {
-            auto cluster = this->ptrs[i];
-            if(cluster == nullptr)
+            if(this->indices[i] == -1)
                 continue;
+            auto cluster = &all_clusters[this->indices[i]];
             std::cout << cluster->index;
             std::cout << " ";
             auto ptr_type = this->types[i];

@@ -8,13 +8,15 @@ import argparse
 parser = argparse.ArgumentParser(description='Run RC program and plot results.')
 parser.add_argument('--randomized', type=str, choices=['true', 'false'], default='false', help='Set randomized flag for RC.')
 parser.add_argument('--do-height', type=str, choices=['true', 'false'], default='true', help='Set do-height flag for RC.')
+parser.add_argument('-n', type=str, required=True, help='Name to append to titles and file names')
 args = parser.parse_args()
 
 # Constants
-graph_sizes = [100, 1000, 10000, 100000, 1000000, 5000000, 10000000, 50000000, 100000000,  500000000, 1000000000]
+graph_sizes = [100, 1000, 10000, 100000, 1000000, 5000000, 10000000, 50000000, 100000000, 500000000, 1000000000]
 num_threads_list = [144, 100, 72, 60, 48, 36, 24, 16, 8, 4, 2, 1]
-time_output_filename = f'creation_time_vs_graph_size_randomized_{args.randomized}_do_height_{args.do_height} max_deg=3.png'
-speedup_output_filename = f'speedup_vs_graph_size_randomized_{args.randomized}_do_height_{args.do_height} max_deg=3.png'
+name_suffix = args.n
+time_output_filename = f'creation_time_vs_graph_size_randomized_{args.randomized}_do_height_{args.do_height}_{name_suffix}.png'
+speedup_output_filename = f'speedup_vs_graph_size_randomized_{args.randomized}_do_height_{args.do_height}_{name_suffix}.png'
 
 # Prepare to collect results
 results = {threads: [] for threads in num_threads_list}
@@ -25,7 +27,7 @@ def run_rc_with_threads(graph_size, num_threads):
     env['PARLAY_NUM_THREADS'] = str(num_threads)
     env['LD_PRELOAD'] = '/usr/local/lib/libjemalloc.so'
     try:
-        cmd = ['./RC', '--print-creation', f'--randomized', args.randomized, '--do-height', args.do_height, '-n', str(graph_size)]
+        cmd = ['./RC', '--print-creation', '--randomized', args.randomized, '--do-height', args.do_height, '-n', str(graph_size)]
         result = subprocess.run(cmd, capture_output=True, text=True, env=env)
         output = result.stdout.strip()
         if output:
@@ -34,7 +36,6 @@ def run_rc_with_threads(graph_size, num_threads):
     except Exception as e:
         print(f"Failed to run ./RC for graph size {graph_size} with {num_threads} threads: {e}")
     return None
-
 
 # Collect results for each configuration
 for num_threads in num_threads_list:
@@ -68,7 +69,7 @@ for num_threads in num_threads_list:
     plt.plot(plot_data[num_threads]['sizes'], plot_data[num_threads]['times'], marker='o', label=f'{num_threads} threads')
 plt.xlabel('Graph Size (n)')
 plt.ylabel('Creation Time (seconds)')
-plt.title(f'Graph Creation Time vs Graph Size (randomized={args.randomized}, do-height={args.do_height}) max_deg=3')
+plt.title(f'Graph Creation Time vs Graph Size (randomized={args.randomized}, do-height={args.do_height}) {name_suffix}')
 plt.legend()
 plt.savefig(time_output_filename)
 print(f'Creation time plot saved as {time_output_filename}')
@@ -86,8 +87,8 @@ for i, num_threads in enumerate(num_threads_list):
 
 plt.xlabel('Graph size')
 plt.xscale('log')
-plt.ylabel(f'Speedup (relative to 1 thread) (randomized={args.randomized}, do-height={args.do_height})')
-plt.title(f'Speedup vs Graph Size (randomized={args.randomized}, do-height={args.do_height}) max_deg=3')
+plt.ylabel(f'Speedup (relative to 1 thread) (randomized={args.randomized}, do-height={args.do_height}) {name_suffix}')
+plt.title(f'Speedup vs Graph Size (randomized={args.randomized}, do-height={args.do_height}) {name_suffix}')
 plt.legend()
 plt.savefig(speedup_output_filename)
 print(f'Speedup plot saved as {speedup_output_filename}')
