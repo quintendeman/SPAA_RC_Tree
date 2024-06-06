@@ -36,7 +36,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
     parlay::parallel_for(0, num_elements, [&] (T v) {
         std::uniform_real_distribution<> dis(0, 1);
         static const float nullary = 0.01;
-        static const float anywhere = 0.95;
+        static const float anywhere = 0.1;
         auto random_val = dis(gen);
         if (random_val <= anywhere && v > 0)
         {
@@ -231,8 +231,8 @@ void set_MIS(parlay::sequence<T>& cluster_indices,  parlay::sequence<cluster<T>>
 
 
         auto colours = parlay::tabulate(cluster_indices.size(), [&] (T v) {
-            all_clusters[cluster_indices[v]].is_MIS = false;
-            all_clusters[cluster_indices[v]].is_candidate = true;
+            all_clusters[cluster_indices[v]].set_MIS(false);
+            all_clusters[cluster_indices[v]].state |= is_candidate;
             return all_clusters[cluster_indices[v]].colour;
         });
 
@@ -257,22 +257,22 @@ void set_MIS(parlay::sequence<T>& cluster_indices,  parlay::sequence<cluster<T>>
                 T v = result[i];
                 if(all_clusters[cluster_indices[v]].get_neighbour_MIS(all_clusters) == true)
                 {
-                    all_clusters[cluster_indices[v]].is_MIS = false;
+                    all_clusters[cluster_indices[v]].set_MIS(false);
                     return;
                 }
-                all_clusters[cluster_indices[v]].is_MIS = true;
+                all_clusters[cluster_indices[v]].set_MIS(true);
             });
         }
 
         parlay::parallel_for(0, cluster_indices.size(), [&] (T v) {
-            all_clusters[cluster_indices[v]].is_candidate = false;
+            all_clusters[cluster_indices[v]].state &= (~is_candidate);
         });
     }
     else
     {
         // set as is_candidate
         parlay::parallel_for(0, cluster_indices.size(), [&] (T v) {
-            all_clusters[cluster_indices[v]].is_candidate = true;
+            all_clusters[cluster_indices[v]].state |= is_candidate;
         });
 
         parlay::random_generator gen;
@@ -283,11 +283,11 @@ void set_MIS(parlay::sequence<T>& cluster_indices,  parlay::sequence<cluster<T>>
         });
 
         parlay::parallel_for(0, cluster_indices.size(), [&] (T v) {
-            all_clusters[cluster_indices[v]].is_MIS=all_clusters[cluster_indices[v]].is_max_neighbour_colour(all_clusters);
+            all_clusters[cluster_indices[v]].set_MIS(all_clusters[cluster_indices[v]].is_max_neighbour_colour(all_clusters));
         });
 
         parlay::parallel_for(0, cluster_indices.size(), [&] (T v) {
-            all_clusters[cluster_indices[v]].is_candidate = false;
+            all_clusters[cluster_indices[v]].state &= (~is_candidate);
         });
 
     }
@@ -402,10 +402,16 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
         return base_clusters[C].state & live;
     });
 
+    auto last_forest_size = 0;
+    auto count = 0;
     bool first_time = true;
 
     do
     {
+       
+
+        // printTree(base_clusters);
+        // std::cout << "\n\n\n\n\n\n" << std::endl;
         // Shrink the forst as live nodes decrease
         if(first_time == true)
         {
@@ -417,6 +423,12 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
             forest = parlay::filter(forest, [&] (T C) {
                 return base_clusters[C].state & live;
             });
+            if(forest.size() == last_forest_size)
+            {
+                count++;
+            }
+            assert(count < 100 && "INFINITE LOOP, FOREST SIZE CONSTANT");
+            last_forest_size = forest.size();
         }
         
         // std::cout << "forest.size(): " << forest.size() << std::endl;
@@ -433,57 +445,58 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
 
         // Filter out an MIS of eligible nodes
         candidates = parlay::filter(eligible, [&] (T C) {
-            return base_clusters[C].is_MIS;
+            return base_clusters[C].state & is_MIS;
         });
 
         // std::cout << "candidates.size(): " << candidates.size() << std::endl;
 
-        // printTree(base_clusters);
+        
+        
 
         // do rake and compress
         parlay::parallel_for(0, candidates.size(), [&] (T v) {
-            cluster<T>& cluster = base_clusters[candidates[v]];
             T cluster_index = candidates[v];
+            // base_clusters[cluster_index];
             // rake
-            if(cluster.get_neighbour_count() == 0)
+            if(base_clusters[cluster_index].get_neighbour_count() == 0)
             {
-                cluster.state&=(~live);
-                cluster.state|=(nullary_cluster);
-                cluster.state|=internal;
+                base_clusters[cluster_index].state&=(~live);
+                base_clusters[cluster_index].state|=(nullary_cluster);
+                base_clusters[cluster_index].state|=internal;
             }
-            if(cluster.get_neighbour_count() == 1)
+            if(base_clusters[cluster_index].get_neighbour_count() == 1)
             {
                 T edge_idx = -1;
                 T other_side = -1;
                 short neighbour_index = -1;
                 
-                for(short i = 0; i < cluster.size; i+=2) // TODO: replace with a get_first_neighbour functions?
+                for(short i = 0; i < base_clusters[cluster_index].size; i+=2) // TODO: replace with a get_first_neighbour functions?
                 {
-                    if(cluster.types[i] & neighbour_type)
+                    if(base_clusters[cluster_index].types[i] & neighbour_type)
                     {
-                        other_side = cluster.indices[i];
-                        edge_idx = cluster.indices[i+1];
+                        other_side = base_clusters[cluster_index].indices[i];
+                        edge_idx = base_clusters[cluster_index].indices[i+1];
                         neighbour_index = i;
                     }
                 }
-                assert(edge_idx != -1 && other_side != -1);
+                // assert(edge_idx != -1 && other_side != -1);
 
                 // now add these two as children and remove as neighbours if neighbours
-                base_clusters[other_side].change_to_child(edge_idx);
-                base_clusters[other_side].change_to_child(cluster_index);
+                auto child1 = base_clusters[other_side].change_to_child(edge_idx);
+                auto child2 = base_clusters[other_side].change_to_child(cluster_index);
+                
+                // assert(child1 != -1 && child2 != -1);
 
                 // // make other_side be the parent for both
                 base_clusters[edge_idx].set_parent(cluster_index);
-                cluster.set_parent(other_side);
+                base_clusters[cluster_index].set_parent(other_side);
 
-                // // mark both of these as not live
-                base_clusters[edge_idx].state&=(~live);
-                cluster.state&=(~live);
-                cluster.state|=unary_cluster;
-                cluster.state|=internal;
+                //
+                base_clusters[cluster_index].state&=(~live);
+                base_clusters[cluster_index].state|=unary_cluster;
+                base_clusters[cluster_index].state|=internal;
             }
-            else 
-            if (cluster.get_neighbour_count() == 2)
+            if (base_clusters[cluster_index].get_neighbour_count() == 2)
             {
                 // find left and right vertices/nodes
                 T left_edge_idx = -1;
@@ -491,10 +504,10 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
                 T left_node_idx = -1;
                 T right_node_idx = -1;
 
-                cluster.get_two_neighbours_edges(left_node_idx, left_edge_idx, right_node_idx, right_edge_idx);
+                base_clusters[cluster_index].get_two_neighbours_edges(left_node_idx, left_edge_idx, right_node_idx, right_edge_idx);
 
-                assert(left_edge_idx != -1);
-                assert(right_edge_idx != -1);
+                // assert(left_edge_idx != -1);
+                // assert(right_edge_idx != -1);
                 
                 base_clusters[left_node_idx].overwrite_neighbour(cluster_index, right_node_idx, cluster_index);
 
@@ -503,21 +516,27 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
                 base_clusters[left_edge_idx].set_parent(cluster_index);
                 base_clusters[right_edge_idx].set_parent(cluster_index);
 
-                cluster.change_to_child(left_edge_idx);
-                cluster.change_to_child(right_edge_idx);
+                auto child1 = base_clusters[cluster_index].change_to_child(left_edge_idx);
+                auto child2 = base_clusters[cluster_index].change_to_child(right_edge_idx);
 
-                base_clusters[left_edge_idx].state&=(~live);
-                base_clusters[right_edge_idx].state&=(~live);
+                
 
-                cluster.state&=(~live);
+                // assert(child1 != -1 && child2 != -1);
 
-                cluster.state|=binary_cluster;
-                cluster.state|=internal;
+                // base_clusters[left_edge_idx].state&=(~live);
+                // base_clusters[right_edge_idx].state&=(~live);
+
+                base_clusters[cluster_index].state&=(~live);
+
+                base_clusters[cluster_index].state|=binary_cluster;
+                base_clusters[cluster_index].state|=internal;
                 
             }
         });
 
-    }while(candidates.size());
+        // std::cout << "forest: " << forest.size() << std::endl;
+
+    }while(forest.size());
 
     if(do_height == true)
         set_heights(all_cluster_indices, base_clusters);
@@ -528,10 +547,19 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
 
 
 template<typename T>
+void printTree(parlay::sequence<T> cluster_indices, parlay::sequence<cluster<T> > &base_clusters)
+{
+    for(uint i = 0; i < cluster_indices.size(); i++)
+    {
+        base_clusters[cluster_indices[i]].print(base_clusters);
+    }   
+}
+
+template<typename T>
 void printTree(parlay::sequence<cluster<T> > &base_clusters)
 {
     for(uint i = 0; i < base_clusters.size(); i++)
     {
-        base_clusters[i].print();
+        base_clusters[i].print(base_clusters);
     }   
 }

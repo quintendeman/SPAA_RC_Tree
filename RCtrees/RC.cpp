@@ -13,7 +13,7 @@
 // **************************************************************
 // Driver
 // **************************************************************
-using vertex = int;
+using vertex = long;
 using utils = graph_utils<vertex>;
 using graph = parlay::sequence<parlay::sequence<vertex> >;
 

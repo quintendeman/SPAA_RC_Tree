@@ -11,14 +11,17 @@ const short binary_cluster = 8;
 const short nullary_cluster = 16;
 const short live = 256;
 const short carrying_weight = 512;
+const short is_MIS = 1024;
+const short is_candidate = 2048;
 const short internal = 8192;
+
 
 const char neighbour_type = 1;
 const char parent_type = 2;
 const char child_type = 4;
 const char edge_type = 8;
 
-const int max_neighbours = 3;
+const int max_neighbours = 6;
 
 /*
     This represents a cluster in an RC tree.
@@ -38,8 +41,6 @@ public:
     std::atomic<T> height;
     static const short size = max_neighbours*2;
     short state = 0; // unaffected, affected or update eligible
-    bool is_MIS = false;
-    bool is_candidate = false;
     char types[max_neighbours * 2] = {};
 
     // Default constructor
@@ -51,8 +52,7 @@ public:
           colour(other.colour),
           data(other.data),
           height(other.height.load()), // Load the atomic value
-          state(other.state),
-          is_MIS(other.is_MIS)
+          state(other.state)
     {    
         for(uint i = 0; i < this->size; i++)
         {
@@ -135,9 +135,7 @@ public:
         {
             if(this->indices[i] == child)
             {
-                this->types[i]&=(~neighbour_type);
-                this->types[i]&=(~edge_type);
-                this->types[i]|=child_type;
+                this->types[i]=child_type;
                 return i;
             }
         }
@@ -173,6 +171,15 @@ public:
         return -1;
     }
 
+    void set_MIS(bool val)
+    {
+        static const short flags = 0xffff & is_MIS;
+        if(val == true)
+            this->state |= flags;
+        else
+            this->state &= (~flags);
+    }
+
     // set the neighbours MIS to val
     // useful when colouring
     void set_neighbour_mis(bool val, parlay::sequence<cluster<T>>& all_clusters)
@@ -180,7 +187,7 @@ public:
         for(short i = 0; i < this->size; i+=2)
         {
             if(this->indices[i] > -1)
-                all_clusters[this->indices[i]].is_MIS = val;
+                all_clusters[this->indices[i]].set_MIS(val);
         }
     }
 
@@ -198,7 +205,7 @@ public:
         T max_colour = this->colour;
         for(short i = 0; i < this->size; i+=2)
         {
-            if(this->indices[i] > -1 && all_clusters[this->indices[i]].colour > max_colour && all_clusters[this->indices[i]].is_candidate)
+            if(this->indices[i] > -1 && all_clusters[this->indices[i]].colour >= max_colour && all_clusters[this->indices[i]].state & is_candidate)
                 max_colour = all_clusters[this->indices[i]].colour;
         }
         if(max_colour == this->colour)
@@ -214,7 +221,7 @@ public:
     {
         for(short i = 0; i < this->size; i+=2)
         {
-            if(this->indices[i] > -1 && all_clusters[this->indices[i]].is_MIS && all_clusters[this->indices[i]].is_candidate)
+            if(this->indices[i] > -1 && all_clusters[this->indices[i]].state & is_MIS && all_clusters[this->indices[i]].state & is_candidate)
                 return true;
         }
         return false;
@@ -223,7 +230,7 @@ public:
     short get_neighbour_count(void)
     {
         short num_neighbours = 0;
-        for(short i = 0; i < this->size; i++)
+        for(short i = 0; i < this->size; i+=2)
         {
             if(this->types[i] & neighbour_type)
                 num_neighbours++;
@@ -270,7 +277,7 @@ public:
                 this->types[i]|=neighbour_type;
                 
                 this->indices[i+1] = new_edge;
-                this->indices[i+1]|= edge_type;
+                this->types[i+1]|= edge_type;
                 this->types[i+1]&= (~neighbour_type);
                 
                 return i;
@@ -288,25 +295,59 @@ public:
             std::cout << "live ";
         else
             std::cout << "dead ";
-        for(uint i = 0; i < this->size; i+=2)
+        
+        if(this->state & base_vertex)
         {
-            if(this->indices[i] == -1)
-                continue;
-            auto cluster = &all_clusters[this->indices[i]];
-            std::cout << cluster->index;
-            std::cout << " ";
-            auto ptr_type = this->types[i];
-            if(ptr_type & neighbour_type)
-                std::cout << "N";
-            if(ptr_type & edge_type)
-                std::cout << "C";
-            if(ptr_type & parent_type)
-                std::cout << "P";
-            if(ptr_type & child_type)
-                std::cout << "C";
-            std::cout << "   ";
+            for(uint i = 0; i < this->size; i+=2)
+                {
+                    if(this->indices[i] == -1)
+                        continue;
+                    auto cluster = &all_clusters[this->indices[i]];
+                    std::cout << cluster->index;
+                    std::cout << "(";
+                    std::cout << (&all_clusters[this->indices[i+1]])->index;
+                    std::cout << ") ";
+                    auto ptr_type = this->types[i];
+                    if(ptr_type & neighbour_type)
+                        std::cout << "N";
+                    if(ptr_type & edge_type)
+                        std::cout << "C";
+                    if(ptr_type & parent_type)
+                        std::cout << "P";
+                    if(ptr_type & child_type)
+                        std::cout << "C";
+                    std::cout << "   ";
+                }
         }
-        std::cout << " colour(" << this->colour << ") ";
+        else
+        {
+            for(uint i = 0; i < this->size; i+=1)
+            {
+                if(this->indices[i] == -1)
+                    continue;
+                auto cluster = &all_clusters[this->indices[i]];
+                std::cout << cluster->index;
+                std::cout << "(";
+                auto ptr_type = this->types[i];
+                if(ptr_type & neighbour_type)
+                    std::cout << "N";
+                if(ptr_type & edge_type)
+                    std::cout << "C";
+                if(ptr_type & parent_type)
+                    std::cout << "P";
+                if(ptr_type & child_type)
+                    std::cout << "C";
+                std::cout << "   ";
+            }
+        }
+        // std::cout << " colour(" << this->colour << ") ";
+        if(this->state & binary_cluster)
+            std::cout << "compress ";
+        if(this->state & unary_cluster)
+            std::cout << "rake ";
+        if(this->state & nullary_cluster)
+            std::cout << "root ";
+
         std::cout << std::endl;
     }
 };
