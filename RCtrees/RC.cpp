@@ -86,6 +86,10 @@ int main(int argc, char* argv[]) {
     auto end_creation = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> creation_time = end_creation - start_creation;
 
+    PathQuery((vertex) 0, (vertex) graph_size/2, (vertex) 0, clusters, [] (vertex vval, vertex wval) {
+        return vval + wval;
+    });
+
     if (print_creation) {
         std::cout << graph_size << "," << std::setprecision(6) << creation_time.count() << std::endl;
     } else {

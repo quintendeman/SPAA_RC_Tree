@@ -17,6 +17,7 @@
 
 
 
+
 /*
     Generate a simple, single rooted graph with each node having two children
     Then, randomly, change the parent of each node with a certain probability such that it picks something on the left of it
@@ -35,12 +36,15 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
 
     parlay::parallel_for(0, num_elements, [&] (T v) {
         std::uniform_real_distribution<> dis(0, 1);
-        static const float nullary = 0.01;
-        static const float anywhere = 0.1;
+        static const float nullary_weight = 5.0;
+        static const float anywhere_weight = 500;
+        static const float adjacent_weight = 50;
+        static const float nullary = (nullary_weight)/(nullary_weight+anywhere_weight+adjacent_weight);
+        static const float anywhere = (anywhere_weight)/(nullary_weight+anywhere_weight+adjacent_weight);
         auto random_val = dis(gen);
         if (random_val <= anywhere && v > 0)
         {
-            std::uniform_int_distribution<> disint(0, v-1);
+            std::uniform_int_distribution<T> disint(0, v-1);
 
             dummy_initial_parents[v] = disint(gen);
         }
@@ -543,6 +547,277 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
 
 }
 
+template <typename T, typename assocfunc>
+T PathQuery(T v, T w, T defretval, parlay::sequence<cluster<T> > &base_clusters, assocfunc func)
+{
+    
+    bool use_v = false;
+
+    T prev_boundary_v_l = base_clusters[v].get_parent();
+    T prev_boundary_v_r = prev_boundary_v_l;
+    T prev_val_till_v_l = defretval;
+    T prev_val_till_v_r = defretval;
+    T prev_v = v;
+
+
+    T prev_boundary_w_l = base_clusters[w].get_parent();
+    T prev_boundary_w_r = prev_boundary_w_l;
+    T prev_val_till_w_l = defretval;
+    T prev_val_till_w_r = defretval;
+
+
+
+    while(true)
+    {
+        // Ascend using the lower-height cluster. If either has to ascend above root, they are not connected.
+        if(v == -1 || w == -1)
+            return defretval;   
+        else if(v == w)
+            break;
+        else if(base_clusters[v].get_height() < base_clusters[w].get_height())
+            use_v = true;
+        else
+            use_v = false;
+        
+
+
+        if(use_v)
+        {
+            cluster<T>& v_cluster = base_clusters[v]; 
+
+            // We are at the start
+            if(prev_val_till_v_l == defretval && prev_val_till_v_r == defretval)
+            {   
+                v_cluster.find_boundary_vertices(prev_boundary_v_l, prev_val_till_v_l, prev_boundary_v_r, prev_val_till_v_r, defretval, base_clusters);
+            }
+            else
+            {
+                T l, lval, r, rval;
+                v_cluster.find_boundary_vertices(l, lval, r, rval, defretval, base_clusters);
+                    
+                // covers both unary to unary
+                // and unary to binary case
+                if(prev_boundary_v_l == v && prev_boundary_v_r == v) 
+                {
+                    prev_boundary_v_l = l;
+                    prev_boundary_v_r = r;
+                    prev_val_till_v_l = func(prev_val_till_v_l, lval);
+                    prev_val_till_v_r = func(prev_val_till_v_r, rval);
+
+                    for(uint i = 0; i < v_cluster.size; i++)
+                    {
+                        if(v_cluster.types[i] & child_type)
+                        {   
+                            prev_val_till_v_l = func(prev_val_till_v_l, base_clusters[v_cluster.indices[i]].data);
+                            prev_val_till_v_r = func(prev_val_till_v_r, base_clusters[v_cluster.indices[i]].data);
+                        }
+                    }
+                }
+                // covers binary ascending to:
+                // unary/nullary
+                else if(l == r)
+                {
+                    if(prev_boundary_v_l == v)
+                    {
+                        prev_boundary_v_l = l;
+                        prev_val_till_v_l = func(prev_boundary_v_l, lval);
+                    }
+                    else
+                    {
+                        prev_boundary_v_l = r;
+                        prev_val_till_v_r = func(prev_boundary_v_r, rval);
+                    }
+                    for(uint i = 0; i < v_cluster.size; i++)
+                    {
+                        if(v_cluster.types[i] & child_type && v_cluster.indices[i] != l)
+                        {   
+                            prev_val_till_v_l = func(prev_val_till_v_l, base_clusters[v_cluster.indices[i]].data);
+                            prev_val_till_v_r = func(prev_val_till_v_r, base_clusters[v_cluster.indices[i]].data);
+                        }
+                    }
+                    
+                }
+                // binary
+                else
+                {
+                    if(prev_boundary_v_l == l)
+                    {
+                        prev_boundary_v_l = l; // not necessary but helps me thinks
+                        prev_val_till_v_l = prev_boundary_v_l;
+                        prev_boundary_v_r = r;
+                        prev_boundary_v_r = func(prev_boundary_v_r, rval);
+                        prev_boundary_v_r = func(prev_boundary_v_r, lval);
+                    }
+                    else if(prev_boundary_v_r == l)
+                    {
+                        prev_boundary_v_r = l; // not necessary but helps me thinks
+                        prev_val_till_v_r = prev_boundary_v_r;
+                        prev_boundary_v_l = r;
+                        prev_boundary_v_l = func(prev_boundary_v_l, rval);
+                        prev_boundary_v_l = func(prev_boundary_v_l, lval);
+                        
+                    }
+                    else if(prev_boundary_v_l == r)
+                    {
+                        prev_boundary_v_l = r; // not necessary but helps me thinks
+                        prev_val_till_v_l = prev_boundary_v_l;
+                        prev_boundary_v_r = l;
+                        prev_boundary_v_r = func(prev_boundary_v_r, rval);
+                        prev_boundary_v_r = func(prev_boundary_v_r, lval);
+                    }
+                    else /*prev_boundary_v_r == r*/
+                    {
+                        prev_boundary_v_r = r; // not necessary but helps me thinks
+                        prev_val_till_v_r = prev_boundary_v_r;
+                        prev_boundary_v_l = l;
+                        prev_boundary_v_l = func(prev_boundary_v_l, rval);
+                        prev_boundary_v_l = func(prev_boundary_v_l, lval);
+                    }
+                }
+            }
+            
+            v = base_clusters[v].get_parent();
+        }
+        else
+        {
+            cluster<T>& w_cluster = base_clusters[w];
+
+            // We are at the start
+            if (prev_val_till_w_l == defretval && prev_val_till_w_r == defretval) 
+            {
+                w_cluster.find_boundary_vertices(prev_boundary_w_l, prev_val_till_w_l, prev_boundary_w_r, prev_val_till_w_r, defretval, base_clusters);
+            } 
+            else 
+            {
+                T l, lval, r, rval;
+                w_cluster.find_boundary_vertices(l, lval, r, rval, defretval, base_clusters);
+
+                // Covers both unary to unary and unary to binary case
+                if (prev_boundary_w_l == w && prev_boundary_w_r == w) 
+                {
+                    prev_boundary_w_l = l;
+                    prev_boundary_w_r = r;
+                    prev_val_till_w_l = func(prev_val_till_w_l, lval);
+                    prev_val_till_w_r = func(prev_val_till_w_r, rval);
+
+                    for (uint i = 0; i < w_cluster.size; i++) 
+                    {
+                        if (w_cluster.types[i] & child_type) 
+                        {
+                            prev_val_till_w_l = func(prev_val_till_w_l, base_clusters[w_cluster.indices[i]].data);
+                            prev_val_till_w_r = func(prev_val_till_w_r, base_clusters[w_cluster.indices[i]].data);
+                        }
+                    }
+                }
+                // Covers binary ascending to unary/nullary
+                else if (l == r) 
+                {
+                    if (prev_boundary_w_l == w) 
+                    {
+                        prev_boundary_w_l = l;
+                        prev_val_till_w_l = func(prev_boundary_w_l, lval);
+                    } 
+                    else 
+                    {
+                        prev_boundary_w_l = r;
+                        prev_val_till_w_r = func(prev_boundary_w_r, rval);
+                    }
+                    for (uint i = 0; i < w_cluster.size; i++) 
+                    {
+                        if (w_cluster.types[i] & child_type && w_cluster.indices[i] != l) 
+                        {
+                            prev_val_till_w_l = func(prev_val_till_w_l, base_clusters[w_cluster.indices[i]].data);
+                            prev_val_till_w_r = func(prev_val_till_w_r, base_clusters[w_cluster.indices[i]].data);
+                        }
+                    }
+                }
+                // Binary
+                else 
+                {
+                    if (prev_boundary_w_l == l) 
+                    {
+                        prev_boundary_w_l = l; // Not necessary but helps me think
+                        prev_val_till_w_l = prev_boundary_w_l;
+                        prev_boundary_w_r = r;
+                        prev_boundary_w_r = func(prev_boundary_w_r, rval);
+                        prev_boundary_w_r = func(prev_boundary_w_r, lval);
+                    } 
+                    else if (prev_boundary_w_r == l) 
+                    {
+                        prev_boundary_w_r = l; // Not necessary but helps me think
+                        prev_val_till_w_r = prev_boundary_w_r;
+                        prev_boundary_w_l = r;
+                        prev_boundary_w_l = func(prev_boundary_w_l, rval);
+                        prev_boundary_w_l = func(prev_boundary_w_l, lval);
+                    } 
+                    else if (prev_boundary_w_l == r) 
+                    {
+                        prev_boundary_w_l = r; // Not necessary but helps me think
+                        prev_val_till_w_l = prev_boundary_w_l;
+                        prev_boundary_w_r = l;
+                        prev_boundary_w_r = func(prev_boundary_w_r, rval);
+                        prev_boundary_w_r = func(prev_boundary_w_r, lval);
+                    } 
+                    else // prev_boundary_w_r == r 
+                    { 
+                        prev_boundary_w_r = r; // Not necessary but helps me think
+                        prev_val_till_w_r = prev_boundary_w_r;
+                        prev_boundary_w_l = l;
+                        prev_boundary_w_l = func(prev_boundary_w_l, rval);
+                        prev_boundary_w_l = func(prev_boundary_w_l, lval);
+                    }
+                }
+            }
+
+            w = base_clusters[w].get_parent();
+        }
+
+        
+    }
+
+    if(prev_boundary_v_l == defretval && prev_boundary_w_l == defretval)
+    {
+        return defretval;
+    }
+    if(prev_boundary_v_l == defretval)
+    {
+        if(w == prev_boundary_w_r)
+            return prev_val_till_w_r;
+        else
+            return prev_val_till_w_l;   
+    }
+    if(prev_boundary_w_l == defretval)
+    {
+        if(v == prev_boundary_v_l)
+            return prev_val_till_v_l;
+        else
+            return prev_val_till_v_r;
+    }
+    
+    T v_contrib, w_contrib;
+    
+    if(v == prev_boundary_v_l)
+        v_contrib = prev_val_till_v_l;
+    else
+        v_contrib = prev_val_till_v_r;
+
+    if(w == prev_boundary_w_l)
+        w_contrib = prev_val_till_w_l;
+    else
+        w_contrib = prev_val_till_w_r;
+
+    return func(v_contrib, w_contrib);
+   
+}
+
+template<typename T, typename assocfunc>
+T subtreeQuery(T root, T u, T defretval, parlay::sequence<cluster<T>> all_clusters, assocfunc func)
+{
+    // rewrite this, I will have to think about this form the POV of clusters expanding,
+    // NOT RC trees!
+
+    return (T) 0;
+}
 
 
 

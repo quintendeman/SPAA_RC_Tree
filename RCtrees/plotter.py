@@ -12,7 +12,9 @@ parser.add_argument('-n', type=str, required=True, help='Name to append to title
 args = parser.parse_args()
 
 # Constants
-graph_sizes = [100, 1000, 10000, 100000, 1000000, 5000000, 10000000, 50000000, 100000000, 500000000, 1000000000]
+graph_sizes = [2500000000, 1000000000, 500000000, 100000000, 50000000, 10000000, 5000000, 1000000, 100000, 10000, 1000, 100]
+
+
 num_threads_list = [144, 100, 72, 60, 48, 36, 24, 16, 8, 4, 2, 1]
 name_suffix = args.n
 time_output_filename = f'creation_time_vs_graph_size_randomized_{args.randomized}_do_height_{args.do_height}_{name_suffix}.png'
@@ -40,6 +42,7 @@ def run_rc_with_threads(graph_size, num_threads):
 # Collect results for each configuration
 for num_threads in num_threads_list:
     for graph_size in graph_sizes:
+        print(f'{graph_size=}')
         result = run_rc_with_threads(graph_size, num_threads)
         if result:
             results[num_threads].append(result)

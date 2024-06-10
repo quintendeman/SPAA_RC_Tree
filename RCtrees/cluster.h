@@ -62,14 +62,19 @@ public:
         return;
     }
 
+    inline T get_height(void)
+    {
+        return this->height.load();
+    }
+
     // Method to get colour based off memory address
-    unsigned long get_default_colour(void) const
+    inline unsigned long get_default_colour(void) const
     {
         return this->index;
     }
 
     // To be used only for connecting the base_edges to base_nodes
-    void add_initial_neighbours(T V,  T W)
+    inline void add_initial_neighbours(T V,  T W)
     {
         this->indices[0] = V;
         this->indices[1] = W;
@@ -151,8 +156,8 @@ public:
         {
             if(this->indices[i] == node)
             {
-                this->types[i]=parent_type;
-                this->types[i]&=(~neighbour_type);
+                this->types[i] = parent_type;
+                this->types[i] &= (~neighbour_type);
                 return i;
             }
         }
@@ -165,6 +170,19 @@ public:
         {
             if(this->types[i]&parent_type)
             {
+                return this->indices[i];
+            }
+        }
+        return -1;
+    }
+
+    T get_parent(T& parent_index)
+    {
+        for(short i = 0; i < this->size; i++)
+        {
+            if(this->types[i]&parent_type)
+            {
+                parent_index = i;
                 return this->indices[i];
             }
         }
@@ -274,17 +292,55 @@ public:
             if(this->indices[i] == old_neighbour)
             {
                 this->indices[i] = new_neighbour;
-                this->types[i]|=neighbour_type;
+                this->types[i] |=neighbour_type;
                 
                 this->indices[i+1] = new_edge;
-                this->types[i+1]|= edge_type;
-                this->types[i+1]&= (~neighbour_type);
+                this->types[i+1] |= edge_type;
+                this->types[i+1] &= (~neighbour_type);
                 
                 return i;
             }
         }
 
         return -1;
+    }
+
+
+    // Find boundary vertices by observing own state and ajdacent edges
+    void find_boundary_vertices(T& l, T& lval, T& r, T& rval, T defretval, parlay::sequence<cluster<T>>& all_clusters)
+    {
+        if(this->state & nullary_cluster)
+        {
+            l = r = defretval;
+            return;
+        }
+        if(this->state & unary_cluster)
+        {
+            T parent_index;
+            l = r = this->get_parent(parent_index);
+            lval = rval = all_clusters[this->indices[parent_index+1]].data;
+            return;
+        }
+        if(this->state & binary_cluster)
+        {
+            T parent_index;
+            r = this->get_parent(parent_index);
+            rval = all_clusters[this->indices[parent_index+1]].data;
+
+
+            for(uint i = 0; i < this->size; i+=2)
+            {
+                if(this->types[i] & neighbour_type && this->indices[i] != r)
+                {
+                    l = this->indices[i];
+                    lval = all_clusters[this->indices[i+1]].data;
+                    return;
+                }
+            }
+           
+        }
+
+        return;
     }
 
     void print( parlay::sequence<cluster<T>>& all_clusters)
