@@ -737,34 +737,39 @@ T PathQuery(T v, T w, T defretval, parlay::sequence<cluster<T> > &base_clusters,
                     if (prev_boundary_w_l == l) 
                     {
                         prev_boundary_w_l = l; // Not necessary but helps me think
-                        prev_val_till_w_l = prev_boundary_w_l;
+                        prev_val_till_w_l = prev_val_till_w_l;
+                        
                         prev_boundary_w_r = r;
-                        prev_boundary_w_r = func(prev_boundary_w_r, rval);
-                        prev_boundary_w_r = func(prev_boundary_w_r, lval);
+                        prev_val_till_w_r = func(prev_val_till_w_r, lval);
                     } 
                     else if (prev_boundary_w_r == l) 
                     {
                         prev_boundary_w_r = l; // Not necessary but helps me think
-                        prev_val_till_w_r = prev_boundary_w_r;
-                        prev_boundary_w_l = r;
-                        prev_boundary_w_l = func(prev_boundary_w_l, rval);
-                        prev_boundary_w_l = func(prev_boundary_w_l, lval);
+                        prev_boundary_v_l = r;
+
+                        T temp_r = prev_val_till_v_r;
+                        
+                        prev_val_till_v_r = func(prev_val_till_v_l, rval);
+                        prev_val_till_v_l = temp_r;
+                    
                     } 
                     else if (prev_boundary_w_l == r) 
                     {
                         prev_boundary_w_l = r; // Not necessary but helps me think
-                        prev_val_till_w_l = prev_boundary_w_l;
-                        prev_boundary_w_r = l;
-                        prev_boundary_w_r = func(prev_boundary_w_r, rval);
-                        prev_boundary_w_r = func(prev_boundary_w_r, lval);
+                        prev_boundary_v_r = l;
+
+                        T temp_l = prev_val_till_v_l;
+                        
+                        prev_val_till_v_l = func(prev_val_till_v_r, lval);
+                        prev_val_till_v_r = temp_l;
                     } 
                     else // prev_boundary_w_r == r 
                     { 
                         prev_boundary_w_r = r; // Not necessary but helps me think
-                        prev_val_till_w_r = prev_boundary_w_r;
+                        prev_val_till_w_r = prev_val_till_w_r;
+                        
                         prev_boundary_w_l = l;
-                        prev_boundary_w_l = func(prev_boundary_w_l, rval);
-                        prev_boundary_w_l = func(prev_boundary_w_l, lval);
+                        prev_val_till_w_l = func(prev_val_till_w_l, rval);
                     }
                 }
             }
