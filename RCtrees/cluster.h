@@ -43,7 +43,13 @@ public:
     char types[max_neighbours * 2] = {};
 
     // Default constructor
-    cluster() : height(0) {}
+    cluster() : height(0) {
+        for(uint i = 0; i < this->size; i++)
+        {
+            this->ptrs[i] = nullptr;
+            this->types[i] = 0;
+        }
+    }
 
     // Copy constructor only for initialization when creating a sequence
     cluster(const cluster& other)

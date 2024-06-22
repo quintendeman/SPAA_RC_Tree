@@ -324,12 +324,12 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
             edge_cluster->index = -1;
             edge_cluster->state = base_edge | live;
             edge_cluster->add_initial_neighbours(&base_clusters[w], &base_clusters[v]);
-            // std::cout << "Edge added between " << v << "<->" << w << std::endl;
+            // std::cout << "[" << v << "] Edge added between " << v << "<->" << w << std::endl;
             cluster.add_neighbour(&base_clusters[w], edge_cluster);
         }
     });
 
-    // Add incoming edges
+    // // Add incoming edges
     parlay::parallel_for(0, n, [&] (T v) {
         auto cluster_ptr = &base_clusters[v];
         cluster_ptr->index = v;
@@ -342,10 +342,14 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
             // find the edge that corresponds that joins to the other side
             for(short i = 0; i < cluster_ptr->size; i+=2)
             {
-                if(cluster_ptr->ptrs[i] == other_node_ptr)
+                if(other_node_ptr->ptrs[i] == cluster_ptr)
                 {
-                    auto& connecting_edge_ptr = cluster_ptr->ptrs[i+1];
-                    other_node_ptr->add_neighbour(cluster_ptr, connecting_edge_ptr);
+                    auto& connecting_edge_ptr = other_node_ptr->ptrs[i+1];
+                    // std::cout << "I, " << v << ", am attempting to connect to " << w << std::endl;
+                    // std::cout << "I found a connecting edge ";
+                    // connecting_edge_ptr->print_as_edge();
+                    // std::cout << std::endl;
+                    cluster_ptr->add_neighbour(other_node_ptr, connecting_edge_ptr);
                     break;
                 }
             }
@@ -431,6 +435,8 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
     });
 
     bool first_time = true;
+
+    // printTree(base_clusters);
 
     do
     {
@@ -540,7 +546,9 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
                 
             }
         });
-    }while(candidates.size());
+        // printTree(base_clusters);
+        // std::cout << "Forest size: " << forest.size() << std::endl;
+    }while(forest.size());
 
     if(do_height == true)
         set_heights(all_cluster_ptrs);
@@ -577,7 +585,7 @@ void deleteRCtree(parlay::sequence<cluster<T> > &base_clusters)
             //         std::cout << "C ";
             //     std::cout << std::endl;
             // }
-            if((potential_ptr != nullptr) && (potential_ptr->state & base_edge) && (potential_type & (child_type | edge_type)))
+            if((potential_ptr != nullptr) && (potential_ptr->state & base_edge) && (potential_type & (child_type)))
             {
                 // std::cout << "Edge deleted ";
                 // potential_ptr->print_as_edge();
