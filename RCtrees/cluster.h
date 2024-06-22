@@ -36,6 +36,7 @@ public:
     T colour = -1;
     T data = 0;
     std::atomic<T> height;
+    std::atomic<T> counter; 
     static const short size = max_neighbours*2;
     short state = 0; // unaffected, affected or update eligible
     bool is_MIS = false;
@@ -50,6 +51,7 @@ public:
           colour(other.colour),
           data(other.data),
           height(other.height.load()), // Load the atomic value
+          counter(other.counter.load()), // Load the atomic value
           state(other.state),
           is_MIS(other.is_MIS)
     {    
@@ -72,8 +74,8 @@ public:
     {
         this->ptrs[0] = V;
         this->ptrs[1] = W;
-        this->types[0] =neighbour_type;
-        this->types[1] =neighbour_type;
+        this->types[0] = neighbour_type;
+        this->types[1] = neighbour_type;
     }
 
     // index of neighbour if successful, -1 if not
@@ -279,6 +281,19 @@ public:
         return -1;
     }
 
+    void print_as_edge(void)
+    {
+        if(this == nullptr)
+            return;
+        for(uint i = 0; i < this->size; i++)
+        {
+            if(this->ptrs[i] != nullptr)
+                std::cout << " " << this->ptrs[i]->index;
+        }
+        std::cout << ((this->state & base_edge) ? ""  : ("[" + std::to_string(this->index) + "]"));
+        return;
+    }
+
     void print(void)
     {
         std::cout << "Index: " << this->index;
@@ -298,14 +313,26 @@ public:
             if(ptr_type & neighbour_type)
                 std::cout << "N";
             if(ptr_type & edge_type)
-                std::cout << "C";
+                std::cout << "E";
             if(ptr_type & parent_type)
                 std::cout << "P";
             if(ptr_type & child_type)
                 std::cout << "C";
-            std::cout << "   ";
+            std::cout << "(";
+            this->ptrs[i+1]->print_as_edge();
+            std::cout << " ";
+            ptr_type = this->types[i+1];
+            if(ptr_type & neighbour_type)
+                std::cout << "N";
+            if(ptr_type & edge_type)
+                std::cout << "E";
+            if(ptr_type & parent_type)
+                std::cout << "P";
+            if(ptr_type & child_type)
+                std::cout << "C";
+            std::cout << ")   ";
         }
-        std::cout << " colour(" << this->colour << ") ";
+        // std::cout << " colour(" << this->colour << ") ";
         std::cout << std::endl;
     }
 };

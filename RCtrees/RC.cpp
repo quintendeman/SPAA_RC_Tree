@@ -86,6 +86,10 @@ int main(int argc, char* argv[]) {
     auto end_creation = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> creation_time = end_creation - start_creation;
 
+    // printTree(clusters);
+
+    deleteRCtree(clusters);
+
     if (print_creation) {
         std::cout << graph_size << "," << std::setprecision(6) << creation_time.count() << std::endl;
     } else {

@@ -5,6 +5,7 @@
 #include <mutex>
 #include "cluster.h"
 #include "../examples/helper/graph_utils.h"
+#include <parlay/alloc.h>
 
 
 #define ANSI_COLOR_RED     "\x1b[31m"
@@ -299,37 +300,77 @@ template <typename T>
 void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequence<cluster<T> > &base_clusters, const T max_size)
 {
 
+    using cluster_allocator = parlay::type_allocator<cluster<T>>;
+
     T n = G.size();
-    T total_num_clusters = n + n-1;
+    T total_num_clusters = n;
 
     base_clusters = parlay::tabulate(total_num_clusters, [&] (T v) {
         cluster<T> base_cluster;
         return base_cluster;
     });
 
-    parlay::parallel_for(0, n, [&] (T v) {
-        auto cluster = &base_clusters[v];
-        cluster->index = v;
-        cluster->state = base_vertex | live;
 
-        for(short i = 0; i < G[v].size(); i++) //TODO: Assumes ordering i.e. root is towards zero
+    // Add all "outgoung" edges from one side
+    parlay::parallel_for(0, n, [&] (T v) {
+        auto& cluster = base_clusters[v];
+        cluster.index = v;
+        cluster.state = base_vertex | live;
+        for(const auto& w : G[v])
         {
-            if(G[v][i] < v)
+            if(w < v)
+                continue;
+            auto edge_cluster = cluster_allocator::alloc();
+            edge_cluster->index = -1;
+            edge_cluster->state = base_edge | live;
+            edge_cluster->add_initial_neighbours(&base_clusters[w], &base_clusters[v]);
+            // std::cout << "Edge added between " << v << "<->" << w << std::endl;
+            cluster.add_neighbour(&base_clusters[w], edge_cluster);
+        }
+    });
+
+    // Add incoming edges
+    parlay::parallel_for(0, n, [&] (T v) {
+        auto cluster_ptr = &base_clusters[v];
+        cluster_ptr->index = v;
+
+        for(const auto& w : G[v])
+        {
+            if(v < w) // reversed
+                continue;
+            auto other_node_ptr = &base_clusters[w];
+            // find the edge that corresponds that joins to the other side
+            for(short i = 0; i < cluster_ptr->size; i+=2)
             {
-                base_clusters[v+n].add_initial_neighbours(&base_clusters[G[v][i]], cluster);
-                base_clusters[v+n].state = base_edge;
-                base_clusters[v+n].index = v+n;
-                base_clusters[v].add_neighbour(&base_clusters[G[v][i]], &base_clusters[v+n]);
-            }
-            else
-            {
-                base_clusters[v].add_neighbour(&base_clusters[G[v][i]], &base_clusters[G[v][i]+n]);
+                if(cluster_ptr->ptrs[i] == other_node_ptr)
+                {
+                    auto& connecting_edge_ptr = cluster_ptr->ptrs[i+1];
+                    other_node_ptr->add_neighbour(cluster_ptr, connecting_edge_ptr);
+                    break;
+                }
             }
         }
 
     });
 
+
+
 }
+
+// for(short i = 0; i < G[v].size(); i++) //TODO: Assumes ordering i.e. root is towards zero
+// {
+//     if(G[v][i] < v)
+//     {
+//         base_clusters[v+n].add_initial_neighbours(&base_clusters[G[v][i]], cluster);
+//         base_clusters[v+n].state = base_edge;
+//         base_clusters[v+n].index = v+n;
+//         base_clusters[v].add_neighbour(&base_clusters[G[v][i]], &base_clusters[v+n]);
+//     }
+//     else
+//     {
+//         base_clusters[v].add_neighbour(&base_clusters[G[v][i]], &base_clusters[G[v][i]+n]);
+//     }
+// }
 
 template <typename T>
 void set_heights(parlay::sequence<cluster<T>*> &all_cluster_ptrs)
@@ -507,7 +548,46 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
 }
 
 
+/**
+ * Only frees the "floating" edge clusters
+*/
+template<typename T>
+void deleteRCtree(parlay::sequence<cluster<T> > &base_clusters)
+{
+    using cluster_allocator = parlay::type_allocator<cluster<T>>;
 
+    parlay::parallel_for(0, base_clusters.size(), [&] (T v) {
+        auto cluster_ptr = &base_clusters[v];
+        
+        for(short i = 0; i < cluster_ptr->size; i+=1)
+        {
+            cluster<T>*& potential_ptr = cluster_ptr->ptrs[i];
+            short potential_type = cluster_ptr->types[i];
+            // if(potential_ptr != nullptr)
+            // {
+            //     potential_ptr->print_as_edge();
+            //     auto& ptr_type = potential_type;
+            //     if(ptr_type & neighbour_type)
+            //         std::cout << "N";
+            //     if(ptr_type & edge_type)
+            //         std::cout << "E";
+            //     if(ptr_type & parent_type)
+            //         std::cout << "P";
+            //     if(ptr_type & child_type)
+            //         std::cout << "C ";
+            //     std::cout << std::endl;
+            // }
+            if((potential_ptr != nullptr) && (potential_ptr->state & base_edge) && (potential_type & (child_type | edge_type)))
+            {
+                // std::cout << "Edge deleted ";
+                // potential_ptr->print_as_edge();
+                // std::cout << std::endl;
+                cluster_allocator::destroy(potential_ptr);
+            }
+        }
+
+    });
+}
 
 template<typename T>
 void printTree(parlay::sequence<cluster<T> > &base_clusters)
