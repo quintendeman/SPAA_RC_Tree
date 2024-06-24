@@ -83,8 +83,13 @@ int main(int argc, char* argv[]) {
     auto start_creation = std::chrono::high_resolution_clock::now();
     create_base_clusters(G, clusters, max_degree);
     create_RC_tree(clusters, graph_size, do_height, randomized);
+    set_heights(clusters);
     auto end_creation = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> creation_time = end_creation - start_creation;
+
+    PathQuery(&clusters[0], &clusters[G.size()/2], (vertex) 0, [] (vertex a, vertex b) {
+        return a > b ? a : b;
+    });
 
     // printTree(clusters);
 

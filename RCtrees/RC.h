@@ -313,9 +313,9 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
 
     // Add all "outgoung" edges from one side
     parlay::parallel_for(0, n, [&] (T v) {
-        auto& cluster = base_clusters[v];
-        cluster.index = v;
-        cluster.state = base_vertex | live;
+        auto& _cluster = base_clusters[v];
+        _cluster.index = v;
+        _cluster.state = base_vertex | live;
         for(const auto& w : G[v])
         {
             if(w < v)
@@ -325,7 +325,7 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
             edge_cluster->state = base_edge | live;
             edge_cluster->add_initial_neighbours(&base_clusters[w], &base_clusters[v]);
             // std::cout << "[" << v << "] Edge added between " << v << "<->" << w << std::endl;
-            cluster.add_neighbour(&base_clusters[w], edge_cluster);
+            _cluster.add_neighbour(&base_clusters[w], edge_cluster);
         }
     });
 
@@ -381,24 +381,24 @@ void set_heights(parlay::sequence<cluster<T>*> &all_cluster_ptrs)
 {
 
     parlay::parallel_for(0, all_cluster_ptrs.size(), [&] (T v) {
-        auto cluster = all_cluster_ptrs[v];
+        auto cluster_ptr = all_cluster_ptrs[v];
         T my_height = 0;
 
-        while(cluster != nullptr)
+        while(cluster_ptr != nullptr)
         {
             bool swapped = false;
             while(swapped == false)
             {                
-                T height = cluster->height.load();
+                T height = cluster_ptr->height.load();
                 if(height >= my_height)
                 {
                     return;
                 }
-                swapped = cluster->height.compare_exchange_strong(height, my_height);
+                swapped = cluster_ptr->height.compare_exchange_strong(height, my_height);
             }            
 
             my_height++;
-            cluster = cluster->get_parent();
+            cluster_ptr = cluster_ptr->get_parent();
         }
 
     });
@@ -553,6 +553,338 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
     if(do_height == true)
         set_heights(all_cluster_ptrs);
 
+}
+
+template <typename T>
+void set_heights(parlay::sequence<cluster<T>>*& cluster_ptrs)
+{
+
+    parlay::parallel_for(0, cluster_ptrs.size(), [&] (T v) {
+        auto cluster_ptr = cluster_ptrs[v];
+        T my_height = 0;
+        cluster_ptr->height = 0;
+
+        while(cluster_ptr != nullptr)
+        {
+            bool swapped = false;
+            while(swapped == false)
+            {                
+                T height = cluster_ptr->height.load();
+                if(height >= my_height)
+                {
+                    return;
+                }
+                swapped = cluster_ptr->height.compare_exchange_strong(height, my_height);
+            }            
+
+            my_height++;
+            cluster_ptr = cluster_ptr->get_parent();
+
+        }
+
+    });
+}
+
+template <typename T>
+void set_heights(parlay::sequence<cluster<T>> &clusters)
+{
+
+parlay::parallel_for(0, clusters.size(), [&] (T v) {
+        auto cluster_ptr = &clusters[v];
+        T my_height = 0;
+        cluster_ptr->height = 0;
+
+        while(cluster_ptr != nullptr)
+        {
+            bool swapped = false;
+            while(swapped == false)
+            {                
+                T height = cluster_ptr->height.load();
+                if(height >= my_height)
+                {
+                    return;
+                }
+                swapped = cluster_ptr->height.compare_exchange_strong(height, my_height);
+            }            
+
+            my_height++;
+            cluster_ptr = cluster_ptr->get_parent();
+
+        }
+
+    });
+}
+
+template <typename T, typename assocfunc>
+T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)
+{
+    
+    bool use_v = false;
+
+    cluster<T>* prev_boundary_v_l = v->get_parent();
+    cluster<T>* prev_boundary_v_r = prev_boundary_v_l;
+    T prev_val_till_v_l = defretval;
+    T prev_val_till_v_r = defretval;
+    
+    cluster<T>* prev_boundary_w_l = w->get_parent();
+    cluster<T>* prev_boundary_w_r = prev_boundary_w_l;
+    T prev_val_till_w_l = defretval;
+    T prev_val_till_w_r = defretval;
+
+
+
+    while(true)
+    {
+        // Ascend using the lower-height cluster. If either has to ascend above root, they are not connected.
+        if(v == nullptr || w == nullptr)
+            return defretval;   
+        else if(v == w)
+            break;
+        else if(v->get_height() < w->get_height())
+            use_v = true;
+        else
+            use_v = false;
+        
+        if(use_v)
+        {
+            v = v; //unnecessary but helps me understand, let compiler remove this
+            cluster<T>* &v_cluster = v;
+
+            // We are at the start
+            if (prev_val_till_v_l == defretval && prev_val_till_v_r == defretval) 
+            {
+                v_cluster->find_boundary_vertices(prev_boundary_v_l, prev_val_till_v_l, prev_boundary_v_r, prev_val_till_v_r, defretval);
+            } 
+            else 
+            {
+                T lval;
+                T rval;
+                cluster<T>* l;
+                cluster<T>* r;
+
+                v_cluster->find_boundary_vertices(l, lval, r, rval, defretval);
+
+                // Covers both unary to unary and unary to binary case
+                if (prev_boundary_v_l == v && prev_boundary_v_r == v) 
+                {
+                    prev_boundary_v_l = l;
+                    prev_boundary_v_r = r;
+                    prev_val_till_v_l = func(prev_val_till_v_l, lval);
+                    prev_val_till_v_r = func(prev_val_till_v_r, rval);
+
+                    for (uint i = 0; i < v_cluster->size; i++) // any children which are edges
+                    {
+                        if (v_cluster->types[i] & child_type) 
+                        {
+                            prev_val_till_v_l = func(prev_val_till_v_l, v_cluster->ptrs[i]->data);
+                            prev_val_till_v_r = func(prev_val_till_v_r, v_cluster->ptrs[i]->data);
+                        }
+                    }
+                }
+                // Covers binary ascending to unary/nullary
+                else if (l == r) 
+                {
+                    if (prev_boundary_v_l == v) 
+                    {
+                        prev_boundary_v_l = l;
+                        prev_val_till_v_l = func(prev_val_till_v_l, lval);
+                    } 
+                    else 
+                    {
+                        prev_boundary_v_l = r;
+                        prev_val_till_v_r = func(prev_val_till_v_r, rval);
+                    }
+                    for (uint i = 0; i < v_cluster->size; i++) 
+                    {
+                        if (v_cluster->types[i] & child_type && v_cluster->ptrs[i] != l) 
+                        {
+                            prev_val_till_v_l = func(prev_val_till_v_l, v_cluster->ptrs[i]->data);
+                            prev_val_till_v_r = func(prev_val_till_v_r, v_cluster->ptrs[i]->data);
+                        }
+                    }
+                }
+                // Binary
+                else 
+                {
+                    if (prev_boundary_v_l == l) 
+                    {
+                        prev_boundary_v_l = l; // Not necessary but helps me think
+                        prev_val_till_v_l = prev_val_till_v_l;
+                        
+                        prev_boundary_v_r = r;
+                        prev_val_till_v_r = func(prev_val_till_v_r, lval);
+                    } 
+                    else if (prev_boundary_v_r == l) 
+                    {
+                        prev_boundary_v_r = l; // Not necessary but helps me think
+                        prev_boundary_v_l = r;
+
+                        T temp_r = prev_val_till_v_r;
+                        
+                        prev_val_till_v_r = func(prev_val_till_v_l, rval);
+                        prev_val_till_v_l = temp_r;
+                    
+                    } 
+                    else if (prev_boundary_v_l == r) 
+                    {
+                        prev_boundary_v_l = r; // Not necessary but helps me think
+                        prev_boundary_v_r = l;
+
+                        T temp_l = prev_val_till_v_l;
+                        
+                        prev_val_till_v_l = func(prev_val_till_v_r, lval);
+                        prev_val_till_v_r = temp_l;
+                    } 
+                    else // prev_boundary_v_r == r 
+                    { 
+                        prev_boundary_v_r = r; // Not necessary but helps me think
+                        prev_val_till_v_r = prev_val_till_v_r;
+                        
+                        prev_boundary_v_l = l;
+                        prev_val_till_v_l = func(prev_val_till_v_l, rval);
+                    }
+                }
+            }
+            v = v->get_parent();
+        }
+        else
+        {
+            w = w; //unnecessary but helps me understand, let compiler remove this
+            cluster<T>* &w_cluster = w;
+
+            // We are at the start
+            if (prev_val_till_w_l == defretval && prev_val_till_w_r == defretval) 
+            {
+                w_cluster->find_boundary_vertices(prev_boundary_w_l, prev_val_till_w_l, prev_boundary_w_r, prev_val_till_w_r, defretval);
+            } 
+            else 
+            {
+                T lval, rval;
+                cluster<T>* l;
+                cluster<T>* r;
+                w_cluster->find_boundary_vertices(l, lval, r, rval, defretval);
+
+                // Covers both unary to unary and unary to binary case
+                if (prev_boundary_w_l == w && prev_boundary_w_r == w) 
+                {
+                    prev_boundary_w_l = l;
+                    prev_boundary_w_r = r;
+                    prev_val_till_w_l = func(prev_val_till_w_l, lval);
+                    prev_val_till_w_r = func(prev_val_till_w_r, rval);
+
+                    for (uint i = 0; i < w_cluster->size; i++) // any children which are edges
+                    {
+                        if (w_cluster->types[i] & child_type) 
+                        {
+                            prev_val_till_w_l = func(prev_val_till_w_l, w_cluster->ptrs[i]->data);
+                            prev_val_till_w_r = func(prev_val_till_w_r, w_cluster->ptrs[i]->data);
+                        }
+                    }
+                }
+                // Covers binary ascending to unary/nullary
+                else if (l == r) 
+                {
+                    if (prev_boundary_w_l == w) 
+                    {
+                        prev_boundary_w_l = l;
+                        prev_val_till_w_l = func(prev_val_till_w_l, lval);
+                    } 
+                    else 
+                    {
+                        prev_boundary_w_l = r;
+                        prev_val_till_w_r = func(prev_val_till_w_r, rval);
+                    }
+                    for (uint i = 0; i < w_cluster->size; i++) 
+                    {
+                        if (w_cluster->types[i] & child_type && w_cluster->ptrs[i] != l) 
+                        {
+                            prev_val_till_w_l = func(prev_val_till_w_l, w_cluster->ptrs[i]->data);
+                            prev_val_till_w_r = func(prev_val_till_w_r, w_cluster->ptrs[i]->data);
+                        }
+                    }
+                }
+                // Binary
+                else 
+                {
+                    if (prev_boundary_w_l == l) 
+                    {
+                        prev_boundary_w_l = l; // Not necessary but helps me think
+                        prev_val_till_w_l = prev_val_till_w_l;
+                        
+                        prev_boundary_w_r = r;
+                        prev_val_till_w_r = func(prev_val_till_w_r, lval);
+                    } 
+                    else if (prev_boundary_w_r == l) 
+                    {
+                        prev_boundary_w_r = l; // Not necessary but helps me think
+                        prev_boundary_v_l = r;
+
+                        T temp_r = prev_val_till_v_r;
+                        
+                        prev_val_till_v_r = func(prev_val_till_v_l, rval);
+                        prev_val_till_v_l = temp_r;
+                    
+                    } 
+                    else if (prev_boundary_w_l == r) 
+                    {
+                        prev_boundary_w_l = r; // Not necessary but helps me think
+                        prev_boundary_v_r = l;
+
+                        T temp_l = prev_val_till_v_l;
+                        
+                        prev_val_till_v_l = func(prev_val_till_v_r, lval);
+                        prev_val_till_v_r = temp_l;
+                    } 
+                    else // prev_boundary_w_r == r 
+                    { 
+                        prev_boundary_w_r = r; // Not necessary but helps me think
+                        prev_val_till_w_r = prev_val_till_w_r;
+                        
+                        prev_boundary_w_l = l;
+                        prev_val_till_w_l = func(prev_val_till_w_l, rval);
+                    }
+                }
+            }
+
+            w = w->get_parent();
+        }
+
+        
+    }
+
+    if(prev_boundary_v_l == nullptr && prev_boundary_w_l == nullptr)
+    {
+        return defretval;
+    }
+    if(prev_boundary_v_l == nullptr)
+    {
+        if(w == prev_boundary_w_r)
+            return prev_val_till_w_r;
+        else
+            return prev_val_till_w_l;   
+    }
+    if(prev_boundary_w_l == nullptr)
+    {
+        if(v == prev_boundary_v_l)
+            return prev_val_till_v_l;
+        else
+            return prev_val_till_v_r;
+    }
+    
+    T v_contrib, w_contrib;
+    
+    if(v == prev_boundary_v_l)
+        v_contrib = prev_val_till_v_l;
+    else
+        v_contrib = prev_val_till_v_r;
+
+    if(w == prev_boundary_w_l)
+        w_contrib = prev_val_till_w_l;
+    else
+        w_contrib = prev_val_till_w_r;
+
+    return func(v_contrib, w_contrib);
+   
 }
 
 

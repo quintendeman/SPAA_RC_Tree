@@ -262,6 +262,39 @@ public:
         }
     }
 
+    // Find boundary vertices by observing own state and ajdacent edges
+    void find_boundary_vertices(cluster<T>* &l, T& lval, cluster<T>* &r, T& rval, const T& defretval)
+    {
+        if(this->state & nullary_cluster)
+        {
+            l = r = nullptr;
+            return;
+        }
+        if(this->state & unary_cluster)
+        {
+            l = r = this->get_parent();
+            /* l CAN NEVER BE NULLPTR*/
+            lval = rval = l->data;
+            return;
+        }
+        if(this->state & binary_cluster)
+        {
+            r = this->get_parent();
+            rval = r->data;
+            for(uint i = 0; i < this->size; i+=2)
+            {
+                if(this->types[i] & neighbour_type && this->ptrs[i] != r)
+                {
+                    l = this->ptrs[i];
+                    lval = l->data;
+                    return;
+                }
+            }
+           
+        }
+        return;
+    }
+
     /*
         Mainly used when doing compress
 
@@ -285,6 +318,11 @@ public:
         }
 
         return -1;
+    }
+
+    inline T get_height()
+    {
+        return this->height.load();
     }
 
     void print_as_edge(void)
