@@ -953,7 +953,7 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, T>>& edges, 
         
         while(cluster_ptr != nullptr)
         {
-            short ret_val = cluster_ptr->counter.fetch_add(-1);
+            auto ret_val = cluster_ptr->counter.fetch_add(-1);
             if(ret_val > 1)
                 break;
             // prepare children
@@ -980,6 +980,12 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, T>>& edges, 
 
     });
 
+    return;
+}
+
+template<typename T>
+void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, T>>& add_edges, parlay::sequence<cluster<T>>& clusters)
+{
     return;
 }
 

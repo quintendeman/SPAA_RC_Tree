@@ -96,6 +96,36 @@ int main(int argc, char* argv[]) {
         return a > b ? a : b;
     });
 
+    parlay::random_generator gen;
+    std::uniform_int_distribution<vertex> dis(0, graph_size-1);
+
+    auto random_indices = parlay::tabulate(1000 < graph_size ? 1000 : graph_size, [&] (vertex i) 
+    {
+        auto r = gen[i];
+        auto random_index = dis(r);
+        return random_index;
+    });
+
+    auto delete_pairs = parlay::tabulate(random_indices.size(), [&] (vertex i)
+    {
+        if (i & 1)
+            return std::pair<vertex, vertex>(i, parents[i]);
+        return std::pair<vertex, vertex>(parents[i], i);        
+    });
+
+    auto add_edges = parlay::tabulate(random_indices.size(), [&] (vertex i)
+    {    
+        vertex v = i;
+        auto r = gen[i];
+        vertex w = dis(r) % v; // something to the left of w
+        vertex weight = dis(r) * dis(r);
+        if (i & 1)
+            return std::make_tuple(v, w, weight);
+
+        return std::make_tuple(w, v, weight);
+    });
+    
+    batchInsertEdge(delete_pairs, add_edges, clusters);
 
     // printTree(clusters);
 

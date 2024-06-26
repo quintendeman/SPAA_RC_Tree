@@ -11,7 +11,8 @@ const short binary_cluster = 8;
 const short nullary_cluster = 16;
 const short live = 256;
 const short carrying_weight = 512;
-const short internal = 8192;
+const short internal = 1024;
+const short affected = 2048;
 
 const char neighbour_type = 1;
 const char parent_type = 2;
@@ -36,14 +37,14 @@ public:
     T colour = -1;
     T data = 0;
     std::atomic<T> height;
-    std::atomic<short> counter; // a node will not have more than 255 edges
     static const short size = max_neighbours*2;
     short state = 0; // unaffected, affected or update eligible
     bool is_MIS = false;
+    std::atomic<char> counter; // a node will not have more than 255 edges
     char types[max_neighbours * 2] = {};
 
     // Default constructor
-    cluster() : height(0) {
+    cluster() : height(0), counter(0) {
         for(uint i = 0; i < this->size; i++)
         {
             this->ptrs[i] = nullptr;
@@ -63,8 +64,8 @@ public:
     {    
         for(uint i = 0; i < this->size; i++)
         {
-            ptrs[i] = nullptr;
-            types[i] = 0;
+            this->ptrs[i] = nullptr;
+            this->types[i] = 0;
         }
         return;
     }
