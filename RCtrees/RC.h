@@ -887,6 +887,101 @@ T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)
    
 }
 
+/**
+ * Given a pair [v,w], returns the  (if it exists)
+ * Exploits the fact that an edge [v,w] must be the child of v or w in an RC tree
+*/
+template<typename T>
+cluster<T>* getEdge(T v, T w, parlay::sequence<cluster<T>>& clusters)
+{
+    // check v
+    auto& cluster_v = clusters[v];
+    for(uint i = 0; i < cluster_v.size; i++)
+    {
+        if(cluster_v.types[i] == child_type && cluster_v.ptrs[i]->index == v && cluster_v.ptrs[i]->state & base_edge)
+            return cluster_v.ptrs[i];
+    }
+
+    // check w
+    auto& cluster_w = clusters[w];
+    for(uint i = 0; i < cluster_w.size; i++)
+    {
+        if(cluster_w.types[i] == child_type && cluster_w.ptrs[i]->index == w && cluster_w.ptrs[i]->state & base_edge)
+            return cluster_w.ptrs[i];
+    }
+
+
+    return nullptr;
+}
+
+template<typename T, typename assocfunc>
+void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, T>>& edges, assocfunc func, parlay::sequence<cluster<T>>& clusters)
+{
+
+    // increment counter and return ptrs
+    parlay::sequence<cluster<T>*> edge_ptrs = parlay::tabulate(edges.size(), [&] (const T i) {
+        const std::tuple<T, T, T> edge_tuple = edges[i];
+        const auto& weight = std::get<2>(edge_tuple);
+        const auto& v = std::get<1>(edge_tuple);
+        const auto& w = std::get<0>(edge_tuple);
+
+        cluster<T>* cluster_ptr = getEdge(v, w, clusters);
+        auto retptr = cluster_ptr;
+
+
+        while(cluster_ptr != nullptr)
+        {
+            auto old_value = cluster_ptr->counter.fetch_add(1);
+            if(old_value > 0) 
+                break;
+            cluster_ptr = cluster_ptr->get_parent();
+        }
+
+        return retptr;
+
+    });
+
+    parlay::parallel_for(0, edge_ptrs.size(), [&] (T i) {
+        auto& edge_ptr = edge_ptrs[i];
+        if(edge_ptr == nullptr)
+            return;
+            
+        auto& cluster_ptr = edge_ptr;
+
+        
+        // decrement counter
+        
+        while(cluster_ptr != nullptr)
+        {
+            short ret_val = cluster_ptr->counter.fetch_add(-1);
+            if(ret_val > 1)
+                break;
+            // prepare children
+            bool first_child = true;
+            T final_val;
+            for(uint i = 0; i < cluster_ptr->size; i++)
+            {
+                if(cluster_ptr->ptrs[i] != nullptr && cluster_ptr->types[i] & child_type)
+                {
+                    if(first_child)
+                    {
+                        first_child = false;
+                        final_val = cluster_ptr->ptrs[i]->data;
+                    }
+                    else
+                    {
+                        final_val = func(final_val, cluster_ptr->ptrs[i]->data);
+                    }
+                }
+            }
+
+            cluster_ptr = cluster_ptr->get_parent();
+        }
+
+    });
+
+    return;
+}
 
 /**
  * Only frees the "floating" edge clusters
@@ -903,25 +998,9 @@ void deleteRCtree(parlay::sequence<cluster<T> > &base_clusters)
         {
             cluster<T>*& potential_ptr = cluster_ptr->ptrs[i];
             short potential_type = cluster_ptr->types[i];
-            // if(potential_ptr != nullptr)
-            // {
-            //     potential_ptr->print_as_edge();
-            //     auto& ptr_type = potential_type;
-            //     if(ptr_type & neighbour_type)
-            //         std::cout << "N";
-            //     if(ptr_type & edge_type)
-            //         std::cout << "E";
-            //     if(ptr_type & parent_type)
-            //         std::cout << "P";
-            //     if(ptr_type & child_type)
-            //         std::cout << "C ";
-            //     std::cout << std::endl;
-            // }
+            
             if((potential_ptr != nullptr) && (potential_ptr->state & base_edge) && (potential_type & (child_type)))
             {
-                // std::cout << "Edge deleted ";
-                // potential_ptr->print_as_edge();
-                // std::cout << std::endl;
                 cluster_allocator::destroy(potential_ptr);
             }
         }

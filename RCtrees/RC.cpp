@@ -87,9 +87,15 @@ int main(int argc, char* argv[]) {
     auto end_creation = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> creation_time = end_creation - start_creation;
 
+    batchModifyEdgeWeights(weighted_edges, [] (vertex a, vertex b) {
+        return a > b ? a : b;
+    }, clusters);
+
+
     PathQuery(&clusters[0], &clusters[G.size()/2], (vertex) 0, [] (vertex a, vertex b) {
         return a > b ? a : b;
     });
+
 
     // printTree(clusters);
 

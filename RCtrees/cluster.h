@@ -36,7 +36,7 @@ public:
     T colour = -1;
     T data = 0;
     std::atomic<T> height;
-    std::atomic<T> counter; 
+    std::atomic<short> counter; // a node will not have more than 255 edges
     static const short size = max_neighbours*2;
     short state = 0; // unaffected, affected or update eligible
     bool is_MIS = false;
