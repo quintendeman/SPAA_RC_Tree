@@ -589,7 +589,7 @@ template <typename T>
 void set_heights(parlay::sequence<cluster<T>> &clusters)
 {
 
-parlay::parallel_for(0, clusters.size(), [&] (T v) {
+    parlay::parallel_for(0, clusters.size(), [&] (T v) {
         auto cluster_ptr = &clusters[v];
         T my_height = 0;
         cluster_ptr->height = 0;
@@ -983,9 +983,23 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, T>>& edges, 
     return;
 }
 
+/**
+ * Assumes that "clusters" contains a bunch of ALREADY fully contracted trees i.e. a fully contracted
+ */
+
 template<typename T>
 void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, T>>& add_edges, parlay::sequence<cluster<T>>& clusters)
 {
+
+    int count = 0;
+
+    do
+    {
+
+
+        count++;
+    }while(!(count > 1000));    
+
     return;
 }
 

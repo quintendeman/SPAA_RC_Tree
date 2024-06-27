@@ -19,6 +19,8 @@ using graph = parlay::sequence<parlay::sequence<vertex> >;
 
 const vertex max_degree = 3;
 
+static const vertex batch_insertion_size = 1000;
+
 int main(int argc, char* argv[]) {
     auto usage = "Usage: RC [--graph-size <graph-size>] [-n <graph-size>] [--num-queries <num-queries>] [--print-creation] [--do-height <true|false>] [--randomized <true|false>]";
 
@@ -99,32 +101,54 @@ int main(int argc, char* argv[]) {
     parlay::random_generator gen;
     std::uniform_int_distribution<vertex> dis(0, graph_size-1);
 
-    auto random_indices = parlay::tabulate(1000 < graph_size ? 1000 : graph_size, [&] (vertex i) 
+    auto random_indices = parlay::tabulate(batch_insertion_size < graph_size ? batch_insertion_size : graph_size, [&] (vertex i) 
     {
         auto r = gen[i];
         auto random_index = dis(r);
         return random_index;
     });
 
-    auto delete_pairs = parlay::tabulate(random_indices.size(), [&] (vertex i)
+    auto delete_pairs = parlay::tabulate(random_indices.size(), [&] (vertex index)
     {
+        auto& i = random_indices[index];
+        parents[i] = i;    
         if (i & 1)
-            return std::pair<vertex, vertex>(i, parents[i]);
+            {
+                return std::pair<vertex, vertex>(i, parents[i]);
+            }
+
         return std::pair<vertex, vertex>(parents[i], i);        
     });
 
-    auto add_edges = parlay::tabulate(random_indices.size(), [&] (vertex i)
-    {    
-        vertex v = i;
-        auto r = gen[i];
-        vertex w = dis(r) % v; // something to the left of w
-        vertex weight = dis(r) * dis(r);
-        if (i & 1)
-            return std::make_tuple(v, w, weight);
 
+
+    auto add_edges = parlay::tabulate(random_indices.size(), [&] (vertex index)
+    {   
+        auto& i = random_indices[index];
+        vertex& v = i;
+        auto r = gen[i];
+        vertex w;
+        if(v > 0)
+            w = dis(r) % v; // something to the left of w
+        else
+            w = 0;
+        vertex weight = dis(r) * dis(r);
+        
+        parents[i] = w;
+        if (i & 1)
+        {
+            return std::make_tuple(v, w, weight);
+        }
         return std::make_tuple(w, v, weight);
     });
     
+    degree_cap_parents(parents, max_degree);
+
+    add_edges = parlay::filter(add_edges, [&] (auto edge_tuple) {
+        const vertex& i = std::get<0>(edge_tuple);
+        return i != parents[i];
+    });
+
     batchInsertEdge(delete_pairs, add_edges, clusters);
 
     // printTree(clusters);

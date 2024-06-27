@@ -13,6 +13,8 @@ const short live = 256;
 const short carrying_weight = 512;
 const short internal = 1024;
 const short affected = 2048;
+const short adjacency_changed = 4096;
+
 
 const char neighbour_type = 1;
 const char parent_type = 2;
