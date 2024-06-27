@@ -1,6 +1,7 @@
 #include <atomic>
 #include <random>
 #include <set>
+#include <algorithm>
 #include <iostream>
 #include <mutex>
 #include "cluster.h"
@@ -104,8 +105,6 @@ void degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
     });
 
 }
-
-
 
 
 /**
@@ -361,48 +360,59 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
 
 }
 
-// for(short i = 0; i < G[v].size(); i++) //TODO: Assumes ordering i.e. root is towards zero
-// {
-//     if(G[v][i] < v)
-//     {
-//         base_clusters[v+n].add_initial_neighbours(&base_clusters[G[v][i]], cluster);
-//         base_clusters[v+n].state = base_edge;
-//         base_clusters[v+n].index = v+n;
-//         base_clusters[v].add_neighbour(&base_clusters[G[v][i]], &base_clusters[v+n]);
-//     }
-//     else
-//     {
-//         base_clusters[v].add_neighbour(&base_clusters[G[v][i]], &base_clusters[G[v][i]+n]);
-//     }
-// }
 
 template <typename T>
-void set_heights(parlay::sequence<cluster<T>*> &all_cluster_ptrs)
+void set_heights(parlay::sequence<cluster<T>*>& cluster_ptrs)
 {
 
-    parlay::parallel_for(0, all_cluster_ptrs.size(), [&] (T v) {
-        auto cluster_ptr = all_cluster_ptrs[v];
+    parlay::parallel_for(0, cluster_ptrs.size(), [&] (T v) {
+        auto cluster_ptr = cluster_ptrs[v];
         T my_height = 0;
+        cluster_ptr->height = 0;
 
         while(cluster_ptr != nullptr)
         {
-            bool swapped = false;
-            while(swapped == false)
-            {                
-                T height = cluster_ptr->height.load();
-                if(height >= my_height)
+            auto num_children = cluster_ptr->get_children_count();
+            if(num_children == 0)
+                cluster_ptr->height = 0;
+            else
+            {
+                auto children_reached_count = cluster_ptr->counter.fetch_add(1);
+                if(children_reached_count == (num_children - 1))
                 {
-                    return;
+                    for(short i = 0; i < cluster_ptr->size; i++)
+                        if(cluster_ptr->types[i] & child_type)
+                            my_height = std::max(my_height, cluster_ptr->ptrs[i]->height);
+                    my_height++;
+                    cluster_ptr->counter = 0;
                 }
-                swapped = cluster_ptr->height.compare_exchange_strong(height, my_height);
-            }            
-
-            my_height++;
+                else
+                    break;
+            }
             cluster_ptr = cluster_ptr->get_parent();
+
         }
 
     });
+}
 
+template <typename T>
+void set_heights(parlay::sequence<cluster<T>> &clusters)
+{
+
+    auto cluster_ptrs = parlay::tabulate(clusters.size(), [&] (T i) {
+        return &clusters[i];
+    });
+    set_heights(cluster_ptrs);
+}
+
+template <typename T>
+void set_heights(parlay::sequence<T> indices, parlay::sequence<cluster<T>>& clusters)
+{
+    auto cluster_ptrs = parlay::tabulate(clusters.size(), [&] (T i) {
+        return &clusters[indices[i]];
+    });
+    set_heights(cluster_ptrs);
 }
 
 /**
@@ -555,65 +565,9 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
 
 }
 
-template <typename T>
-void set_heights(parlay::sequence<cluster<T>>*& cluster_ptrs)
-{
 
-    parlay::parallel_for(0, cluster_ptrs.size(), [&] (T v) {
-        auto cluster_ptr = cluster_ptrs[v];
-        T my_height = 0;
-        cluster_ptr->height = 0;
 
-        while(cluster_ptr != nullptr)
-        {
-            bool swapped = false;
-            while(swapped == false)
-            {                
-                T height = cluster_ptr->height.load();
-                if(height >= my_height)
-                {
-                    return;
-                }
-                swapped = cluster_ptr->height.compare_exchange_strong(height, my_height);
-            }            
 
-            my_height++;
-            cluster_ptr = cluster_ptr->get_parent();
-
-        }
-
-    });
-}
-
-template <typename T>
-void set_heights(parlay::sequence<cluster<T>> &clusters)
-{
-
-    parlay::parallel_for(0, clusters.size(), [&] (T v) {
-        auto cluster_ptr = &clusters[v];
-        T my_height = 0;
-        cluster_ptr->height = 0;
-
-        while(cluster_ptr != nullptr)
-        {
-            bool swapped = false;
-            while(swapped == false)
-            {                
-                T height = cluster_ptr->height.load();
-                if(height >= my_height)
-                {
-                    return;
-                }
-                swapped = cluster_ptr->height.compare_exchange_strong(height, my_height);
-            }            
-
-            my_height++;
-            cluster_ptr = cluster_ptr->get_parent();
-
-        }
-
-    });
-}
 
 template <typename T, typename assocfunc>
 T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)

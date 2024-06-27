@@ -38,7 +38,7 @@ public:
     T index = -1;
     T colour = -1;
     T data = 0;
-    std::atomic<T> height;
+    T height;
     static const short size = max_neighbours*2;
     short state = 0; // unaffected, affected or update eligible
     bool is_MIS = false;
@@ -59,7 +59,7 @@ public:
         : index(other.index),
           colour(other.colour),
           data(other.data),
-          height(other.height.load()), // Load the atomic value
+          height(other.height), // Load the atomic value
           counter(other.counter.load()), // Load the atomic value
           state(other.state),
           is_MIS(other.is_MIS)
@@ -242,6 +242,15 @@ public:
         return num_neighbours;
     }
 
+    short get_children_count(void)
+    {
+        short num_children;
+        for(const auto& t : this->types)
+            if (t & child_type)
+                num_children++;
+        return num_children;
+    }
+
     void get_two_neighbours_edges(cluster<T>*& neighbour1, cluster<T>*& edge1, cluster<T>*& neighbour2, cluster<T>*& edge2)
     {
         bool first_neighbour_found = false;
@@ -325,7 +334,7 @@ public:
 
     inline T get_height()
     {
-        return this->height.load();
+        return this->height;
     }
 
     void print_as_edge(void)
