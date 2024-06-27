@@ -280,7 +280,6 @@ void set_MIS(parlay::sequence<cluster<T>*> clusters, bool randomized = false)
             clusters[v]->is_MIS=clusters[v]->is_max_neighbour_colour();
         });
 
-        
     }
 
 }
@@ -315,6 +314,10 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
         auto& _cluster = base_clusters[v];
         _cluster.index = v;
         _cluster.state = base_vertex | live;
+        
+        for(char i = 0; i < G[v].size(); i++)
+            _cluster.initial_ngbrs[i] = G[v][i];
+        
         for(const auto& w : G[v])
         {
             if(w < v)
@@ -448,6 +451,8 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
 
     // printTree(base_clusters);
 
+    short contraction_round = 0;
+
     do
     {
         // Shrink the forst as live nodes decrease
@@ -493,6 +498,7 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
                 cluster_ptr->state&=(~live);
                 cluster_ptr->state|=(nullary_cluster);
                 cluster_ptr->state|=internal;
+                
             }
             if(cluster_ptr->get_neighbour_count() == 1)
             {
@@ -524,6 +530,7 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
 
                 cluster_ptr->state|=unary_cluster;
                 cluster_ptr->state|=internal;
+                cluster_ptr->contraction_time = contraction_round;
             }
             else 
             if (cluster_ptr->get_neighbour_count() == 2)
@@ -553,11 +560,12 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
 
                 cluster_ptr->state|=binary_cluster;
                 cluster_ptr->state|=internal;
-                
+                cluster_ptr->contraction_time = contraction_round;
             }
         });
         // printTree(base_clusters);
         // std::cout << "Forest size: " << forest.size() << std::endl;
+        contraction_round++;
     }while(forest.size());
 
     if(do_height == true)

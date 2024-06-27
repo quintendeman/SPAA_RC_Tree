@@ -39,6 +39,8 @@ public:
     T colour = -1;
     T data = 0;
     T height;
+    T initial_ngbrs[3];
+    short contraction_time = 0;
     static const short size = max_neighbours*2;
     short state = 0; // unaffected, affected or update eligible
     bool is_MIS = false;
@@ -51,6 +53,8 @@ public:
         {
             this->ptrs[i] = nullptr;
             this->types[i] = 0;
+            if(i < max_neighbours)
+                this->initial_ngbrs[i] = -1;
         }
     }
 
@@ -62,12 +66,15 @@ public:
           height(other.height), // Load the atomic value
           counter(other.counter.load()), // Load the atomic value
           state(other.state),
+          contraction_time(other.contraction_time),
           is_MIS(other.is_MIS)
     {    
         for(uint i = 0; i < this->size; i++)
         {
             this->ptrs[i] = nullptr;
             this->types[i] = 0;
+            if(i < max_neighbours)
+                this->initial_ngbrs[i] = other.initial_ngbrs[i];
         }
         return;
     }
