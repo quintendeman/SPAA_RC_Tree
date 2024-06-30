@@ -63,6 +63,8 @@ int main(int argc, char* argv[]) {
     if (graph_size < 16)
         graph_size = 16;
 
+    std::cout << "Working with a graph of size " << graph_size << std::endl;
+
     auto parents = generate_tree_graph(graph_size);
     degree_cap_parents(parents, max_degree);
     graph G;

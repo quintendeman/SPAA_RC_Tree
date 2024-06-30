@@ -2,7 +2,7 @@
 CXX = g++
 CXXFLAGS = -O3 -std=c++17 -pthread -g
 INCLUDES = -I ../include/
-TARGET = RC
+TARGET = RC.o
 SRC = RC.cpp
 
 # Default target

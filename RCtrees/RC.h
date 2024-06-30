@@ -432,7 +432,7 @@ void set_heights(parlay::sequence<T> indices, parlay::sequence<cluster<T>>& clus
 */
 
 template <typename T>
-void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_height = true, bool randomized = false)
+void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool randomized = false)
 {
     // std::cout << "create RC tree called" << std::endl;
     
