@@ -16,7 +16,7 @@
 #define ANSI_COLOR_MAGENTA "\x1b[35m"
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
-
+ 
 
 
 /*
@@ -170,8 +170,8 @@ static unsigned char get_single_colour_contribution(const T vcolour, const T wco
 //     The clusters should be for "vertices" s.t. one hop from each vertex is a cluster representing an edge
 //     and two hops away is a vertex representing a neighbouring node
 // */
-template<typename T>
-void colour_clusters(parlay::sequence<cluster<T>*> clusters)
+template<typename T, typename D>
+void colour_clusters(parlay::sequence<cluster<T,D>*> clusters)
 {
     static const T local_maximum_colour = (T) 0;
     static const T local_minimum_colour = (T) 1;    
@@ -218,8 +218,8 @@ void colour_clusters(parlay::sequence<cluster<T>*> clusters)
 //     also may change the boolean flag of some other clusters, only consider the clusters in this
 //     These clusters must have a maximum degree of 2
 // */
-template<typename T>
-void set_MIS(parlay::sequence<cluster<T>*> clusters, bool randomized = false)
+template<typename T, typename D>
+void set_MIS(parlay::sequence<cluster<T,D>*> clusters, bool randomized = false)
 {
     if(!randomized)
     {
@@ -294,17 +294,17 @@ void set_MIS(parlay::sequence<cluster<T>*> clusters, bool randomized = false)
  * it returns an array of n clusters corresponding to the original n vertices.
  * The edge clusters are present as edges.
 */
-template <typename T>
-void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequence<cluster<T> > &base_clusters, const T max_size)
+template <typename T, typename D>
+void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequence<cluster<T, D> > &base_clusters, const T max_size)
 {
 
-    using cluster_allocator = parlay::type_allocator<cluster<T>>;
+    using cluster_allocator = parlay::type_allocator<cluster<T,D>>;
 
     T n = G.size();
     T total_num_clusters = n;
 
     base_clusters = parlay::tabulate(total_num_clusters, [&] (T v) {
-        cluster<T> base_cluster;
+        cluster<T,D> base_cluster;
         return base_cluster;
     });
 
@@ -364,8 +364,8 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
 }
 
 
-template <typename T>
-void set_heights(parlay::sequence<cluster<T>*>& cluster_ptrs)
+template <typename T, typename D>
+void set_heights(parlay::sequence<cluster<T, D>*>& cluster_ptrs)
 {
 
     parlay::parallel_for(0, cluster_ptrs.size(), [&] (T v) {
@@ -399,8 +399,8 @@ void set_heights(parlay::sequence<cluster<T>*>& cluster_ptrs)
     });
 }
 
-template <typename T>
-void set_heights(parlay::sequence<cluster<T>> &clusters)
+template <typename T, typename D>
+void set_heights(parlay::sequence<cluster<T, D>> &clusters)
 {
 
     auto cluster_ptrs = parlay::tabulate(clusters.size(), [&] (T i) {
@@ -409,8 +409,8 @@ void set_heights(parlay::sequence<cluster<T>> &clusters)
     set_heights(cluster_ptrs);
 }
 
-template <typename T>
-void set_heights(parlay::sequence<T> indices, parlay::sequence<cluster<T>>& clusters)
+template <typename T, typename D>
+void set_heights(parlay::sequence<T> indices, parlay::sequence<cluster<T,D>>& clusters)
 {
     auto cluster_ptrs = parlay::tabulate(clusters.size(), [&] (T i) {
         return &clusters[indices[i]];
@@ -431,19 +431,19 @@ void set_heights(parlay::sequence<T> indices, parlay::sequence<cluster<T>>& clus
  * not an approximate compaction
 */
 
-template <typename T>
-void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool randomized = false)
+template <typename T, typename D>
+void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool randomized = false)
 {
     // std::cout << "create RC tree called" << std::endl;
     
-    parlay::sequence<cluster<T>*> all_cluster_ptrs = parlay::tabulate(n, [&] (T v) {
+    parlay::sequence<cluster<T,D>*> all_cluster_ptrs = parlay::tabulate(n, [&] (T v) {
         return &base_clusters[v];
     });
 
-    parlay::sequence<cluster<T>*> forest, candidates;
+    parlay::sequence<cluster<T,D>*> forest, candidates;
 
     // Initially the forest of live nodes is all live nodes
-    forest = parlay::filter(all_cluster_ptrs, [&] (cluster<T>* C) {
+    forest = parlay::filter(all_cluster_ptrs, [&] (cluster<T,D>* C) {
         return ((C->state & live));
     });
 
@@ -463,7 +463,7 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool rand
         }
         else
         {
-            forest = parlay::filter(forest, [&] (cluster<T>* C) {
+            forest = parlay::filter(forest, [&] (cluster<T,D>* C) {
                 return ((C->state & live));
             });
         }
@@ -471,7 +471,7 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool rand
         // std::cout << "forest.size(): " << forest.size() << std::endl;
 
         // Eligible nodes are those with 0, 1 or 2 neighbours
-        auto eligible = parlay::filter(forest, [&] (cluster<T>* C) {
+        auto eligible = parlay::filter(forest, [&] (cluster<T,D>* C) {
             return (C->get_neighbour_count() <= 2);
         });
 
@@ -481,7 +481,7 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool rand
         set_MIS(eligible, randomized = randomized);
 
         // Filter out an MIS of eligible nodes
-        candidates = parlay::filter(eligible, [&] (cluster<T>* C) {
+        candidates = parlay::filter(eligible, [&] (cluster<T,D>* C) {
             return (C->is_MIS);
         });
 
@@ -491,7 +491,7 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool rand
 
         // do rake and compress
         parlay::parallel_for(0, candidates.size(), [&] (T v) {
-            cluster<T>* cluster_ptr = candidates[v];
+            cluster<T,D>* cluster_ptr = candidates[v];
             // rake
             if(cluster_ptr->get_neighbour_count() == 0)
             {
@@ -502,8 +502,8 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool rand
             }
             if(cluster_ptr->get_neighbour_count() == 1)
             {
-                cluster<T>* edge_ptr = nullptr;
-                cluster<T>* other_side = nullptr;
+                cluster<T,D>* edge_ptr = nullptr;
+                cluster<T,D>* other_side = nullptr;
                 short neighbour_index = -1;
                 
                 for(short i = 0; i < cluster_ptr->size; i+=2)
@@ -536,10 +536,10 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool rand
             if (cluster_ptr->get_neighbour_count() == 2)
             {
                 // find left and right vertices/nodes
-                cluster<T>* left_edge_ptr = nullptr;
-                cluster<T>* right_edge_ptr = nullptr;
-                cluster<T>* left_node_ptr = nullptr;
-                cluster<T>* right_node_ptr = nullptr;
+                cluster<T,D>* left_edge_ptr = nullptr;
+                cluster<T,D>* right_edge_ptr = nullptr;
+                cluster<T,D>* left_node_ptr = nullptr;
+                cluster<T,D>* right_node_ptr = nullptr;
 
                 cluster_ptr->get_two_neighbours_edges(left_node_ptr, left_edge_ptr, right_node_ptr, right_edge_ptr);
 
@@ -578,21 +578,21 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool rand
 
 
 
-template <typename T, typename assocfunc>
-T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)
+template <typename T, typename D, typename assocfunc>
+D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc func)
 {
     
     bool use_v = false;
 
-    cluster<T>* prev_boundary_v_l = v->get_parent();
-    cluster<T>* prev_boundary_v_r = prev_boundary_v_l;
-    T prev_val_till_v_l = defretval;
-    T prev_val_till_v_r = defretval;
+    cluster<T,D>* prev_boundary_v_l = v->get_parent();
+    cluster<T,D>* prev_boundary_v_r = prev_boundary_v_l;
+    D prev_val_till_v_l = defretval;
+    D prev_val_till_v_r = defretval;
     
-    cluster<T>* prev_boundary_w_l = w->get_parent();
-    cluster<T>* prev_boundary_w_r = prev_boundary_w_l;
-    T prev_val_till_w_l = defretval;
-    T prev_val_till_w_r = defretval;
+    cluster<T,D>* prev_boundary_w_l = w->get_parent();
+    cluster<T,D>* prev_boundary_w_r = prev_boundary_w_l;
+    D prev_val_till_w_l = defretval;
+    D prev_val_till_w_r = defretval;
 
 
 
@@ -611,7 +611,7 @@ T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)
         if(use_v)
         {
             v = v; //unnecessary but helps me understand, let compiler remove this
-            cluster<T>* &v_cluster = v;
+            cluster<T,D>* &v_cluster = v;
 
             // We are at the start
             if (prev_val_till_v_l == defretval && prev_val_till_v_r == defretval) 
@@ -620,10 +620,10 @@ T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)
             } 
             else 
             {
-                T lval;
-                T rval;
-                cluster<T>* l;
-                cluster<T>* r;
+                D lval;
+                D rval;
+                cluster<T,D>* l;
+                cluster<T,D>* r;
 
                 v_cluster->find_boundary_vertices(l, lval, r, rval, defretval);
 
@@ -682,7 +682,7 @@ T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)
                         prev_boundary_v_r = l; // Not necessary but helps me think
                         prev_boundary_v_l = r;
 
-                        T temp_r = prev_val_till_v_r;
+                        D temp_r = prev_val_till_v_r;
                         
                         prev_val_till_v_r = func(prev_val_till_v_l, rval);
                         prev_val_till_v_l = temp_r;
@@ -693,7 +693,7 @@ T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)
                         prev_boundary_v_l = r; // Not necessary but helps me think
                         prev_boundary_v_r = l;
 
-                        T temp_l = prev_val_till_v_l;
+                        D temp_l = prev_val_till_v_l;
                         
                         prev_val_till_v_l = func(prev_val_till_v_r, lval);
                         prev_val_till_v_r = temp_l;
@@ -713,7 +713,7 @@ T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)
         else
         {
             w = w; //unnecessary but helps me understand, let compiler remove this
-            cluster<T>* &w_cluster = w;
+            cluster<T,D>* &w_cluster = w;
 
             // We are at the start
             if (prev_val_till_w_l == defretval && prev_val_till_w_r == defretval) 
@@ -722,9 +722,9 @@ T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)
             } 
             else 
             {
-                T lval, rval;
-                cluster<T>* l;
-                cluster<T>* r;
+                D lval, rval;
+                cluster<T,D>* l;
+                cluster<T,D>* r;
                 w_cluster->find_boundary_vertices(l, lval, r, rval, defretval);
 
                 // Covers both unary to unary and unary to binary case
@@ -782,7 +782,7 @@ T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)
                         prev_boundary_w_r = l; // Not necessary but helps me think
                         prev_boundary_v_l = r;
 
-                        T temp_r = prev_val_till_v_r;
+                        D temp_r = prev_val_till_v_r;
                         
                         prev_val_till_v_r = func(prev_val_till_v_l, rval);
                         prev_val_till_v_l = temp_r;
@@ -793,7 +793,7 @@ T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)
                         prev_boundary_w_l = r; // Not necessary but helps me think
                         prev_boundary_v_r = l;
 
-                        T temp_l = prev_val_till_v_l;
+                        D temp_l = prev_val_till_v_l;
                         
                         prev_val_till_v_l = func(prev_val_till_v_r, lval);
                         prev_val_till_v_r = temp_l;
@@ -834,7 +834,7 @@ T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)
             return prev_val_till_v_r;
     }
     
-    T v_contrib, w_contrib;
+    D v_contrib, w_contrib;
     
     if(v == prev_boundary_v_l)
         v_contrib = prev_val_till_v_l;
@@ -854,41 +854,47 @@ T PathQuery( cluster<T>* v,  cluster<T>* w, const T defretval, assocfunc func)
  * Given a pair [v,w], returns the  (if it exists)
  * Exploits the fact that an edge [v,w] must be the child of v or w in an RC tree
 */
-template<typename T>
-cluster<T>* getEdge(T v, T w, parlay::sequence<cluster<T>>& clusters)
+template<typename T, typename D>
+cluster<T, D>* getEdge(T v, T w, parlay::sequence<cluster<T, D>>& clusters)
 {
     // check v
     auto& cluster_v = clusters[v];
     for(uint i = 0; i < cluster_v.size; i++)
     {
-        if(cluster_v.types[i] == child_type && cluster_v.ptrs[i]->index == v && cluster_v.ptrs[i]->state & base_edge)
-            return cluster_v.ptrs[i];
+        if(cluster_v.ptrs[i] != nullptr && cluster_v.ptrs[i]->index == w && cluster_v.ptrs[i+1]->state & base_edge)
+            return cluster_v.ptrs[i+1];
     }
 
     // check w
     auto& cluster_w = clusters[w];
     for(uint i = 0; i < cluster_w.size; i++)
     {
-        if(cluster_w.types[i] == child_type && cluster_w.ptrs[i]->index == w && cluster_w.ptrs[i]->state & base_edge)
-            return cluster_w.ptrs[i];
+        if(cluster_w.ptrs[i] != nullptr && cluster_w.ptrs[i]->index == v && cluster_w.ptrs[i+1]->state & base_edge)
+            return cluster_w.ptrs[i+1];
     }
 
+    std::cout << red << v << " - " << w <<": edge not found" << reset << std::endl;
 
     return nullptr;
 }
 
-template<typename T, typename assocfunc>
-void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, T>>& edges, assocfunc func, parlay::sequence<cluster<T>>& clusters)
+template<typename T, typename D, typename assocfunc>
+void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, assocfunc func, parlay::sequence<cluster<T, D>>& clusters)
 {
 
     // increment counter and return ptrs
-    parlay::sequence<cluster<T>*> edge_ptrs = parlay::tabulate(edges.size(), [&] (const T i) {
-        const std::tuple<T, T, T> edge_tuple = edges[i];
+    parlay::sequence<cluster<T,D>*> edge_ptrs = parlay::tabulate(edges.size(), [&] (const T i) {
+        const std::tuple<T, T, D> edge_tuple = edges[i];
         const auto& weight = std::get<2>(edge_tuple);
         const auto& v = std::get<1>(edge_tuple);
         const auto& w = std::get<0>(edge_tuple);
 
-        cluster<T>* cluster_ptr = getEdge(v, w, clusters);
+        cluster<T,D>* cluster_ptr = getEdge(v, w, clusters);
+
+        if(cluster_ptr != nullptr)
+            cluster_ptr->data = weight;
+        
+
         auto retptr = cluster_ptr;
 
 
@@ -904,16 +910,19 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, T>>& edges, 
 
     });
 
-    parlay::parallel_for(0, edge_ptrs.size(), [&] (T i) {
-        auto& edge_ptr = edge_ptrs[i];
-        if(edge_ptr == nullptr)
-            return;
-            
-        auto& cluster_ptr = edge_ptr;
+    for(const auto ep : edge_ptrs)
+        std::cout << ep->data << " ";
+    std::cout << std::endl;
 
+    parlay::parallel_for(0, edge_ptrs.size(), [&] (T i) {
+        if(edge_ptrs[i] == nullptr)
+            return;
+
+        auto cluster_ptr = edge_ptrs[i];
         
+
+
         // decrement counter
-        
         while(cluster_ptr != nullptr)
         {
             auto ret_val = cluster_ptr->counter.fetch_add(-1);
@@ -921,7 +930,7 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, T>>& edges, 
                 break;
             // prepare children
             bool first_child = true;
-            T final_val;
+            D final_val;
             for(uint i = 0; i < cluster_ptr->size; i++)
             {
                 if(cluster_ptr->ptrs[i] != nullptr && cluster_ptr->types[i] & child_type)
@@ -938,10 +947,17 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, T>>& edges, 
                 }
             }
 
+            cluster_ptr->data = final_val;
+
             cluster_ptr = cluster_ptr->get_parent();
         }
 
     });
+
+    for(const auto& ep : edge_ptrs)
+        std::cout << ep->data << " ";
+    std::cout << std::endl;
+    
 
     return;
 }
@@ -950,8 +966,8 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, T>>& edges, 
  * Assumes that "clusters" contains a bunch of ALREADY fully contracted trees i.e. a fully contracted
  */
 
-template<typename T>
-void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, T>>& add_edges, parlay::sequence<cluster<T>>& clusters)
+template<typename T, typename D>
+void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, D>>& add_edges, parlay::sequence<cluster<T, D>>& clusters)
 {
 
     int count = 0;
@@ -969,17 +985,17 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
 /**
  * Only frees the "floating" edge clusters
 */
-template<typename T>
-void deleteRCtree(parlay::sequence<cluster<T> > &base_clusters)
+template<typename T, typename D>
+void deleteRCtree(parlay::sequence<cluster<T, D>> &base_clusters)
 {
-    using cluster_allocator = parlay::type_allocator<cluster<T>>;
+    using cluster_allocator = parlay::type_allocator<cluster<T,D>>;
 
     parlay::parallel_for(0, base_clusters.size(), [&] (T v) {
         auto cluster_ptr = &base_clusters[v];
         
         for(short i = 0; i < cluster_ptr->size; i+=1)
         {
-            cluster<T>*& potential_ptr = cluster_ptr->ptrs[i];
+            cluster<T,D>*& potential_ptr = cluster_ptr->ptrs[i];
             short potential_type = cluster_ptr->types[i];
             
             if((potential_ptr != nullptr) && (potential_ptr->state & base_edge) && (potential_type & (child_type)))
@@ -991,8 +1007,8 @@ void deleteRCtree(parlay::sequence<cluster<T> > &base_clusters)
     });
 }
 
-template<typename T>
-void printTree(parlay::sequence<cluster<T> > &base_clusters)
+template<typename T, typename D>
+void printTree(parlay::sequence<cluster<T, D>> &base_clusters)
 {
     for(uint i = 0; i < base_clusters.size(); i++)
     {

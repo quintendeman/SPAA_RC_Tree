@@ -3,6 +3,7 @@
 #include <chrono>
 #include <iomanip>
 #include <fstream>
+#include <string>
 #include <cmath>
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
@@ -16,6 +17,8 @@
 using vertex = long;
 using utils = graph_utils<vertex>;
 using graph = parlay::sequence<parlay::sequence<vertex> >;
+
+using datatype = float;
 
 const vertex max_degree = 3;
 
@@ -60,24 +63,24 @@ int main(int argc, char* argv[]) {
     if (num_queries > graph_size)
         num_queries = graph_size;
 
-    if (graph_size < 16)
-        graph_size = 16;
+    if (graph_size < 10)
+        graph_size = 10;
 
-    std::cout << "Working with a graph of size " << graph_size << std::endl;
+    std::cout << "Working with a graph of size " << graph_size << std::endl; 
 
     auto parents = generate_tree_graph(graph_size);
     degree_cap_parents(parents, max_degree);
     graph G;
     G = convert_parents_to_graph(G, parents);
 
-    parlay::sequence<std::tuple<vertex, vertex, vertex>> weighted_edges = parlay::tabulate(parents.size(), [&] (vertex i) {
-        return std::tuple<vertex, vertex, vertex>(i, parents[i], i + 123210 * i % 12312);
+    parlay::sequence<std::tuple<vertex, vertex, datatype>> weighted_edges = parlay::tabulate(parents.size(), [&] (vertex i) {
+        return std::tuple<vertex, vertex, datatype>(i, parents[i], (datatype) (i + parents[i] * 10 ));
     });
-    weighted_edges = parlay::filter(weighted_edges, [&] (std::tuple<vertex, vertex, vertex> wedge) {
+    weighted_edges = parlay::filter(weighted_edges, [&] (std::tuple<vertex, vertex, datatype> wedge) {
         return std::get<0>(wedge) != std::get<1>(wedge);
     });
 
-    parlay::sequence<cluster<vertex>> clusters;
+    parlay::sequence<cluster<vertex, datatype>> clusters;
 
     // Measure creation time
     auto start_creation = std::chrono::high_resolution_clock::now();
@@ -87,67 +90,72 @@ int main(int argc, char* argv[]) {
     auto end_creation = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> creation_time = end_creation - start_creation;
 
-    batchModifyEdgeWeights(weighted_edges, [] (vertex a, vertex b) {
-        return a > b ? a : b;
+    std::cout << "There are " << weighted_edges.size() << " edges being inserted" << std::endl;
+
+    batchModifyEdgeWeights(weighted_edges, [] (datatype a, datatype b) {
+        return a + b;
     }, clusters);
 
+    printTree(clusters);
 
-    PathQuery(&clusters[0], &clusters[G.size()/2], (vertex) 0, [] (vertex a, vertex b) {
-        return a > b ? a : b;
-    });
+    // const datatype defretval = 0.0f;
 
-    parlay::random_generator gen;
-    std::uniform_int_distribution<vertex> dis(0, graph_size-1);
+    // PathQuery(&clusters[0], &clusters[G.size()/2], 0.0f, [] (datatype a, datatype b) {
+    //     return a + b;
+    // });
 
-    auto random_indices = parlay::tabulate(batch_insertion_size < graph_size ? batch_insertion_size : graph_size, [&] (vertex i) 
-    {
-        auto r = gen[i];
-        auto random_index = dis(r);
-        return random_index;
-    });
+    // parlay::random_generator gen;
+    // std::uniform_int_distribution<vertex> dis(0, graph_size-1);
 
-    auto delete_pairs = parlay::tabulate(random_indices.size(), [&] (vertex index)
-    {
-        auto& i = random_indices[index];
-        parents[i] = i;    
-        if (i & 1)
-            {
-                return std::pair<vertex, vertex>(i, parents[i]);
-            }
+    // auto random_indices = parlay::tabulate(batch_insertion_size < graph_size ? batch_insertion_size : graph_size, [&] (vertex i) 
+    // {
+    //     auto r = gen[i];
+    //     auto random_index = dis(r);
+    //     return random_index;
+    // });
 
-        return std::pair<vertex, vertex>(parents[i], i);        
-    });
+    // auto delete_pairs = parlay::tabulate(random_indices.size(), [&] (vertex index)
+    // {
+    //     auto& i = random_indices[index];
+    //     parents[i] = i;    
+    //     if (i & 1)
+    //         {
+    //             return std::pair<vertex, vertex>(i, parents[i]);
+    //         }
+
+    //     return std::pair<vertex, vertex>(parents[i], i);        
+    // });
 
 
 
-    auto add_edges = parlay::tabulate(random_indices.size(), [&] (vertex index)
-    {   
-        auto& i = random_indices[index];
-        vertex& v = i;
-        auto r = gen[i];
-        vertex w;
-        if(v > 0)
-            w = dis(r) % v; // something to the left of w
-        else
-            w = 0;
-        vertex weight = dis(r) * dis(r);
+    // auto add_edges = parlay::tabulate(random_indices.size(), [&] (vertex index)
+    // {   
+    //     auto& i = random_indices[index];
+    //     vertex& v = i;
+    //     auto r = gen[i];
+    //     vertex w;
+    //     if(v > 0)
+    //         w = dis(r) % v; // something to the left of w
+    //     else
+    //         w = 0;
+    //     datatype weight = (double) (dis(r) * dis(r));
         
-        parents[i] = w;
-        if (i & 1)
-        {
-            return std::make_tuple(v, w, weight);
-        }
-        return std::make_tuple(w, v, weight);
-    });
+    //     parents[i] = w;
+    //     if (i & 1)
+    //     {
+    //         return std::make_tuple(v, w, weight);
+    //     }
+    //     return std::make_tuple(w, v, weight);
+    // });
     
-    degree_cap_parents(parents, max_degree);
+    // degree_cap_parents(parents, max_degree);
 
-    add_edges = parlay::filter(add_edges, [&] (auto edge_tuple) {
-        const vertex& i = std::get<0>(edge_tuple);
-        return i != parents[i];
-    });
+    // add_edges = parlay::filter(add_edges, [&] (auto edge_tuple) {
+    //     const vertex& i = std::get<0>(edge_tuple);
+    //     return i != parents[i];
+    // });
 
-    batchInsertEdge(delete_pairs, add_edges, clusters);
+    // batchInsertEdge(delete_pairs, add_edges, clusters);
 
     // printTree(clusters);
 

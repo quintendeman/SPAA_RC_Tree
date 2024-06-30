@@ -21,8 +21,22 @@ const char neighbour_type = 1;
 const char parent_type = 2;
 const char child_type = 4;
 const char edge_type = 8;
+const char added_type = 16;
+const char deleted_type = 32;
 
 const int max_neighbours = 3;
+
+
+const std::string reset = "\033[0m";
+const std::string black = "\033[30m";
+const std::string red = "\033[31m";
+const std::string green = "\033[32m";
+const std::string yellow = "\033[33m";
+const std::string blue = "\033[34m";
+const std::string magenta = "\033[35m";
+const std::string cyan = "\033[36m";
+const std::string white = "\033[37m";
+
 
 /*
     This represents a cluster in an RC tree.
@@ -31,16 +45,16 @@ const int max_neighbours = 3;
 #include <atomic>
 #include <cstring> // for std::memcpy if needed
 
-template <typename T>
+template <typename T, typename D>
 struct cluster
 {
 public:
-    cluster<T>* ptrs[max_neighbours * 2]; 
+    cluster<T, D>* ptrs[max_neighbours * 2]; 
     T index = -1;
     T colour = -1;
-    T data = 0;
-    T height;
     T initial_ngbrs[3];
+    T height;
+    D data = -1.0;
     static const short size = max_neighbours*2;
     short state = 0; // unaffected, affected or update eligible
     bool is_MIS = false;
@@ -87,7 +101,7 @@ public:
     }
 
     // To be used only for connecting the base_edges to base_nodes
-    void add_initial_neighbours(cluster<T>* V,  cluster<T>* W)
+    void add_initial_neighbours(cluster<T, D>* V,  cluster<T, D>* W)
     {
         this->ptrs[0] = V;
         this->ptrs[1] = W;
@@ -103,7 +117,7 @@ public:
     // Note, if that pointer already exists, set its type to neighbour
     // and returns that index
     // index i+1 will contain edge for easier management
-    short add_neighbour(cluster<T>* neighbour, cluster<T>* edge)
+    short add_neighbour(cluster<T, D>* neighbour, cluster<T, D>* edge)
     {
         for(short i = 0; i < this->size; i+=2)
         {
@@ -122,7 +136,7 @@ public:
     /**
      * Removes a node as a neighbour and returns the index
     */
-    short remove_neighbour(cluster<T>* neighbour)
+    short remove_neighbour(cluster<T, D>* neighbour)
     {
         for(short i = 0; i < this->size; i++)
         {
@@ -135,7 +149,7 @@ public:
         return -1;
     }
 
-    short change_to_neighbour(cluster<T>* neighbour)
+    short change_to_neighbour(cluster<T, D>* neighbour)
     {
         for(short i = 0; i < this->size; i++)
         {
@@ -151,7 +165,7 @@ public:
     }
 
     // changes a ptr from neighbour_type or edge_type to child_type
-    short change_to_child(cluster<T>* child)
+    short change_to_child(cluster<T, D>* child)
     {
         for(short i = 0; i < this->size; i++)
         {
@@ -169,7 +183,7 @@ public:
     /**
      * designates a neighbour as a parent
     */
-    short set_parent(cluster<T>* node)
+    short set_parent(cluster<T, D>* node)
     {
         for(short i = 0; i < this->size; i++)
         {
@@ -183,7 +197,7 @@ public:
         return -1;
     }
 
-    cluster<T>* get_parent(void)
+    cluster<T, D>* get_parent(void)
     {
         for(short i = 0; i < this->size; i++)
         {
@@ -263,7 +277,7 @@ public:
         return num_children;
     }
 
-    void get_two_neighbours_edges(cluster<T>*& neighbour1, cluster<T>*& edge1, cluster<T>*& neighbour2, cluster<T>*& edge2)
+    void get_two_neighbours_edges(cluster<T, D>*& neighbour1, cluster<T, D>*& edge1, cluster<T, D>*& neighbour2, cluster<T, D>*& edge2)
     {
         bool first_neighbour_found = false;
         for(short i = 0; i < this->size; i+=2)
@@ -287,7 +301,7 @@ public:
     }
 
     // Find boundary vertices by observing own state and ajdacent edges
-    void find_boundary_vertices(cluster<T>* &l, T& lval, cluster<T>* &r, T& rval, const T& defretval)
+    void find_boundary_vertices(cluster<T, D>* &l, D& lval, cluster<T, D>* &r, D& rval, const D& defretval)
     {
         if(this->state & nullary_cluster)
         {
@@ -323,7 +337,7 @@ public:
         Mainly used when doing compress
 
     */
-    short overwrite_neighbour(cluster<T>* old_neighbour, cluster<T>* new_neighbour, cluster<T>* new_edge)
+    short overwrite_neighbour(cluster<T, D>* old_neighbour, cluster<T, D>* new_neighbour, cluster<T, D>* new_edge)
     {
 
         for(short i = 0; i < this->size; i++)
@@ -384,10 +398,10 @@ public:
             std::cout << "dead ";
         for(uint i = 0; i < this->size; i+=2)
         {
-            auto cluster = this->ptrs[i];
-            if(cluster == nullptr)
+            auto cluster_ptr = this->ptrs[i];
+            if(cluster_ptr == nullptr)
                 continue;
-            std::cout << cluster->index;
+            std::cout << cluster_ptr->index;
             std::cout << " ";
             auto ptr_type = this->types[i];
             if(ptr_type & neighbour_type)
@@ -410,6 +424,9 @@ public:
                 std::cout << "P";
             if(ptr_type & child_type)
                 std::cout << "C";
+            std::cout << " " << green;
+            std::cout << this->ptrs[i+1]->data;
+            std::cout << reset << " ";
             std::cout << ")   ";
         }
         // std::cout << " colour(" << this->colour << ") ";
