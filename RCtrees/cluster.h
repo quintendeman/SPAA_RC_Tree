@@ -1,4 +1,5 @@
 #include <atomic>
+#include <algorithm>
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
 #include "../examples/counting_sort.h"
@@ -40,13 +41,13 @@ public:
     T data = 0;
     T height;
     T initial_ngbrs[3];
-    short contraction_time = 0;
     static const short size = max_neighbours*2;
     short state = 0; // unaffected, affected or update eligible
     bool is_MIS = false;
     std::atomic<char> counter; // a node will not have more than 255 edges
     char types[max_neighbours * 2] = {};
-
+    unsigned char contraction_time = 0;
+    
     // Default constructor
     cluster() : height(0), counter(0) {
         for(uint i = 0; i < this->size; i++)
@@ -82,7 +83,7 @@ public:
     // Method to get colour based off memory address
     unsigned long get_default_colour(void) const
     {
-        return reinterpret_cast<T>(this);
+        return reinterpret_cast<unsigned long>(this);
     }
 
     // To be used only for connecting the base_edges to base_nodes
@@ -93,6 +94,10 @@ public:
         this->types[0] = neighbour_type;
         this->types[1] = neighbour_type;
     }
+
+    
+
+    
 
     // index of neighbour if successful, -1 if not
     // Note, if that pointer already exists, set its type to neighbour
@@ -342,6 +347,18 @@ public:
     inline T get_height()
     {
         return this->height;
+    }
+
+    void set_height()
+    {
+        this->height = 0;
+        for(uint i = 0; i < this->size; i+=2)
+        {
+            if(this->types[i] & child_type && this->ptrs[i] != nullptr)
+                this->height = std::max(this->height, this->ptrs[i]->height);
+        }
+        this->height++;
+        return;
     }
 
     void print_as_edge(void)

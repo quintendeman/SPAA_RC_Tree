@@ -111,7 +111,7 @@ void degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
  * Extracts a particular bit (counted from the right) from an element
 */
 template <typename T>
-static inline bool extract_bit(T number, int offset_from_right)
+inline bool extract_bit(T number, int offset_from_right)
 {
     return (number >> offset_from_right) & 1;
 }
@@ -451,7 +451,7 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
 
     // printTree(base_clusters);
 
-    short contraction_round = 0;
+    unsigned char contraction_round = 0;
 
     do
     {
@@ -568,8 +568,9 @@ void create_RC_tree(parlay::sequence<cluster<T> > &base_clusters, T n, bool do_h
         contraction_round++;
     }while(forest.size());
 
-    if(do_height == true)
-        set_heights(all_cluster_ptrs);
+    // not necessary anynmore!
+    // if(do_height == true)
+    //     set_heights(all_cluster_ptrs);
 
 }
 
