@@ -27,7 +27,6 @@ int main(int argc, char* argv[]) {
     vertex graph_size = 100; // Default value
     vertex num_queries = 100; // Default value
     bool print_creation = false;
-    bool do_height = true; // Default value
     bool randomized = false; // Default value
 
     // Parse command line arguments
@@ -41,9 +40,6 @@ int main(int argc, char* argv[]) {
             num_queries = std::stol(argv[++i]);
         } else if (arg == "--print-creation") {
             print_creation = true;
-        } else if (arg == "--do-height" && i + 1 < argc) {
-            std::string value = argv[++i];
-            do_height = (value == "true");
         } else if (arg == "--randomized" && i + 1 < argc) {
             std::string value = argv[++i];
             randomized = (value == "true");
@@ -84,7 +80,7 @@ int main(int argc, char* argv[]) {
     // Measure creation time
     auto start_creation = std::chrono::high_resolution_clock::now();
     create_base_clusters(G, clusters, max_degree);
-    create_RC_tree(clusters, graph_size, do_height, randomized);
+    create_RC_tree(clusters, graph_size, randomized);
     set_heights(clusters);
     auto end_creation = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> creation_time = end_creation - start_creation;
