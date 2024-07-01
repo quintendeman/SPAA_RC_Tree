@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <fstream>
 #include <string>
+#include <random>
 #include <cmath>
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
@@ -23,6 +24,82 @@ using datatype = float;
 const vertex max_degree = 3;
 
 static const vertex batch_insertion_size = 1000;
+
+const double espilon = 0.001;
+
+static bool isNearlyEqual(double a, double b, double epsilon = espilon) {
+    return std::abs(a - b) < epsilon;
+}
+
+void test_rc_valid(parlay::sequence<vertex>& parents, parlay::sequence<cluster<vertex, datatype>>& clusters)
+{
+    parlay::sequence<std::tuple<vertex, vertex, datatype>> weighted_edges = parlay::tabulate(parents.size(), [&] (vertex i) {
+        return std::tuple<vertex, vertex, datatype>(i, parents[i], (datatype) ( clusters.size()));
+    });
+
+    // std::cout << "Working with " << blue << weighted_edges.size() << reset << " edges" << std::endl;
+
+    // pick a random pair to have a path between
+    vertex starting_index, ending_index;
+    std::mt19937 gen(std::random_device{}());
+    std::uniform_int_distribution<> disint(0, clusters.size()-1);
+    starting_index = disint(gen);
+
+    // chase edge until it hits a dead end then stop
+    vertex current_index = starting_index;
+    vertex parent_index; // anything other than current index will work
+
+    auto count = 0;
+
+    std::cout << "Path: " << bold << bright_yellow << current_index << reset;
+
+
+
+    while(true) // we hit a root
+    {
+        auto edge_tuple = weighted_edges[current_index];
+        parent_index = std::get<1>(edge_tuple);
+        if(parent_index == current_index)
+            break;
+        weighted_edges[current_index] = std::tuple<vertex, vertex, datatype>(current_index, parent_index, (datatype) 1.0f);
+        std::cout << bold << bright_yellow << " -> " << parent_index << reset;
+        current_index = parent_index;
+        if(count > (10 * clusters.size()))
+            {std::cout << red << "Cycle?" << std::endl; exit(1);}
+        count++;
+    }
+
+
+    std::cout << std::endl;
+
+
+
+    ending_index = parent_index;
+
+    // std::cout << blue << "Checking from " << ending_index << " to " << starting_index << reset << std::endl;
+
+
+    weighted_edges = parlay::filter(weighted_edges, [&] (auto edge) {
+        return std::get<0>(edge) != std::get<1>(edge);
+    });
+
+    batchModifyEdgeWeights(weighted_edges, [] (datatype a, datatype b) {
+        return a + b;
+    }, clusters);
+
+    auto retval = PathQuery(&clusters[starting_index], &clusters[ending_index], (datatype) -1, [] (datatype a, datatype b) {
+        return a + b;
+    });
+
+    if(isNearlyEqual(retval, count) || (starting_index == ending_index && retval == -1))
+        std::cout << green << "The count should have been " << count << " and it was " << retval << reset << std::endl;
+    else
+        std::cout << red << "The count should have been " << count << " but it was " << retval << reset << std::endl;
+
+    return;
+}
+
+
 
 int main(int argc, char* argv[]) {
     auto usage = "Usage: RC [--graph-size <graph-size>] [-n <graph-size>] [--num-queries <num-queries>] [--print-creation] [--do-height <true|false>] [--randomized <true|false>]";
@@ -73,12 +150,6 @@ int main(int argc, char* argv[]) {
     graph G;
     G = convert_parents_to_graph(G, parents);
 
-    parlay::sequence<std::tuple<vertex, vertex, datatype>> weighted_edges = parlay::tabulate(parents.size(), [&] (vertex i) {
-        return std::tuple<vertex, vertex, datatype>(i, parents[i], (datatype) (i + parents[i] * 10 ));
-    });
-    weighted_edges = parlay::filter(weighted_edges, [&] (std::tuple<vertex, vertex, datatype> wedge) {
-        return std::get<0>(wedge) != std::get<1>(wedge);
-    });
 
     parlay::sequence<cluster<vertex, datatype>> clusters;
 
@@ -86,17 +157,16 @@ int main(int argc, char* argv[]) {
     auto start_creation = std::chrono::high_resolution_clock::now();
     create_base_clusters(G, clusters, max_degree);
     create_RC_tree(clusters, graph_size, randomized);
-    set_heights(clusters);
     auto end_creation = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> creation_time = end_creation - start_creation;
 
-    std::cout << "There are " << weighted_edges.size() << " edges being inserted" << std::endl;
 
-    batchModifyEdgeWeights(weighted_edges, [] (datatype a, datatype b) {
-        return a + b;
-    }, clusters);
+    test_rc_valid(parents, clusters);
+    
 
-    printTree(clusters);
+
+    if(graph_size <= 100)
+        printTree(clusters);
 
     // const datatype defretval = 0.0f;
 

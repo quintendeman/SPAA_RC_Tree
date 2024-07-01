@@ -36,6 +36,23 @@ const std::string blue = "\033[34m";
 const std::string magenta = "\033[35m";
 const std::string cyan = "\033[36m";
 const std::string white = "\033[37m";
+const std::string bright_black = "\033[90m";
+const std::string bright_red = "\033[91m";
+const std::string bright_green = "\033[92m";
+const std::string bright_yellow = "\033[93m";
+const std::string bright_blue = "\033[94m";
+const std::string bright_magenta = "\033[95m";
+const std::string bright_cyan = "\033[96m";
+const std::string bright_white = "\033[97m";
+const std::string bold = "\033[1m";
+const std::string dim = "\033[2m";
+const std::string italic = "\033[3m";
+const std::string underline = "\033[4m";
+const std::string blink = "\033[5m";
+const std::string reverse = "\033[7m";
+const std::string hidden = "\033[8m";
+
+
 
 
 /*
@@ -53,7 +70,6 @@ public:
     T index = -1;
     T colour = -1;
     T initial_ngbrs[3];
-    T height;
     D data = -1.0;
     static const short size = max_neighbours*2;
     short state = 0; // unaffected, affected or update eligible
@@ -63,7 +79,7 @@ public:
     unsigned char contraction_time = 0;
     
     // Default constructor
-    cluster() : height(0), counter(0) {
+    cluster() :  counter(0) {
         for(uint i = 0; i < this->size; i++)
         {
             this->ptrs[i] = nullptr;
@@ -78,7 +94,6 @@ public:
         : index(other.index),
           colour(other.colour),
           data(other.data),
-          height(other.height), // Load the atomic value
           counter(other.counter.load()), // Load the atomic value
           state(other.state),
           contraction_time(other.contraction_time),
@@ -209,6 +224,20 @@ public:
         return nullptr;
     }
 
+    cluster<T, D>* get_parent(short& parent_index)
+    {
+        parent_index = -1;
+        for(short i = 0; i < this->size; i++)
+        {
+            if(this->types[i] & parent_type)
+            {
+                parent_index = i;
+                return this->ptrs[i];
+            }
+        }
+        return nullptr;
+    }
+
     // set the neighbours MIS to val
     // useful when colouring
     void set_neighbour_mis(bool val)
@@ -270,7 +299,7 @@ public:
 
     short get_children_count(void)
     {
-        short num_children;
+        short num_children = 0;
         for(const auto& t : this->types)
             if (t & child_type)
                 num_children++;
@@ -303,6 +332,7 @@ public:
     // Find boundary vertices by observing own state and ajdacent edges
     void find_boundary_vertices(cluster<T, D>* &l, D& lval, cluster<T, D>* &r, D& rval, const D& defretval)
     {
+        lval = rval = defretval;
         if(this->state & nullary_cluster)
         {
             l = r = nullptr;
@@ -310,21 +340,23 @@ public:
         }
         if(this->state & unary_cluster)
         {
-            l = r = this->get_parent();
+            short parent_index = 0;
+            l = r = this->get_parent(parent_index);
             /* l CAN NEVER BE NULLPTR*/
-            lval = rval = l->data;
+            lval = rval = this->ptrs[parent_index+1]->data;
             return;
         }
         if(this->state & binary_cluster)
         {
-            r = this->get_parent();
-            rval = r->data;
+            short parent_index;
+            r = this->get_parent(parent_index);
+            rval = this->ptrs[parent_index+1]->data;
             for(uint i = 0; i < this->size; i+=2)
             {
                 if(this->types[i] & neighbour_type && this->ptrs[i] != r)
                 {
                     l = this->ptrs[i];
-                    lval = l->data;
+                    lval = this->ptrs[i+1]->data;
                     return;
                 }
             }
@@ -358,20 +390,20 @@ public:
         return -1;
     }
 
-    inline T get_height()
+    inline unsigned char get_height()
     {
-        return this->height;
+        return this->contraction_time;
     }
 
     void set_height()
     {
-        this->height = 0;
-        for(uint i = 0; i < this->size; i+=2)
+        this->height = -1;
+        for(uint i = 0; i < this->size; i++)
         {
             if(this->types[i] & child_type && this->ptrs[i] != nullptr)
                 this->height = std::max(this->height, this->ptrs[i]->height);
         }
-        this->height++;
+        this->height = this->height + 1;
         return;
     }
 
@@ -390,7 +422,16 @@ public:
 
     void print(void)
     {
-        std::cout << "Index: " << this->index;
+        if(this->state & binary_cluster)
+            std::cout << red;
+        else if (this->state & unary_cluster)
+            std::cout << cyan;
+        else 
+            std::cout << green;
+        std::cout << "Index: " << this->index << reset;
+        std::cout << blue << "[" << (int) this->get_height()  << "]" << reset;
+        std::cout << yellow << "[" << this->data << "]" << reset;
+        std::cout << magenta << "[" << (int) this->counter << "]" << reset;
         std::cout << "  ";
         if(this->state&live)
             std::cout << "live ";
