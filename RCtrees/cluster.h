@@ -1,3 +1,10 @@
+#ifndef CLUSTER_H
+#define CLUSTER_H
+
+// Declarations and definitions
+
+
+
 #include <atomic>
 #include <algorithm>
 #include "../include/parlay/primitives.h"
@@ -27,31 +34,31 @@ const char deleted_type = 32;
 const int max_neighbours = 3;
 
 
-const std::string reset = "\033[0m";
-const std::string black = "\033[30m";
-const std::string red = "\033[31m";
-const std::string green = "\033[32m";
-const std::string yellow = "\033[33m";
-const std::string blue = "\033[34m";
-const std::string magenta = "\033[35m";
-const std::string cyan = "\033[36m";
-const std::string white = "\033[37m";
-const std::string bright_black = "\033[90m";
-const std::string bright_red = "\033[91m";
-const std::string bright_green = "\033[92m";
-const std::string bright_yellow = "\033[93m";
-const std::string bright_blue = "\033[94m";
-const std::string bright_magenta = "\033[95m";
-const std::string bright_cyan = "\033[96m";
-const std::string bright_white = "\033[97m";
-const std::string bold = "\033[1m";
-const std::string dim = "\033[2m";
-const std::string italic = "\033[3m";
-const std::string underline = "\033[4m";
-const std::string blink = "\033[5m";
-const std::string reverse = "\033[7m";
-const std::string hidden = "\033[8m";
-
+const char* reset = "\033[0m";
+const char* black = "\033[30m";
+const char* red = "\033[31m";
+const char* green = "\033[32m";
+const char* yellow = "\033[33m";
+const char* blue = "\033[34m";
+const char* magenta = "\033[35m";
+const char* cyan = "\033[36m";
+const char* white = "\033[37m";
+const char* bright_black = "\033[90m";
+const char* bright_red = "\033[91m";
+const char* bright_green = "\033[92m";
+const char* bright_yellow = "\033[93m";
+const char* bright_blue = "\033[94m";
+const char* bright_magenta = "\033[95m";
+const char* bright_cyan = "\033[96m";
+const char* bright_white = "\033[97m";
+const char* bold = "\033[1m";
+const char* dim = "\033[2m";
+const char* italic = "\033[3m";
+const char* underline = "\033[4m";
+const char* blink = "\033[5m";
+const char* reverse = "\033[7m";
+const char* hidden = "\033[8m";
+const char* backspace = "\033[D";
 
 
 
@@ -69,7 +76,7 @@ public:
     cluster<T, D>* ptrs[max_neighbours * 2]; 
     T index = -1;
     T colour = -1;
-    T initial_ngbrs[3];
+    T initial_adjacency[3];
     D data = -1.0;
     static const short size = max_neighbours*2;
     short state = 0; // unaffected, affected or update eligible
@@ -85,7 +92,7 @@ public:
             this->ptrs[i] = nullptr;
             this->types[i] = 0;
             if(i < max_neighbours)
-                this->initial_ngbrs[i] = -1;
+                this->initial_adjacency[i] = -1;
         }
     }
 
@@ -104,7 +111,7 @@ public:
             this->ptrs[i] = nullptr;
             this->types[i] = 0;
             if(i < max_neighbours)
-                this->initial_ngbrs[i] = other.initial_ngbrs[i];
+                this->initial_adjacency[i] = other.initial_adjacency[i];
         }
         return;
     }
@@ -125,7 +132,30 @@ public:
     }
 
     
+    void add_initial_adjacency(T ngbr)
+    {
+        for(auto& n : this->initial_adjacency)
+            if(n == -1)
+            {
+                n = ngbr;
+                return;
+            }
+        return;
+    }
 
+    short isPtr(T ngbr_index, short defretval = -1) const
+    {
+        for(short i = 0; i < this->size; i+=2)
+            if(this->ptrs[i] != nullptr && this->ptrs[i]->index  == ngbr_index)
+                return i;
+        return defretval;
+    }
+    short isPtr(const cluster<T, D>* ngbr_ptr, short defretval = -1) const
+    {
+        if(ngbr_ptr == nullptr)
+            return defretval;
+        return this->isPtr(ngbr_ptr->index, defretval);
+    }
     
 
     // index of neighbour if successful, -1 if not
@@ -212,7 +242,7 @@ public:
         return -1;
     }
 
-    cluster<T, D>* get_parent(void)
+    cluster<T, D>* get_parent(void) const
     {
         for(short i = 0; i < this->size; i++)
         {
@@ -224,7 +254,7 @@ public:
         return nullptr;
     }
 
-    cluster<T, D>* get_parent(short& parent_index)
+    cluster<T, D>* get_parent(short& parent_index) const
     {
         parent_index = -1;
         for(short i = 0; i < this->size; i++)
@@ -271,11 +301,21 @@ public:
         return false;
     }
 
+    cluster<T, D>* get_one_neighbour(void) const
+    {
+        for(short i = 0; i < this->size; i++)
+        {
+            if(this->types[i] & neighbour_type)
+                return this->ptrs[i];
+        }
+        return nullptr;
+    }
+
     /*
         return true if any neighbours are in MIS
         else return false
     */
-    bool get_neighbour_MIS(void)
+    bool get_neighbour_MIS(void) const
     {
         for(short i = 0; i < this->size; i+=2)
         {
@@ -285,7 +325,7 @@ public:
         return false;
     }
 
-    short get_neighbour_count(void)
+    short get_neighbour_count(void) const
     {
         short num_neighbours = 0;
         for(short i = 0; i < this->size; i++)
@@ -297,7 +337,7 @@ public:
         return num_neighbours;
     }
 
-    short get_children_count(void)
+    short get_children_count(void) const
     {
         short num_children = 0;
         for(const auto& t : this->types)
@@ -306,7 +346,7 @@ public:
         return num_children;
     }
 
-    void get_two_neighbours_edges(cluster<T, D>*& neighbour1, cluster<T, D>*& edge1, cluster<T, D>*& neighbour2, cluster<T, D>*& edge2)
+    void get_two_neighbours_edges(cluster<T, D>*& neighbour1, cluster<T, D>*& edge1, cluster<T, D>*& neighbour2, cluster<T, D>*& edge2) const
     {
         bool first_neighbour_found = false;
         for(short i = 0; i < this->size; i+=2)
@@ -330,7 +370,7 @@ public:
     }
 
     // Find boundary vertices by observing own state and ajdacent edges
-    void find_boundary_vertices(cluster<T, D>* &l, D& lval, cluster<T, D>* &r, D& rval, const D& defretval)
+    void find_boundary_vertices(cluster<T, D>* &l, D& lval, cluster<T, D>* &r, D& rval, const D& defretval) const
     {
         lval = rval = defretval;
         if(this->state & nullary_cluster)
@@ -390,7 +430,7 @@ public:
         return -1;
     }
 
-    inline unsigned char get_height()
+    inline unsigned char get_height() const
     {
         return this->contraction_time;
     }
@@ -470,7 +510,25 @@ public:
             std::cout << reset << " ";
             std::cout << ")   ";
         }
+
+        std::cout << bright_blue << "[";
+        for(const auto& w : this->initial_adjacency)
+        {
+            if(this->isPtr(w) != -1)
+                std::cout << bright_blue;
+            else if (w == -1)
+                std::cout << bright_white;
+            else
+                std::cout << red;
+            std::cout << w << " ";
+        }
+        std::cout << blue << "\033[D]";
+        std::cout << reset << std::endl;
         // std::cout << " colour(" << this->colour << ") ";
         std::cout << std::endl;
     }
 };
+
+
+
+#endif

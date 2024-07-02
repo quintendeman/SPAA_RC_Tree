@@ -9,8 +9,9 @@
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
 #include "../include/parlay/internal/get_time.h"
-#include "RC.h"
+#include "RCdynamic.h"
 #include "../examples/samplesort.h"
+
 
 // **************************************************************
 // Driver
@@ -92,7 +93,7 @@ void test_rc_valid(parlay::sequence<vertex>& parents, parlay::sequence<cluster<v
     });
 
     if(isNearlyEqual(retval, count) || (starting_index == ending_index && retval == -1))
-        std::cout << green << "The count should have been " << count << " and it was " << retval << reset << std::endl;
+        std::cout << green << "The count should have been " << (starting_index == ending_index ? -1 : count) << " and it was " << retval << reset << std::endl;
     else
         std::cout << red << "The count should have been " << count << " but it was " << retval << reset << std::endl;
 
@@ -168,7 +169,21 @@ int main(int argc, char* argv[]) {
     if(graph_size <= 100)
         printTree(clusters);
 
-    // const datatype defretval = 0.0f;
+    getAdjacencyAtLevel(&clusters[(vertex) graph_size/2], 5, clusters);
+
+    deleteRCtree(clusters);
+
+    if (print_creation) {
+        std::cout << graph_size << "," << std::setprecision(6) << creation_time.count() << std::endl;
+    } else {
+        std::cout << "Creation time: " << std::setprecision(6) << creation_time.count() << " seconds" << std::endl;
+    }
+
+    return 0;
+}
+
+
+// const datatype defretval = 0.0f;
 
     // PathQuery(&clusters[0], &clusters[G.size()/2], 0.0f, [] (datatype a, datatype b) {
     //     return a + b;
@@ -228,14 +243,3 @@ int main(int argc, char* argv[]) {
     // batchInsertEdge(delete_pairs, add_edges, clusters);
 
     // printTree(clusters);
-
-    deleteRCtree(clusters);
-
-    if (print_creation) {
-        std::cout << graph_size << "," << std::setprecision(6) << creation_time.count() << std::endl;
-    } else {
-        std::cout << "Creation time: " << std::setprecision(6) << creation_time.count() << " seconds" << std::endl;
-    }
-
-    return 0;
-}

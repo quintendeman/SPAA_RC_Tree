@@ -1,3 +1,10 @@
+#ifndef RC_H
+#define RC_H
+
+/**
+ * Mainly deals with static RC tree creation
+*/
+
 #include <atomic>
 #include <random>
 #include <set>
@@ -8,15 +15,6 @@
 #include "../examples/helper/graph_utils.h"
 #include <parlay/alloc.h>
 
-
-#define ANSI_COLOR_RED     "\x1b[31m"
-#define ANSI_COLOR_GREEN   "\x1b[32m"
-#define ANSI_COLOR_YELLOW  "\x1b[33m"
-#define ANSI_COLOR_BLUE    "\x1b[34m"
-#define ANSI_COLOR_MAGENTA "\x1b[35m"
-#define ANSI_COLOR_CYAN    "\x1b[36m"
-#define ANSI_COLOR_RESET   "\x1b[0m"
- 
 
 
 /*
@@ -39,9 +37,9 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
         std::uniform_real_distribution<double> dis(0, 1);
         auto random_val = dis(gen);
 
-        static const double anywhere_left_weight = 2;
-        static const double immediate_left_weight = 15;
-        static const double root_weight = 0.1;
+        static const double anywhere_left_weight = 10;
+        static const double immediate_left_weight = 100;
+        static const double root_weight = 0.0;
 
         static const double anywhere_prob = (anywhere_left_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
         static const double root_prob = anywhere_prob + (root_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
@@ -323,11 +321,9 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
         _cluster.index = v;
         _cluster.state = base_vertex | live;
         
-        for(char i = 0; i < G[v].size(); i++)
-            _cluster.initial_ngbrs[i] = G[v][i];
-        
         for(const auto& w : G[v])
         {
+            _cluster.add_initial_adjacency(w);
             if(w < v)
                 continue;
             auto edge_cluster = cluster_allocator::alloc();
@@ -356,10 +352,6 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
                 if(other_node_ptr->ptrs[i] == cluster_ptr)
                 {
                     auto& connecting_edge_ptr = other_node_ptr->ptrs[i+1];
-                    // std::cout << "I, " << v << ", am attempting to connect to " << w << std::endl;
-                    // std::cout << "I found a connecting edge ";
-                    // connecting_edge_ptr->print_as_edge();
-                    // std::cout << std::endl;
                     cluster_ptr->add_neighbour(other_node_ptr, connecting_edge_ptr);
                     break;
                 }
@@ -925,25 +917,7 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, 
     return;
 }
 
-/**
- * Assumes that "clusters" contains a bunch of ALREADY fully contracted trees i.e. a fully contracted
- */
 
-template<typename T, typename D>
-void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, D>>& add_edges, parlay::sequence<cluster<T, D>>& clusters)
-{
-
-    int count = 0;
-
-    do
-    {
-
-
-        count++;
-    }while(!(count > 1000));    
-
-    return;
-}
 
 /**
  * Only frees the "floating" edge clusters
@@ -978,3 +952,5 @@ void printTree(parlay::sequence<cluster<T, D>> &base_clusters)
         base_clusters[i].print();
     }   
 }
+
+#endif
