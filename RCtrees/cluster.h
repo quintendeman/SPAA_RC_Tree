@@ -73,19 +73,21 @@ template <typename T, typename D>
 struct cluster
 {
 public:
-    cluster<T, D>* ptrs[max_neighbours * 2]; 
+    static const short size = max_neighbours*2;
+    std::array<cluster<T, D>*, size> ptrs;
+    // cluster<T, D>* ptrs[max_neighbours * 2];
     // parlay::short_sequence<T> initial_adjacency = parlay::sequence<T>(3);
     std::array<T, max_neighbours> initial_adjacency;
     T index = -1;
     T colour = -1;
     D data = -1.0;
-    static const short size = max_neighbours*2;
     short state = 0; // unaffected, affected or update eligible
     bool is_MIS = false;
     std::atomic<char> counter; // a node will not have more than 255 edges
-    char types[max_neighbours * 2] = {};
+    std::array<char, size> types;
+    // char types[max_neighbours * 2];
     unsigned char contraction_time = 0;
-    
+
     // Default constructor
     cluster() :  counter(0) {
         for(uint i = 0; i < this->size; i++)
@@ -106,7 +108,7 @@ public:
           state(other.state),
           contraction_time(other.contraction_time),
           is_MIS(other.is_MIS)
-    {    
+    {
         for(uint i = 0; i < this->size; i++)
         {
             this->ptrs[i] = nullptr;
@@ -132,7 +134,7 @@ public:
         this->types[1] = neighbour_type;
     }
 
-    
+
     void add_initial_adjacency(T ngbr)
     {
         for(auto& n : this->initial_adjacency)
@@ -157,7 +159,7 @@ public:
             return defretval;
         return this->isPtr(ngbr_ptr->index, defretval);
     }
-    
+
 
     // index of neighbour if successful, -1 if not
     // Note, if that pointer already exists, set its type to neighbour
@@ -286,7 +288,7 @@ public:
         {
             if(this->ptrs[i])
                 this->ptrs[i]->colour = input_colour;
-        }   
+        }
     }
 
     bool is_max_neighbour_colour(void)
@@ -364,7 +366,7 @@ public:
                 {
                     neighbour2 = this->ptrs[i];
                     edge2 = this->ptrs[i+1];
-                    return;   
+                    return;
                 }
             }
         }
@@ -401,7 +403,7 @@ public:
                     return;
                 }
             }
-           
+
         }
         return;
     }
@@ -419,11 +421,11 @@ public:
             {
                 this->ptrs[i] = new_neighbour;
                 this->types[i]|=neighbour_type;
-                
+
                 this->ptrs[i+1] = new_edge;
                 this->types[i+1]|= edge_type;
                 this->types[i+1]&= (~neighbour_type);
-                
+
                 return i;
             }
         }
@@ -467,7 +469,7 @@ public:
             std::cout << red;
         else if (this->state & unary_cluster)
             std::cout << cyan;
-        else 
+        else
             std::cout << green;
         std::cout << "Index: " << this->index << reset;
         std::cout << blue << "[" << (int) this->get_height()  << "]" << reset;

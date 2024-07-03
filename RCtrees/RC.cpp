@@ -164,22 +164,38 @@ int main(int argc, char* argv[]) {
 
     test_rc_valid(parents, clusters);
     
-
+    vertex test_index = std::sqrt(graph_size);
 
     if(graph_size <= 100)
         printTree(clusters);
 
-    auto ret_adj = getAdjacencyAtLevel(&clusters[(vertex) graph_size/2], 0, clusters);
+    auto ret_adj = getAdjacencyAtLevel(test_index, 0, clusters);
 
     for(auto& i : ret_adj)
+    {
+        if(i == -1)
+            std::cout << white;
+        else if (clusters[test_index].isPtr(i) == -1)
+            std::cout << red;
+        else
+            std::cout << blue;
         std::cout << i << " ";
-    std::cout << std::endl;
+    }
+    std::cout << reset << std::endl;
 
-    ret_adj = getAdjacencyAtLevel(&clusters[(vertex) graph_size/2], 1, ret_adj, 0, clusters);
+    ret_adj = getAdjacencyAtLevel(test_index, 100, ret_adj, 0, clusters);
 
     for(auto& i : ret_adj)
+    {
+        if(i == -1)
+            std::cout << white;
+        else if (clusters[test_index].isPtr(i) == -1)
+            std::cout << red;
+        else
+            std::cout << blue;
         std::cout << i << " ";
-    std::cout << std::endl;
+    }
+    std::cout << reset << std::endl;
 
 
     deleteRCtree(clusters);
