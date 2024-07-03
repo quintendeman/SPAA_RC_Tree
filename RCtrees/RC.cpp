@@ -52,7 +52,7 @@ void test_rc_valid(parlay::sequence<vertex>& parents, parlay::sequence<cluster<v
 
     auto count = 0;
 
-    std::cout << "Path: " << bold << bright_yellow << current_index << reset;
+    std::cout << "Test Path: " << bold << bright_yellow << current_index << reset;
 
 
 

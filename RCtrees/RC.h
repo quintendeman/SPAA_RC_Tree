@@ -38,7 +38,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
         auto random_val = dis(gen);
 
         static const double anywhere_left_weight = 10;
-        static const double immediate_left_weight = 100;
+        static const double immediate_left_weight = 200;
         static const double root_weight = 0.0;
 
         static const double anywhere_prob = (anywhere_left_weight/(anywhere_left_weight+immediate_left_weight+root_weight));

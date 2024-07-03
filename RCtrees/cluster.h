@@ -74,9 +74,10 @@ struct cluster
 {
 public:
     cluster<T, D>* ptrs[max_neighbours * 2]; 
+    // parlay::short_sequence<T> initial_adjacency = parlay::sequence<T>(3);
+    std::array<T, 3> initial_adjacency;
     T index = -1;
     T colour = -1;
-    T initial_adjacency[3];
     D data = -1.0;
     static const short size = max_neighbours*2;
     short state = 0; // unaffected, affected or update eligible
