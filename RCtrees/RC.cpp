@@ -169,7 +169,18 @@ int main(int argc, char* argv[]) {
     if(graph_size <= 100)
         printTree(clusters);
 
-    getAdjacencyAtLevel(&clusters[(vertex) graph_size/2], 5, clusters);
+    auto ret_adj = getAdjacencyAtLevel(&clusters[(vertex) graph_size/2], 0, clusters);
+
+    for(auto& i : ret_adj)
+        std::cout << i << " ";
+    std::cout << std::endl;
+
+    ret_adj = getAdjacencyAtLevel(&clusters[(vertex) graph_size/2], 1, ret_adj, 0, clusters);
+
+    for(auto& i : ret_adj)
+        std::cout << i << " ";
+    std::cout << std::endl;
+
 
     deleteRCtree(clusters);
 

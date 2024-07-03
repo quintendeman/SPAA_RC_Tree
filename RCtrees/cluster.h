@@ -75,7 +75,7 @@ struct cluster
 public:
     cluster<T, D>* ptrs[max_neighbours * 2]; 
     // parlay::short_sequence<T> initial_adjacency = parlay::sequence<T>(3);
-    std::array<T, 3> initial_adjacency;
+    std::array<T, max_neighbours> initial_adjacency;
     T index = -1;
     T colour = -1;
     D data = -1.0;
