@@ -24,21 +24,17 @@ using datatype = float;
 
 const vertex max_degree = 3;
 
-static const vertex batch_insertion_size = 1000;
-
 const double espilon = 0.001;
 
 static bool isNearlyEqual(double a, double b, double epsilon = espilon) {
     return std::abs(a - b) < epsilon;
 }
 
-void test_rc_valid(parlay::sequence<vertex>& parents, parlay::sequence<cluster<vertex, datatype>>& clusters)
+void test_rc_valid(const parlay::sequence<vertex>& parents, parlay::sequence<cluster<vertex, datatype>>& clusters)
 {
     parlay::sequence<std::tuple<vertex, vertex, datatype>> weighted_edges = parlay::tabulate(parents.size(), [&] (vertex i) {
         return std::tuple<vertex, vertex, datatype>(i, parents[i], (datatype) ( clusters.size()));
     });
-
-    // std::cout << "Working with " << blue << weighted_edges.size() << reset << " edges" << std::endl;
 
     // pick a random pair to have a path between
     vertex starting_index, ending_index;
@@ -93,13 +89,66 @@ void test_rc_valid(parlay::sequence<vertex>& parents, parlay::sequence<cluster<v
     });
 
     if(isNearlyEqual(retval, count) || (starting_index == ending_index && retval == -1))
-        std::cout << green << "The count should have been " << (starting_index == ending_index ? -1 : count) << " and it was " << retval << reset << std::endl;
+        std::cout << green << "[static] The count should have been " << (starting_index == ending_index ? -1 : count) << " and it was " << retval << reset << std::endl;
     else
-        std::cout << red << "The count should have been " << count << " but it was " << retval << reset << std::endl;
+        std::cout << red << "[static] The count should have been " << count << " but it was " << retval << reset << std::endl;
 
     return;
 }
 
+void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster<vertex, datatype>>& clusters)
+{
+
+    auto graph_size = parents.size();
+
+    static const vertex batch_insertion_size = graph_size/10;
+    static const vertex batch_deletion_size = graph_size/10;
+
+    parlay::random_generator gen;
+    std::uniform_int_distribution<vertex> dis(0, graph_size-1);
+
+
+    // create a selection of delete edges
+    auto random_indices = parlay::tabulate(batch_deletion_size < 1 ? 1 : batch_deletion_size, [&] (vertex i) 
+    {
+        auto r = gen[i];
+        auto random_index = dis(r);
+        return random_index;
+    });
+
+    // create deletion edges
+    auto delete_edges = parlay::tabulate(random_indices.size(), [&] (vertex i) {
+        parents[random_indices[i]] = random_indices[i];
+        return std::make_pair(random_indices[i], parents[random_indices[i]]);
+    });
+
+    // create insertion edges
+    auto insert_edges = parlay::tabulate(batch_insertion_size < 1 ? 1 : batch_insertion_size, [&] (vertex i) {
+        auto r = gen[i];
+        auto random_number = dis(r);
+
+        auto& child_index = random_number;
+        auto random_parent = child_index == 0 ? 0 : dis(r) % child_index;
+
+        datatype new_val = (datatype) graph_size * 10 * child_index; // some large value
+
+        parents[child_index] = random_parent;
+        return std::tuple<vertex, vertex, datatype>(child_index, random_parent, new_val);
+
+    });
+
+    degree_cap_parents(parents, max_degree);
+
+    // remove edges that were leading to an overflow
+    insert_edges = parlay::filter(insert_edges, [&] (auto edge) {
+        const auto& child_index = std::get<0>(edge);
+        return child_index != parents[child_index];
+    });
+
+    batchInsertEdge(delete_edges, insert_edges, clusters);
+
+    return;
+}
 
 
 int main(int argc, char* argv[]) {
@@ -169,34 +218,7 @@ int main(int argc, char* argv[]) {
     if(graph_size <= 100)
         printTree(clusters);
 
-    auto ret_adj = getAdjacencyAtLevel(test_index, 0, clusters);
-
-    for(auto& i : ret_adj)
-    {
-        if(i == -1)
-            std::cout << white;
-        else if (clusters[test_index].isPtr(i) == -1)
-            std::cout << red;
-        else
-            std::cout << blue;
-        std::cout << i << " ";
-    }
-    std::cout << reset << std::endl;
-
-    ret_adj = getAdjacencyAtLevel(test_index, 100, ret_adj, 0, clusters);
-
-    for(auto& i : ret_adj)
-    {
-        if(i == -1)
-            std::cout << white;
-        else if (clusters[test_index].isPtr(i) == -1)
-            std::cout << red;
-        else
-            std::cout << blue;
-        std::cout << i << " ";
-    }
-    std::cout << reset << std::endl;
-
+    test_dynamic_rc(parents, clusters);
 
     deleteRCtree(clusters);
 
@@ -210,6 +232,34 @@ int main(int argc, char* argv[]) {
 }
 
 
+    // auto ret_adj = getAdjacencyAtLevel(test_index, 0, clusters);
+
+    // for(auto& i : ret_adj)
+    // {
+    //     if(i == -1)
+    //         std::cout << white;
+    //     else if (clusters[test_index].isPtr(i) == -1)
+    //         std::cout << red;
+    //     else
+    //         std::cout << blue;
+    //     std::cout << i << " ";
+    // }
+    // std::cout << reset << std::endl;
+
+    // ret_adj = getAdjacencyAtLevel(test_index, 100, ret_adj, 0, clusters);
+
+    // for(auto& i : ret_adj)
+    // {
+    //     if(i == -1)
+    //         std::cout << white;
+    //     else if (clusters[test_index].isPtr(i) == -1)
+    //         std::cout << red;
+    //     else
+    //         std::cout << blue;
+    //     std::cout << i << " ";
+    // }
+    // std::cout << reset << std::endl;
+
 // const datatype defretval = 0.0f;
 
     // PathQuery(&clusters[0], &clusters[G.size()/2], 0.0f, [] (datatype a, datatype b) {
@@ -219,12 +269,7 @@ int main(int argc, char* argv[]) {
     // parlay::random_generator gen;
     // std::uniform_int_distribution<vertex> dis(0, graph_size-1);
 
-    // auto random_indices = parlay::tabulate(batch_insertion_size < graph_size ? batch_insertion_size : graph_size, [&] (vertex i) 
-    // {
-    //     auto r = gen[i];
-    //     auto random_index = dis(r);
-    //     return random_index;
-    // });
+    
 
     // auto delete_pairs = parlay::tabulate(random_indices.size(), [&] (vertex index)
     // {
