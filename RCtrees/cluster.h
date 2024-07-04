@@ -17,6 +17,7 @@ const short base_edge = 2;
 const short unary_cluster = 4;
 const short binary_cluster = 8;
 const short nullary_cluster = 16;
+const short IS_MIS_SET = 32;
 const short live = 256;
 const short carrying_weight = 512;
 const short internal = 1024;
@@ -82,7 +83,6 @@ public:
     T colour = -1;
     D data = -1.0;
     short state = 0; // unaffected, affected or update eligible
-    bool is_MIS = false;
     std::atomic<char> counter; // a node will not have more than 255 edges
     std::array<char, size> types;
     // char types[max_neighbours * 2];
@@ -106,8 +106,7 @@ public:
           data(other.data),
           counter(other.counter.load()), // Load the atomic value
           state(other.state),
-          contraction_time(other.contraction_time),
-          is_MIS(other.is_MIS)
+          contraction_time(other.contraction_time)
     {
         for(uint i = 0; i < this->size; i++)
         {
@@ -278,7 +277,10 @@ public:
         for(short i = 0; i < this->size; i+=2)
         {
             if(this->ptrs[i])
-                this->ptrs[i]->is_MIS = val;
+                if(val)
+                    this->ptrs[i]->state |= IS_MIS_SET;
+                else
+                    this->ptrs[i]->state &= (~IS_MIS_SET);
         }
     }
 
@@ -286,7 +288,7 @@ public:
     {
         for(short i = 0; i < this->size; i+=2)
         {
-            if(this->ptrs[i])
+            if(this->ptrs[i] && this->types[i] & neighbour_type)
                 this->ptrs[i]->colour = input_colour;
         }
     }
@@ -296,7 +298,7 @@ public:
         T max_colour = this->colour;
         for(short i = 0; i < this->size; i+=2)
         {
-            if(this->ptrs[i] && this->ptrs[i]->colour > max_colour)
+            if(this->ptrs[i] && this->ptrs[i]->colour > max_colour && this->types[i] & neighbour_type)
                 max_colour = this->ptrs[i]->colour;
         }
         if(max_colour == this->colour)
@@ -322,7 +324,7 @@ public:
     {
         for(short i = 0; i < this->size; i+=2)
         {
-            if(this->ptrs[i] && this->ptrs[i]->is_MIS)
+            if(this->ptrs[i] && this->ptrs[i]->state & IS_MIS_SET)
                 return true;
         }
         return false;

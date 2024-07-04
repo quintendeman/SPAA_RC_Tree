@@ -128,7 +128,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     }while(!(count > 1000));    
 
     if(count > 1000)
-        std::cout << red << "[dynamic] definitely went into an infinite loop" << std::endl; 
+        std::cout << red << "[dynamic] definitely went into an infinite loop" << reset << std::endl; 
 
     return;
 }

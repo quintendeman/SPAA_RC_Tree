@@ -232,7 +232,7 @@ void set_MIS(parlay::sequence<cluster<T,D>*> clusters, bool randomized = false)
         colour_clusters(clusters);
 
         parlay::parallel_for(0, clusters.size(), [&] (T v) {
-            clusters[v]->is_MIS = false;
+            clusters[v]->state &= (~IS_MIS_SET);
             clusters[v]->set_neighbour_mis(false);
         });
 
@@ -261,10 +261,10 @@ void set_MIS(parlay::sequence<cluster<T,D>*> clusters, bool randomized = false)
                 T v = result[i];
                 if(clusters[v]->get_neighbour_MIS() == true)
                 {
-                    clusters[v]->is_MIS = false;
+                    clusters[v]->state &= (~IS_MIS_SET);
                     return;
                 }
-                clusters[v]->is_MIS = true;
+                clusters[v]->state |= IS_MIS_SET;
             });
         }
     }
@@ -283,7 +283,11 @@ void set_MIS(parlay::sequence<cluster<T,D>*> clusters, bool randomized = false)
         });
 
         parlay::parallel_for(0, clusters.size(), [&] (T v) {
-            clusters[v]->is_MIS=clusters[v]->is_max_neighbour_colour();
+            bool flag = clusters[v]->is_max_neighbour_colour();
+            if(flag)
+                clusters[v]->state |= IS_MIS_SET;
+            else
+                clusters[v]->state &= (~IS_MIS_SET);
         });
 
     }
@@ -431,7 +435,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
 
         // Filter out an MIS of eligible nodes
         candidates = parlay::filter(eligible, [&] (cluster<T,D>* C) {
-            return (C->is_MIS);
+            return (C->state & IS_MIS_SET);
         });
 
         // std::cout << "candidates.size(): " << candidates.size() << std::endl;
