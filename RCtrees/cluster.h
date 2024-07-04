@@ -79,6 +79,7 @@ public:
     // cluster<T, D>* ptrs[max_neighbours * 2];
     // parlay::short_sequence<T> initial_adjacency = parlay::sequence<T>(3);
     std::array<T, max_neighbours> initial_adjacency;
+    std::array<T, max_neighbours> modified_adjacency;
     T index = -1;
     T colour = -1;
     D data = -1.0;
@@ -95,7 +96,7 @@ public:
             this->ptrs[i] = nullptr;
             this->types[i] = 0;
             if(i < max_neighbours)
-                this->initial_adjacency[i] = -1;
+                this->initial_adjacency[i] = this->modified_adjacency[i] = -1;
         }
     }
 
@@ -113,7 +114,7 @@ public:
             this->ptrs[i] = nullptr;
             this->types[i] = 0;
             if(i < max_neighbours)
-                this->initial_adjacency[i] = other.initial_adjacency[i];
+                this->initial_adjacency[i] = this->modified_adjacency[i] = other.initial_adjacency[i];
         }
         return;
     }

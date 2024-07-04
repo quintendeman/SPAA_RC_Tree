@@ -335,7 +335,6 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
             edge_cluster->state = base_edge | live;
             edge_cluster->data = defretval;
             edge_cluster->add_initial_neighbours(&base_clusters[w], &base_clusters[v]);
-            // std::cout << "[" << v << "] Edge added between " << v << "<->" << w << std::endl;
             _cluster.add_neighbour(&base_clusters[w], edge_cluster);
         }
     });
