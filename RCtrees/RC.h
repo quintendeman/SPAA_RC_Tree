@@ -325,9 +325,16 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
         _cluster.index = v;
         _cluster.state = base_vertex | live;
         
+        for(short i = 0; i < max_neighbours; i++)
+            if(i < G[v].size())
+                _cluster.adjacencies[i+1] = G[v][i];
+            else
+                _cluster.adjacencies[i+1] = -1;
+        _cluster.adjacencies[0] = 0;
+                
         for(const auto& w : G[v])
         {
-            _cluster.add_initial_adjacency(w);
+
             if(w < v)
                 continue;
             auto edge_cluster = cluster_allocator::alloc();
@@ -394,11 +401,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
 
     parlay::sequence<cluster<T,D>*> forest, candidates;
 
-    // Initially the forest of live nodes is all live nodes
-    forest = parlay::filter(all_cluster_ptrs, [&] (cluster<T,D>* C) {
-        return ((C->state & live));
-    });
-
+    
     bool first_time = true;
 
     // printTree(base_clusters);
@@ -410,7 +413,8 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
         // Shrink the forst as live nodes decrease
         if(first_time == true)
         {
-            
+            // Initially the forest of live nodes is all live nodes
+            forest = all_cluster_ptrs;
             first_time = false;
         }
         else
@@ -445,7 +449,6 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
         parlay::parallel_for(0, candidates.size(), [&] (T v) {
             cluster<T,D>* cluster_ptr = candidates[v];
             cluster_ptr->data = defretval;
-            // rake
             if(cluster_ptr->get_neighbour_count() == 0)
             {
                 cluster_ptr->state&=(~live);
@@ -505,9 +508,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
                 cluster_ptr->change_to_child(left_edge_ptr);
                 cluster_ptr->change_to_child(right_edge_ptr);
 
-                left_edge_ptr->state&=(~live);
-                right_edge_ptr->state&=(~live);
-
+                
                 cluster_ptr->state&=(~live);
 
                 cluster_ptr->state|=binary_cluster;

@@ -77,9 +77,7 @@ public:
     static const short size = max_neighbours*2;
     std::array<cluster<T, D>*, size> ptrs;
     // cluster<T, D>* ptrs[max_neighbours * 2];
-    // parlay::short_sequence<T> initial_adjacency = parlay::sequence<T>(3);
-    std::array<T, max_neighbours> initial_adjacency;
-    std::array<T, max_neighbours> modified_adjacency;
+    parlay::sequence<T> adjacencies = parlay::sequence<T>(max_neighbours + 1); // representing a graph -- dynamic! [level node node node level node node node]
     T index = -1;
     T colour = -1;
     D data = -1.0;
@@ -95,8 +93,6 @@ public:
         {
             this->ptrs[i] = nullptr;
             this->types[i] = 0;
-            if(i < max_neighbours)
-                this->initial_adjacency[i] = this->modified_adjacency[i] = -1;
         }
     }
 
@@ -113,8 +109,7 @@ public:
         {
             this->ptrs[i] = nullptr;
             this->types[i] = 0;
-            if(i < max_neighbours)
-                this->initial_adjacency[i] = this->modified_adjacency[i] = other.initial_adjacency[i];
+            this->adjacencies = other.adjacencies;
         }
         return;
     }
@@ -134,17 +129,6 @@ public:
         this->types[1] = neighbour_type;
     }
 
-
-    void add_initial_adjacency(T ngbr)
-    {
-        for(auto& n : this->initial_adjacency)
-            if(n == -1)
-            {
-                n = ngbr;
-                return;
-            }
-        return;
-    }
 
     short isPtr(T ngbr_index, short defretval = -1) const
     {
@@ -516,20 +500,12 @@ public:
             std::cout << reset << " ";
             std::cout << ")   ";
         }
-
-        std::cout << bright_blue << "[";
-        for(const auto& w : this->initial_adjacency)
-        {
-            if(this->isPtr(w) != -1)
-                std::cout << bright_blue;
-            else if (w == -1)
-                std::cout << bright_white;
-            else
-                std::cout << red;
-            std::cout << w << " ";
-        }
-        std::cout << blue << "\033[D]";
+        std::cout << bright_magenta << std::endl;
+        for(const auto& i : this->adjacencies)
+            std::cout << i << " ";
         std::cout << reset << std::endl;
+
+
         // std::cout << " colour(" << this->colour << ") ";
         std::cout << std::endl;
     }
