@@ -210,10 +210,9 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         }
     });
 
+    if(clusters.size() <= 300)
+        printTree(clusters);
 
-
-    // // for(const auto& ptr : aff_ptrs)
-    // //     ptr->print();
 
     parlay::parallel_for(0, delete_edges.size(), [&] (T i) {
         const auto& v = delete_edges[i].first;
@@ -222,7 +221,9 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         if(edgePtr == nullptr)
         {
             std::cout << red << "Empty edge" << reset << std::endl;
+            exit(1);
         }
+        std::cout << "delete " << v << " -- " << w << std::endl;
         cluster_allocator::destroy(edgePtr);
 
         // remove v from alternate adjacency AND ptrs/types
@@ -232,7 +233,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             {
                 clusters[v].alternate_adjacencies[i] = -1;
             }
-            else if (clusters[w].alternate_adjacencies[i] == v)
+            if (clusters[w].alternate_adjacencies[i] == v)
             {
                 clusters[w].alternate_adjacencies[i] = -1;            
             }
@@ -243,7 +244,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             {
                 clusters[v].types[i] = clusters[v].types[i+1] = deleted_type;
             }
-            if(clusters[w].ptrs[i] != nullptr && clusters[w].ptrs[i]->index)
+            if(clusters[w].ptrs[i] != nullptr && clusters[w].ptrs[i]->index == v)
             {
                 clusters[w].types[i] = clusters[w].types[i+1] = deleted_type;
             }
@@ -257,7 +258,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             auto& typ = cluster_ptr->types[i];
             if(typ == deleted_type)
             {
-                cluster_ptr->ptrs[i] = cluster_ptr->ptrs[i+1] = nullptr;
+                cluster_ptr->ptrs[i] = nullptr;
             }
         }
     });
