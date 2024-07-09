@@ -78,15 +78,16 @@ public:
     std::array<cluster<T, D>*, size> ptrs;
     // cluster<T, D>* ptrs[max_neighbours * 2];
     parlay::sequence<T> adjacencies = parlay::sequence<T>(max_neighbours + 1); // representing a graph -- dynamic! [level node node node level node node node]
+    parlay::sequence<T> alternate_adjacencies;
     T index = -1;
-    T colour = -1;
+    T colour = -1; 
+    std::atomic<T> counter; // a node will not have more than 255 edges
     D data = -1.0;
     short state = 0; // unaffected, affected or update eligible
-    std::atomic<char> counter; // a node will not have more than 255 edges
     std::array<char, size> types;
     // char types[max_neighbours * 2];
     unsigned char contraction_time = 0;
-
+    
     // Default constructor
     cluster() :  counter(0) {
         for(uint i = 0; i < this->size; i++)
@@ -456,8 +457,12 @@ public:
             std::cout << red;
         else if (this->state & unary_cluster)
             std::cout << cyan;
-        else
+        else if (this->state & nullary_cluster)
             std::cout << green;
+        else if (this->state & live)
+            std::cout << bright_yellow;
+        else
+            std::cout << reset;
         std::cout << "Index: " << this->index << reset;
         std::cout << blue << "[" << (int) this->get_height()  << "]" << reset;
         std::cout << yellow << "[" << this->data << "]" << reset;
@@ -500,10 +505,18 @@ public:
             std::cout << reset << " ";
             std::cout << ")   ";
         }
-        std::cout << bright_magenta << std::endl;
+        std::cout << std::endl;
+        std::cout << bright_magenta;
         for(const auto& i : this->adjacencies)
             std::cout << i << " ";
         std::cout << reset << std::endl;
+
+        std::cout << bright_green;
+        for(const auto& i : this->alternate_adjacencies)
+            std::cout << i << " ";
+        std::cout << reset << std::endl;
+
+        
 
 
         // std::cout << " colour(" << this->colour << ") ";

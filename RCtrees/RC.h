@@ -37,7 +37,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
         std::uniform_real_distribution<double> dis(0, 1);
         auto random_val = dis(gen);
 
-        static const double anywhere_left_weight = 10;
+        static const double anywhere_left_weight = 45;
         static const double immediate_left_weight = 30;
         static const double root_weight = 0.0;
 
@@ -99,17 +99,28 @@ void degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
 
 
     parlay::parallel_for(0, parents.size(), [&] (T v) {
-        if(counts[parents[v]].load() >= (max_degree))
-        {
-            parents[v] = v;
-        }
+        if(v == parents[v])
+            return;
         T parent_count = counts[parents[v]].fetch_add(1);
-        if(parent_count >= (max_degree - 1))
+        if(parent_count < (max_degree - 2))
         {
-            parents[v] = v;
+            return;
         }
+        else if (parent_count == (max_degree - 1))
+        {
+            if(parents[v] != parents[parents[v]])
+                parents[v] = v;
+        }
+        else
+            parents[v] = v;
     });
-
+    // if(parents.size() <= 100)
+    // {
+    //     std::cout << yellow;
+    //     for(T i = 0; i < counts.size(); i++)
+    //         std::cout << i << " " << counts[i].load() << std::endl;
+    //     std::cout << reset;
+    // }
 }
 
 
@@ -324,13 +335,6 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
         auto& _cluster = base_clusters[v];
         _cluster.index = v;
         _cluster.state = base_vertex | live;
-        
-        for(short i = 0; i < max_neighbours; i++)
-            if(i < G[v].size())
-                _cluster.adjacencies[i+1] = G[v][i];
-            else
-                _cluster.adjacencies[i+1] = -1;
-        _cluster.adjacencies[0] = 0;
                 
         for(const auto& w : G[v])
         {
@@ -367,6 +371,15 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
                 }
             }
         }
+
+        for(uint i = 0; i < max_neighbours; i++)
+        {
+            if(cluster_ptr->ptrs[i*2] != nullptr)
+                cluster_ptr->adjacencies[i+1] = cluster_ptr->ptrs[i*2]->index;
+            else
+                cluster_ptr->adjacencies[i+1] = -1;
+        }
+        cluster_ptr->adjacencies[0] = 0;
 
     });
 
@@ -406,7 +419,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
 
     // printTree(base_clusters);
 
-    unsigned char contraction_round = 0;
+    unsigned char contraction_round = 1;
 
     do
     {
@@ -423,7 +436,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
                 return ((C->state & live));
             });
         }
-        
+         
         // std::cout << "forest.size(): " << forest.size() << std::endl;
 
         // Eligible nodes are those with 0, 1 or 2 neighbours
@@ -516,6 +529,35 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
                 cluster_ptr->contraction_time = contraction_round;
             }
         });
+
+        parlay::parallel_for(0, forest.size(), [&] (T v) {
+            auto& cluster_ptr = forest[v];
+            bool adjustment_needed = false;
+            for(auto i = 0; i < cluster_ptr->size; i+=2)
+            {
+                T val_to_compare;
+                if(cluster_ptr->ptrs[i] == nullptr)
+                    val_to_compare = -1;
+                else
+                    val_to_compare = cluster_ptr->ptrs[i]->index;
+                short check_index = cluster_ptr->adjacencies.size() - (max_neighbours - i/2);
+                if(cluster_ptr->adjacencies[check_index] != val_to_compare)
+                {
+                    adjustment_needed = true;
+                    break;
+                }
+            }
+            if(adjustment_needed)
+            {
+            cluster_ptr->adjacencies.push_back(contraction_round + 1);
+            for(auto i = 0; i < cluster_ptr->size; i+=2)
+                if(cluster_ptr->ptrs[i] != nullptr)
+                    cluster_ptr->adjacencies.push_back(cluster_ptr->ptrs[i]->index);
+                else
+                    cluster_ptr->adjacencies.push_back(-1);
+            }
+        });
+
         // printTree(base_clusters);
         // std::cout << "Forest size: " << forest.size() << std::endl;
         contraction_round++;
@@ -804,7 +846,7 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
  * Exploits the fact that an edge [v,w] must be the child of v or w in an RC tree
 */
 template<typename T, typename D>
-cluster<T, D>* getEdge(T v, T w, parlay::sequence<cluster<T, D>>& clusters)
+cluster<T, D>* getEdge(const T v, const T w, parlay::sequence<cluster<T, D>>& clusters)
 {
 
     if(v == w)

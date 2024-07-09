@@ -116,10 +116,17 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
         return random_index;
     });
 
+    random_indices = parlay::remove_duplicates(random_indices);
+
     // create deletion edges
     auto delete_edges = parlay::tabulate(random_indices.size(), [&] (vertex i) {
+        auto ret_pair = std::make_pair(random_indices[i], parents[random_indices[i]]); 
         parents[random_indices[i]] = random_indices[i];
-        return std::make_pair(random_indices[i], parents[random_indices[i]]);
+        return ret_pair;
+    });
+
+    delete_edges = parlay::filter(delete_edges, [] (auto edge) {
+        return edge.first != edge.second;
     });
 
     // create insertion edges
@@ -128,7 +135,7 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
         auto random_number = dis(r);
 
         auto& child_index = random_number;
-        auto random_parent = child_index == 0 ? 0 : dis(r) % child_index;
+        auto random_parent = (child_index == 0) ? 0 : dis(r) % child_index;
 
         datatype new_val = (datatype) graph_size * 10 * child_index; // some large value
 
@@ -144,6 +151,8 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
         const auto& child_index = std::get<0>(edge);
         return child_index != parents[child_index];
     });
+
+    std::cout << "There are " << red << delete_edges.size() << reset << " delete edges and " << green << insert_edges.size() << reset << " add edges" << std::endl;
 
     batchInsertEdge(delete_edges, insert_edges, clusters);
 
@@ -220,7 +229,11 @@ int main(int argc, char* argv[]) {
 
     test_dynamic_rc(parents, clusters);
 
-    deleteRCtree(clusters);
+    if(graph_size <= 100)
+        printTree(clusters);
+
+
+    // deleteRCtree(clusters);
 
     if (print_creation) {
         std::cout << graph_size << "," << std::setprecision(6) << creation_time.count() << std::endl;
