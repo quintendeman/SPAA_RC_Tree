@@ -141,8 +141,6 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     });
 
     auto aff_ptrs = parlay::flatten(temp_aff_ptrs);
-    
-
 
     parlay::parallel_for(0, aff_ptrs.size(), [&] (T ii) {
         auto& ptr = aff_ptrs[ii];
@@ -223,7 +221,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             std::cout << red << "Empty edge" << reset << std::endl;
             exit(1);
         }
-        std::cout << "delete " << v << " -- " << w << std::endl;
+        // std::cout << "delete " << v << " -- " << w << std::endl;
         cluster_allocator::destroy(edgePtr);
 
         // remove v from alternate adjacency AND ptrs/types
@@ -263,105 +261,113 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         }
     });
 
-
-
     if(clusters.size() <= 300)
         printTree(clusters);
 
-    // for(short cnt = 0; cnt < max_neighbours; cnt++)
-    // {
-    //     parlay::parallel_for(0, add_edges.size(), [&] (T i) {
-    //         auto v = std::get<0>(add_edges[i]);
-    //         auto w = std::get<1>(add_edges[i]);
-    //         if(w < v)
-    //             std::swap(v, w);
-    //         for(short i = 1; i < max_neighbours+1; i++)
-    //         {
-    //             if(clusters[v].alternate_adjacencies[i] == w)
-    //             {
-    //                 return;
-    //             }
-    //         }
-    //         clusters[v].counter = i+1;
-    //     });
 
-    //     parlay::parallel_for(0, add_edges.size(), [&] (T ii){
-    //         auto v = std::get<0>(add_edges[ii]);
-    //         auto w = std::get<1>(add_edges[ii]);
-    //         if(w < v)
-    //             std::swap(v, w);
-    //         if(clusters[v].counter == ii+1)
-    //         {
-    //             auto new_edge = cluster_allocator::alloc();
-    //             new_edge->index = -1;
-    //             new_edge->data = std::get<2>(add_edges[ii]);
-    //             new_edge->state = live | base_edge;
-    //             for(auto i = 0; i < max_neighbours + 1; i++)
-    //             {
-    //                 if(i > 0 && clusters[v].alternate_adjacencies[i] == -1)
-    //                 {
-    //                     clusters[v].alternate_adjacencies[i] = w;
-    //                     clusters[v].add_neighbour(&clusters[w], new_edge);
-    //                     break;
-    //                 }
-    //             }
+    // ADDING -
 
-    //             clusters[v].counter = 0;
-    //         }
-    //     });
-    // }
+    for(short cnt = 0; cnt < max_neighbours; cnt++)
+    {
+        parlay::parallel_for(0, add_edges.size(), [&] (T i) {
+            auto v = std::get<0>(add_edges[i]);
+            auto w = std::get<1>(add_edges[i]);
+            if(w < v)
+                std::swap(v, w);
+            for(short i = 1; i < max_neighbours+1; i++)
+            {
+                if(clusters[v].alternate_adjacencies[i] == w)
+                {
+                    return;
+                }
+            }
+            clusters[v].counter = i+1;
+        });
 
-    // for(short cnt = 0; cnt < max_neighbours; cnt++)
-    // {
-    //     parlay::parallel_for(0, add_edges.size(), [&] (T i) {
-    //         auto v = std::get<0>(add_edges[i]);
-    //         auto w = std::get<1>(add_edges[i]);
-    //         if(w < v)
-    //             std::swap(v, w);
+        parlay::parallel_for(0, add_edges.size(), [&] (T ii){
+            auto v = std::get<0>(add_edges[ii]);
+            auto w = std::get<1>(add_edges[ii]);
+            if(w < v)
+                std::swap(v, w);
+            if(clusters[v].counter == ii+1)
+            {
+                auto new_edge = cluster_allocator::alloc();
+                new_edge->index = -1;
+                new_edge->data = std::get<2>(add_edges[ii]);
+                new_edge->state = live | base_edge;
+                // std::cout << "Added " << v << " -- " << w << std::endl;
+                for(auto i = 0; i < max_neighbours + 1; i++)
+                {
+                    if(i > 0 && clusters[v].alternate_adjacencies[i] == -1)
+                    {
+                        clusters[v].alternate_adjacencies[i] = w;
+                        clusters[v].add_neighbour(&clusters[w], new_edge);
+                        break;
+                    }
+                }
+
+                clusters[v].counter = 0;
+            }
+        });
+    }
+
+    for(short cnt = 0; cnt < max_neighbours; cnt++)
+    {
+        parlay::parallel_for(0, add_edges.size(), [&] (T i) {
+            auto v = std::get<0>(add_edges[i]);
+            auto w = std::get<1>(add_edges[i]);
+            if(w < v)
+                std::swap(v, w);
             
-    //         for(short i = 1; i < max_neighbours+1; i++)
-    //         {
-    //             if(clusters[w].alternate_adjacencies[i] == v)
-    //             {
-    //                 return;
-    //             }
-    //         }
-    //         clusters[w].counter = i+1;
-    //     });
-    //     parlay::parallel_for(0, add_edges.size(), [&] (T ii){
-    //         auto v = std::get<0>(add_edges[ii]);
-    //         auto w = std::get<1>(add_edges[ii]);
-    //         if(w < v)
-    //             std::swap(v, w);
-    //         if(clusters[w].counter == ii+1)
-    //         {
-    //             // find other edge
-    //             cluster<T,D>* edge_ptr = nullptr;
-    //             for(uint i = 0; i < clusters[v].size; i+=2)
-    //             {
-    //                 auto& ptr = clusters[v].ptrs[i];
-    //                 if(ptr == &clusters[w])
-    //                     edge_ptr = clusters[v].ptrs[i+1];
-    //             }
-    //             if(edge_ptr == nullptr)
-    //             {
-    //                 std::cout << red << "NULLPTR " << reset << std::endl;
-    //                 exit(1);
-    //             }
+            for(short i = 1; i < max_neighbours+1; i++)
+            {
+                if(clusters[w].alternate_adjacencies[i] == v)
+                {
+                    return;
+                }
+            }
+            clusters[w].counter = i+1;
+        });
+        parlay::parallel_for(0, add_edges.size(), [&] (T ii){
+            auto v = std::get<0>(add_edges[ii]);
+            auto w = std::get<1>(add_edges[ii]);
+            if(w < v)
+                std::swap(v, w);
+            if(clusters[w].counter == ii+1)
+            {
+                // find other edge
+                cluster<T,D>* edge_ptr = nullptr;
+                for(uint i = 0; i < clusters[v].size; i+=2)
+                {
+                    auto& ptr = clusters[v].ptrs[i];
+                    if(ptr == &clusters[w])
+                        edge_ptr = clusters[v].ptrs[i+1];
+                }
+                if(edge_ptr == nullptr)
+                {
+    
+                    std::cout << red << "NULLPTR " << v << " -- " << w << reset << std::endl;
+                    clusters[v].print();
+                    clusters[w].print();
 
-    //             for(short i = 0; i < max_neighbours + 1; i++)
-    //             {
-    //                 if(i > 0 && clusters[w].alternate_adjacencies[i] == -1)
-    //                 {
-    //                     clusters[w].alternate_adjacencies[i] = v;                
-    //                     clusters[w].add_neighbour(&clusters[v], edge_ptr);
-    //                 }
-    //             }
-    //             clusters[w].counter = 0;
-    //         }
-    //     });
-    // }
+                    exit(1);
+                }
 
+                for(short i = 0; i < max_neighbours + 1; i++)
+                {
+                    if(i > 0 && clusters[w].alternate_adjacencies[i] == -1)
+                    {
+                        clusters[w].alternate_adjacencies[i] = v;                
+                        clusters[w].add_neighbour(&clusters[v], edge_ptr);
+                    }
+                }
+                clusters[w].counter = 0;
+            }
+        });
+    }
+
+    if(clusters.size() <= 300)
+        printTree(clusters);
 
     // new loop
     // write it in w's list

@@ -139,12 +139,11 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
 
         datatype new_val = (datatype) graph_size * 10 * child_index; // some large value
 
-        parents[child_index] = random_parent;
         return std::tuple<vertex, vertex, datatype>(child_index, random_parent, new_val);
 
     });
 
-    degree_cap_parents(parents, max_degree);
+    degree_cap_add_edge(parents, max_degree, insert_edges);
 
     // remove edges that were leading to an overflow
     insert_edges = parlay::filter(insert_edges, [&] (auto edge) {

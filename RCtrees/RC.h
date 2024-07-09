@@ -114,15 +114,42 @@ void degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
         else
             parents[v] = v;
     });
-    // if(parents.size() <= 100)
-    // {
-    //     std::cout << yellow;
-    //     for(T i = 0; i < counts.size(); i++)
-    //         std::cout << i << " " << counts[i].load() << std::endl;
-    //     std::cout << reset;
-    // }
 }
 
+template<typename T, typename D>
+void degree_cap_add_edge(parlay::sequence<T> &parents, const T max_degree, parlay::sequence<std::tuple<T, T, D> >& tuples)
+{
+    parlay::sequence<T> counts = parlay::sequence<T>(parents.size(), 0);
+
+    std::vector<std::mutex> mutexes(counts.size());
+
+
+    parlay::parallel_for(0, counts.size(), [&] (T chld) {
+        if(parents[chld] != chld)
+        {
+            mutexes[parents[chld]].lock();
+            counts[parents[chld]]++;
+            mutexes[parents[chld]].unlock();
+        }
+    });
+
+
+    tuples = parlay::filter(tuples, [&] (auto tple) {
+        auto& child = std::get<0>(tple);
+        auto& parent = std::get<1>(tple);
+        mutexes[parent].lock();
+        if(counts[parent] < max_neighbours)
+        {
+            counts[parent]++;
+            mutexes[parent].unlock();
+            return true;
+        }
+        mutexes[parent].unlock();
+        return false;
+    });
+
+    return;
+}
 
 /**
  * Extracts a particular bit (counted from the right) from an element
