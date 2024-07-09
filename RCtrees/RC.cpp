@@ -223,13 +223,13 @@ int main(int argc, char* argv[]) {
     
     vertex test_index = std::sqrt(graph_size);
 
-    if(graph_size <= 100)
-        printTree(clusters);
+    // if(graph_size <= 100)
+    //     printTree(clusters);
 
     test_dynamic_rc(parents, clusters);
 
-    if(graph_size <= 100)
-        printTree(clusters);
+    // if(graph_size <= 100)
+    //     printTree(clusters);
 
 
     // deleteRCtree(clusters);

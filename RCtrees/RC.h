@@ -37,7 +37,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
         std::uniform_real_distribution<double> dis(0, 1);
         auto random_val = dis(gen);
 
-        static const double anywhere_left_weight = 45;
+        static const double anywhere_left_weight = 1;
         static const double immediate_left_weight = 30;
         static const double root_weight = 0.0;
 
@@ -102,14 +102,9 @@ void degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
         if(v == parents[v])
             return;
         T parent_count = counts[parents[v]].fetch_add(1);
-        if(parent_count < (max_degree - 2))
+        if(parent_count < (max_degree - 1))
         {
             return;
-        }
-        else if (parent_count == (max_degree - 1))
-        {
-            if(parents[v] != parents[parents[v]])
-                parents[v] = v;
         }
         else
             parents[v] = v;
@@ -133,14 +128,19 @@ void degree_cap_add_edge(parlay::sequence<T> &parents, const T max_degree, parla
         }
     });
 
+    // std::cout << blue;
+    // for(const auto& i : counts)
+    //     std::cout << i << " ";
+    // std::cout << reset << std::endl;
 
     tuples = parlay::filter(tuples, [&] (auto tple) {
         auto& child = std::get<0>(tple);
         auto& parent = std::get<1>(tple);
         mutexes[parent].lock();
-        if(counts[parent] < max_neighbours)
+        if(counts[parent] < max_neighbours-1)
         {
             counts[parent]++;
+            parents[child] = parent;
             mutexes[parent].unlock();
             return true;
         }
