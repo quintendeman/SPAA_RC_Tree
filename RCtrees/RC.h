@@ -39,7 +39,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
 
         static const double anywhere_left_weight = 1;
         static const double immediate_left_weight = 30;
-        static const double root_weight = 0.0;
+        static const double root_weight = 0.0; /* warning, does not represet probability of a null cluster as degree capping may create more forests */
 
         static const double anywhere_prob = (anywhere_left_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
         static const double root_prob = anywhere_prob + (root_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
@@ -97,18 +97,27 @@ void degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
        return std::atomic<T>(0); // Initialize each element with the value 0
     });
 
+    std::vector<std::mutex> mutexes(parents.size());
 
-    parlay::parallel_for(0, parents.size(), [&] (T v) {
-        if(v == parents[v])
-            return;
-        T parent_count = counts[parents[v]].fetch_add(1);
-        if(parent_count < (max_degree - 1))
+    parlay::parallel_for(0, parents.size(), [&] (T chld) {
+        auto parent = parents[chld];
+        if(parent != chld)
         {
-            return;
+            mutexes[parent].lock();
+            if(counts[parent] < max_neighbours - 2)
+            {
+                counts[parents[chld]]++;
+            }
+            else if ((counts[parent] == (max_neighbours - 1)) && (parents[parent] == parent))
+            {
+                counts[parents[chld]]++;
+            }
+            else
+                parents[chld] = chld;
+            mutexes[parent].unlock();
         }
-        else
-            parents[v] = v;
     });
+
 }
 
 template<typename T, typename D>
@@ -398,16 +407,7 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
                 }
             }
         }
-
-        for(uint i = 0; i < max_neighbours; i++)
-        {
-            if(cluster_ptr->ptrs[i*2] != nullptr)
-                cluster_ptr->adjacencies[i+1] = cluster_ptr->ptrs[i*2]->index;
-            else
-                cluster_ptr->adjacencies[i+1] = -1;
-        }
-        cluster_ptr->adjacencies[0] = 0;
-
+        
     });
 
 
@@ -444,9 +444,8 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
     
     bool first_time = true;
 
-    // printTree(base_clusters);
 
-    unsigned char contraction_round = 1;
+    unsigned char contraction_round = 0;
 
     do
     {
@@ -454,24 +453,29 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
         if(first_time == true)
         {
             // Initially the forest of live nodes is all live nodes
-            forest = all_cluster_ptrs;
+            forest = parlay::tabulate(all_cluster_ptrs.size(), [&] (T i) {
+                all_cluster_ptrs[i]->add_level(live, 0);
+                return all_cluster_ptrs[i];
+            });
             first_time = false;
         }
         else
         {
             forest = parlay::filter(forest, [&] (cluster<T,D>* C) {
-                return ((C->state & live));
+                if(C->state & live)
+                {
+                    C->add_level(live, contraction_round);
+                    return true;
+                }
+                return false;
             });
         }
          
-        // std::cout << "forest.size(): " << forest.size() << std::endl;
-
         // Eligible nodes are those with 0, 1 or 2 neighbours
         auto eligible = parlay::filter(forest, [&] (cluster<T,D>* C) {
             return (C->get_neighbour_count() <= 2);
         });
 
-        // std::cout << "eligible.size(): " << eligible.size() << std::endl;
 
         // Set the flag is_MIS amongst them
         set_MIS(eligible, randomized = randomized);
@@ -480,10 +484,6 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
         candidates = parlay::filter(eligible, [&] (cluster<T,D>* C) {
             return (C->state & IS_MIS_SET);
         });
-
-        // std::cout << "candidates.size(): " << candidates.size() << std::endl;
-
-        // printTree(base_clusters);
 
         // do rake and compress
         parlay::parallel_for(0, candidates.size(), [&] (T v) {
@@ -557,43 +557,12 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
             }
         });
 
-        parlay::parallel_for(0, forest.size(), [&] (T v) {
-            auto& cluster_ptr = forest[v];
-            bool adjustment_needed = false;
-            for(auto i = 0; i < cluster_ptr->size; i+=2)
-            {
-                T val_to_compare;
-                if(cluster_ptr->ptrs[i] == nullptr)
-                    val_to_compare = -1;
-                else
-                    val_to_compare = cluster_ptr->ptrs[i]->index;
-                short check_index = cluster_ptr->adjacencies.size() - (max_neighbours - i/2);
-                if(cluster_ptr->adjacencies[check_index] != val_to_compare)
-                {
-                    adjustment_needed = true;
-                    break;
-                }
-            }
-            if(adjustment_needed)
-            {
-            cluster_ptr->adjacencies.push_back(contraction_round + 1);
-            for(auto i = 0; i < cluster_ptr->size; i+=2)
-                if(cluster_ptr->ptrs[i] != nullptr)
-                    cluster_ptr->adjacencies.push_back(cluster_ptr->ptrs[i]->index);
-                else
-                    cluster_ptr->adjacencies.push_back(-1);
-            }
-        });
-
         // printTree(base_clusters);
         // std::cout << "Forest size: " << forest.size() << std::endl;
         contraction_round++;
     }while(forest.size());
 
-    // not necessary anynmore!
-    // if(do_height == true)
-    // set_heights(all_cluster_ptrs);
-
+    
 }
 
 

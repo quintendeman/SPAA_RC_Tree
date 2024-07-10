@@ -10,19 +10,8 @@
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
 #include "../examples/counting_sort.h"
+#include "adjacency_linked_list.h"
 
-const short empty_type = 0;
-const short base_vertex = 1;
-const short base_edge = 2;
-const short unary_cluster = 4;
-const short binary_cluster = 8;
-const short nullary_cluster = 16;
-const short IS_MIS_SET = 32;
-const short live = 256;
-const short carrying_weight = 512;
-const short internal = 1024;
-const short affected = 2048;
-const short adjacency_changed = 4096;
 
 
 const char neighbour_type = 1;
@@ -32,7 +21,6 @@ const char edge_type = 8;
 const char added_type = 16;
 const char deleted_type = 32;
 
-const int max_neighbours = 3;
 
 
 const char* reset = "\033[0m";
@@ -76,9 +64,8 @@ struct cluster
 public:
     static const short size = max_neighbours*2;
     std::array<cluster<T, D>*, size> ptrs;
-    // cluster<T, D>* ptrs[max_neighbours * 2];
-    parlay::sequence<T> adjacencies = parlay::sequence<T>(max_neighbours + 1); // representing a graph -- dynamic! [level node node node level node node node]
-    parlay::sequence<T> alternate_adjacencies;
+    adjacency_list<T> adjacency;
+    adjacency_list<T> alternate_adjacency;
     T index = -1;
     T colour = -1; 
     std::atomic<T> counter; // a node will not have more than 255 edges
@@ -110,7 +97,6 @@ public:
         {
             this->ptrs[i] = nullptr;
             this->types[i] = 0;
-            this->adjacencies = other.adjacencies;
         }
         return;
     }
@@ -143,6 +129,19 @@ public:
         if(ngbr_ptr == nullptr)
             return defretval;
         return this->isPtr(ngbr_ptr->index, defretval);
+    }
+
+    void add_level(short state, unsigned char contraction_time)
+    {
+        std::array<T, max_neighbours> arr;
+        for(short i = 0; i <= this->size; i+=2)
+        {
+            if(this->ptrs[i] != nullptr)
+                arr[i/2] = ptrs[i]->index;
+            else
+                arr[i/2] = -1;
+        }
+        this->adjacency.add_level(arr, state, contraction_time);
     }
 
 
@@ -505,19 +504,22 @@ public:
             std::cout << reset << " ";
             std::cout << ")   ";
         }
-        std::cout << std::endl;
-        std::cout << bright_magenta;
-        for(const auto& i : this->adjacencies)
-            std::cout << i << " ";
+        if(this->adjacency.size())
+        {
+            std::cout << magenta << std::endl;
+            for(uint i = 0; i < this->adjacency.size(); i++)
+            {
+                std::cout << "[ ";
+                for(uint j = 0; j < max_neighbours; j++)
+                {
+                    auto ptr = this->adjacency[i];
+                    
+                    std::cout << (*this->adjacency[i])[j] << " ";
+                }
+                std::cout << "] ";
+            } 
         std::cout << reset << std::endl;
-
-        std::cout << bright_green;
-        for(const auto& i : this->alternate_adjacencies)
-            std::cout << i << " ";
-        std::cout << reset << std::endl;
-
-        
-
+        }
 
         // std::cout << " colour(" << this->colour << ") ";
         std::cout << std::endl;

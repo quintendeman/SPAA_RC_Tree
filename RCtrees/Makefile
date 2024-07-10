@@ -10,7 +10,7 @@ SRC = RC.cpp
 all: $(TARGET)
 
 # Rule to build the target
-$(TARGET): $(SRC) RC.h cluster.h RCdynamic.h
+$(TARGET): $(SRC) RC.h cluster.h RCdynamic.h adjacency_linked_list.h
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $(TARGET) $(SRC)
 
 # Clean up build files

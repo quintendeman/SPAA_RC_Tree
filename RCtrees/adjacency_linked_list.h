@@ -1,0 +1,169 @@
+#ifndef ADJ_LL_H
+#define ADJ_LL_H
+
+#include "cluster.h"
+#include <parlay/alloc.h>
+
+
+const short empty_type = 0;
+const short base_vertex = 1;
+const short base_edge = 2;
+const short unary_cluster = 4;
+const short binary_cluster = 8;
+const short nullary_cluster = 16;
+const short IS_MIS_SET = 32;
+const short live = 64;
+const short carrying_weight = 128;
+const short internal = 256;
+const short affected = 512;
+const short adjacency_changed = 1024;
+const short all_contracted_affected = 2048;
+
+const int max_neighbours = 3;
+
+
+template <typename T>
+struct node
+{
+    std::array<T, max_neighbours> adjacents; 
+    node* next = nullptr;
+    node* prev = nullptr;
+    short state = 0; // example value
+    unsigned char contraction_level = 0;
+    
+    node(std::array<T, max_neighbours> arr, short state_val, unsigned char contraction_level_val, node* next_ptr, node* prev_ptr)
+        : adjacents(arr), state(state_val), contraction_level(contraction_level_val), next(next_ptr), prev(prev_ptr)
+    {
+        
+    }
+    T& operator[](short index)
+    {
+        return this->adjacents[index];
+    }
+};
+
+template <typename T>
+class adjacency_list
+{
+    using node_allocator = parlay::type_allocator<node<T>>;
+    private:
+        node<T>* head;
+        node<T>* tail;
+        unsigned char numel;
+
+        
+
+    public:
+        adjacency_list(void)
+        {
+            this->head = nullptr;
+            this->tail = nullptr;
+            this->numel = 0;
+        }
+        adjacency_list(std::array<T, max_neighbours> arr)
+        {
+            this->head = node_allocator::create(arr, live, 0, nullptr, nullptr);
+            // new node(arr, live, 0, nullptr, nullptr);/
+            this->tail = this->head;
+            this->numel = 1;
+        }
+
+        node<T>* add_tail(std::array<T, max_neighbours> arr, short state, unsigned char level)
+        {
+            if(this->numel == 0)
+            {
+                this->head = node_allocator::create(arr, live, 0, nullptr, nullptr);
+                // new node(arr, live, 0, nullptr, nullptr);/
+                this->tail = this->head;
+                this->numel = 1;
+                return this->head;
+            }
+            auto new_node = node_allocator::create(arr, state, level, nullptr, this->tail);
+            this->tail->next = new_node;
+            this->tail = new_node;
+            this->numel++;
+            return this->tail;
+        }
+        
+        node<T>* add_level(std::array<T, max_neighbours> arr, short state, unsigned char contraction_time)
+        {
+            return this->add_tail(arr, state, contraction_time);
+        }
+
+        unsigned char size(void)
+        {
+            return this->numel;
+        }
+        
+
+        node<T>* delete_tail()
+        {
+            if(this->numel == 0)
+            {
+                return nullptr;
+            }
+            auto new_tail = this->tail->prev;
+            node_allocator::destroy(this->tail);
+            this->tail = new_tail;
+            this->numel--;
+            if(this->numel == 0)
+                this->head = nullptr;
+            else
+                this->tail->next = nullptr;
+            return this->tail;
+        }
+
+        node<T>* operator[](unsigned char level) const
+        {
+            if(this->numel == 0)
+                return nullptr;
+            auto ret_ptr = this->head;
+            while(ret_ptr->contraction_level != level)
+                ret_ptr = ret_ptr->next;
+            return ret_ptr;
+        }
+
+        node<T>* adopt(adjacency_list* alt_adj)
+        {
+            this->head = alt_adj->head;
+            this->tail = alt_adj->tail;
+            this->numel = alt_adj->size();
+            alt_adj->clear_vars();
+        }
+
+        void clear_vars(void)
+        {
+            this->numel = 0;
+            this->head = nullptr;
+            this->tail = nullptr;
+        }
+
+        void clear_all(void)
+        {
+            while(this->delete_tail() != nullptr);
+        }    
+
+        node<T>* get_head()
+        {
+            return this->head;
+        }
+        
+        node<T>* get_tail()
+        {
+            return this->tail;
+        }
+
+        ~adjacency_list(void)
+        {
+            while(this->delete_tail() != nullptr);
+        }
+
+
+
+
+};
+
+
+
+
+#endif
