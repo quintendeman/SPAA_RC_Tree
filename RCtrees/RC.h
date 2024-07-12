@@ -137,11 +137,7 @@ void degree_cap_add_edge(parlay::sequence<T> &parents, const T max_degree, parla
         }
     });
 
-    // std::cout << blue;
-    // for(const auto& i : counts)
-    //     std::cout << i << " ";
-    // std::cout << reset << std::endl;
-
+    
     tuples = parlay::filter(tuples, [&] (auto tple) {
         auto& child = std::get<0>(tple);
         auto& parent = std::get<1>(tple);

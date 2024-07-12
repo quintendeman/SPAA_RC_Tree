@@ -144,6 +144,19 @@ public:
         this->adjacency.add_level(arr, state, contraction_time);
     }
 
+    void add_alternate_level(short state, unsigned char contraction_time)
+    {
+        std::array<T, max_neighbours> arr;
+        for(short i = 0; i <= this->size; i+=2)
+        {
+            if(this->ptrs[i] != nullptr)
+                arr[i/2] = ptrs[i]->index;
+            else
+                arr[i/2] = -1;
+        }
+        this->alternate_adjacency.add_level(arr, state, contraction_time);    
+    }
+
 
     // index of neighbour if successful, -1 if not
     // Note, if that pointer already exists, set its type to neighbour
@@ -515,6 +528,22 @@ public:
                     auto ptr = this->adjacency[i];
                     
                     std::cout << (*this->adjacency[i])[j] << " ";
+                }
+                std::cout << "] ";
+            } 
+        std::cout << reset << std::endl;
+        }
+        if(this->alternate_adjacency.size())
+        {
+            std::cout << yellow << std::endl;
+            for(uint i = 0; i < this->alternate_adjacency.size(); i++)
+            {
+                std::cout << "[ ";
+                for(uint j = 0; j < max_neighbours; j++)
+                {
+                    auto ptr = this->alternate_adjacency[i];
+                    
+                    std::cout << (*this->alternate_adjacency[i])[j] << " ";
                 }
                 std::cout << "] ";
             } 

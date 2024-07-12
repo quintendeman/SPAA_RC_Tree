@@ -90,6 +90,11 @@ class adjacency_list
             return this->add_tail(arr, state, contraction_time);
         }
 
+        node<T>* add_level(node<T>* node_ptr)
+        {
+            return this->add_tail(node_ptr->arr, node_ptr->state, node_ptr->contraction_level);
+        }
+
         unsigned char size(void)
         {
             return this->numel;
@@ -113,6 +118,20 @@ class adjacency_list
             return this->tail;
         }
 
+        node<T>* copy_till_level(adjacency_list* adj, const unsigned char& level)
+        {
+            this->clear_all(); // assume that there is nothing in this list
+
+            node<T>* other_head = adj->get_head();
+            while(other_head != nullptr && other_head->contraction_level < level)
+            {
+                this->add_level(other_head);
+                other_head = other_head->next;
+            }
+            
+            return this->get_tail();
+        }
+
         node<T>* operator[](unsigned char level) const
         {
             if(this->numel == 0)
@@ -124,7 +143,8 @@ class adjacency_list
         }
 
         node<T>* adopt(adjacency_list* alt_adj)
-        {
+        {  
+            this->clear_all();
             this->head = alt_adj->head;
             this->tail = alt_adj->tail;
             this->numel = alt_adj->size();
@@ -155,7 +175,7 @@ class adjacency_list
 
         ~adjacency_list(void)
         {
-            while(this->delete_tail() != nullptr);
+            this->clear_all();
         }
 
 
