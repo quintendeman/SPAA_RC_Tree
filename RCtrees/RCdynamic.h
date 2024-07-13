@@ -254,15 +254,15 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
                 newEdgePtr->add_initial_neighbours(&clusters[v], &clusters[w]);
                 clusters[v].add_neighbour(&clusters[w], newEdgePtr);
             
-                // auto& w_arr = *(clusters[v].adjacency[0]);
-                // for(short ii = 0; ii < w_arr.size(); ii++)
-                // {
-                //     if(w_arr[ii] == -1)
-                //     {
-                //         w_arr[ii] = w;
-                //         break;
-                //     }
-                // }
+                auto& w_arr = *(clusters[v].alternate_adjacency[0]);
+                for(short ii = 0; ii < w_arr.size(); ii++)
+                {
+                    if(w_arr[ii] == -1)
+                    {
+                        w_arr[ii] = w;
+                        break;
+                    }
+                }
                 clusters[v].counter = 0;
 
             }
@@ -301,6 +301,15 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
                     exit(1);
                 }
                 clusters[w].add_neighbour(&clusters[v], new_edge);
+                auto& v_arr = *(clusters[w].alternate_adjacency[0]);
+                for(short ii = 0; ii < v_arr.size(); ii++)
+                {
+                    if(v_arr[ii] == -1)
+                    {
+                        v_arr[ii] = v;
+                        break;
+                    }
+                }
                 clusters[w].counter = 0;
             }
         });
