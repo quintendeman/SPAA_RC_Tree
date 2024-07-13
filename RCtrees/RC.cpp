@@ -101,7 +101,7 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
 
     auto graph_size = parents.size();
 
-    static const vertex batch_insertion_size = graph_size/5;
+    static const vertex batch_insertion_size = graph_size/2;
     static const vertex batch_deletion_size = graph_size/10;
 
     parlay::random_generator gen;

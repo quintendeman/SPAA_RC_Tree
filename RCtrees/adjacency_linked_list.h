@@ -41,7 +41,7 @@ struct node
         return this->adjacents[index];
     }
 
-    short size(void)
+    inline short size(void)
     {
         return this->adjacents.size();
     }
@@ -97,7 +97,7 @@ class adjacency_list
 
         node<T>* add_level(node<T>* node_ptr)
         {
-            return this->add_tail(node_ptr->arr, node_ptr->state, node_ptr->contraction_level);
+            return this->add_tail(node_ptr->adjacents, node_ptr->state, node_ptr->contraction_level);
         }
 
         unsigned char size(void)
@@ -128,7 +128,7 @@ class adjacency_list
             this->clear_all(); // assume that there is nothing in this list
 
             node<T>* other_head = adj->get_head();
-            while(other_head != nullptr && other_head->contraction_level < level)
+            while(other_head != nullptr && other_head->contraction_level <= level)
             {
                 this->add_level(other_head);
                 other_head = other_head->next;
@@ -137,14 +137,21 @@ class adjacency_list
             return this->get_tail();
         }
 
+        /*
+            Best effort attempt
+        */
         node<T>* operator[](unsigned char level) const
         {
             if(this->numel == 0)
                 return nullptr;
             auto ret_ptr = this->head;
-            while(ret_ptr->contraction_level != level)
+            auto prev_ptr = ret_ptr;
+            while(ret_ptr != nullptr && ret_ptr->contraction_level != level)
+            {
+                prev_ptr = ret_ptr;
                 ret_ptr = ret_ptr->next;
-            return ret_ptr;
+            }   
+            return prev_ptr;
         }
 
         node<T>* adopt(adjacency_list* alt_adj)
@@ -154,6 +161,7 @@ class adjacency_list
             this->tail = alt_adj->tail;
             this->numel = alt_adj->size();
             alt_adj->clear_vars();
+            return this->tail;
         }
 
         void clear_vars(void)

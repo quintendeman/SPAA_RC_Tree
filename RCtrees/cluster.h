@@ -136,11 +136,19 @@ public:
         std::array<T, max_neighbours> arr;
         for(short i = 0; i <= this->size; i+=2)
         {
-            if(this->ptrs[i] != nullptr)
+            if(this->ptrs[i] != nullptr && this->types[i] == neighbour_type)
                 arr[i/2] = ptrs[i]->index;
             else
                 arr[i/2] = -1;
         }
+        if(this->adjacency.size() > 0)
+            for(auto j = 0; j < this->adjacency.get_tail()->size(); j++)
+            {
+                auto& cmp = this->adjacency.get_tail()->adjacents[j];
+                if(cmp != arr[j])
+                    state = state |= adjacency_changed;
+            }
+        
         this->adjacency.add_level(arr, state, contraction_time);
     }
 
@@ -149,11 +157,18 @@ public:
         std::array<T, max_neighbours> arr;
         for(short i = 0; i <= this->size; i+=2)
         {
-            if(this->ptrs[i] != nullptr)
+            if(this->ptrs[i] != nullptr && this->types[i] == neighbour_type)
                 arr[i/2] = ptrs[i]->index;
             else
                 arr[i/2] = -1;
         }
+        if(this->alternate_adjacency.size() > 0)
+            for(auto j = 0; j < this->alternate_adjacency.get_tail()->size(); j++)
+            {
+                auto& cmp = this->alternate_adjacency.get_tail()->adjacents[j];
+                if(cmp != arr[j])
+                    state = state |= adjacency_changed;
+            }
         this->alternate_adjacency.add_level(arr, state, contraction_time);    
     }
 
@@ -216,9 +231,9 @@ public:
         {
             if(this->ptrs[i] == child)
             {
-                this->types[i]&=(~neighbour_type);
-                this->types[i]&=(~edge_type);
-                this->types[i]|=child_type;
+                // this->types[i]&=(~neighbour_type);
+                // this->types[i]&=(~edge_type);
+                this->types[i]=child_type;
                 return i;
             }
         }
@@ -526,8 +541,12 @@ public:
                 for(uint j = 0; j < max_neighbours; j++)
                 {
                     auto ptr = this->adjacency[i];
-                    
+
+                    if(ptr->state & adjacency_changed)
+                        std::cout << green;   
+
                     std::cout << (*this->adjacency[i])[j] << " ";
+                    std::cout << magenta;
                 }
                 std::cout << "] ";
             } 
@@ -542,8 +561,15 @@ public:
                 for(uint j = 0; j < max_neighbours; j++)
                 {
                     auto ptr = this->alternate_adjacency[i];
-                    
+
+
+
+                    if(ptr->state & adjacency_changed)
+                        std::cout << green;                    
                     std::cout << (*this->alternate_adjacency[i])[j] << " ";
+                    
+                        std::cout << yellow;
+
                 }
                 std::cout << "] ";
             } 

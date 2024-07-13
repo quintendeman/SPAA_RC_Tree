@@ -114,6 +114,186 @@ std::array<T, max_neighbours> getAdjacencyAtLevel(const T& cluster_idx, short co
     return adjacency;
 }
 
+template<typename T, typename D>
+void contract(cluster<T,D>* cluster_ptr)
+{
+    if(cluster_ptr->get_neighbour_count() == 0)
+    {
+        cluster_ptr->state&=(~live);
+        cluster_ptr->state|=(nullary_cluster);
+        cluster_ptr->state|=internal;
+    }
+    else if(cluster_ptr->get_neighbour_count() == 1)
+    {
+        cluster<T,D>* edge_ptr = nullptr;
+        cluster<T,D>* other_side = nullptr;
+        short neighbour_index = -1;
+        
+        for(short i = 0; i < cluster_ptr->size; i+=2)
+        {
+            if(cluster_ptr->types[i] & neighbour_type)
+            {
+                other_side = cluster_ptr->ptrs[i];
+                edge_ptr = cluster_ptr->ptrs[i+1];
+                neighbour_index = i;
+            }
+        }
+
+        // now add these two as children and remove as neighbours if neighbours
+        cluster_ptr->change_to_child(edge_ptr);
+        other_side->change_to_child(cluster_ptr);
+
+        edge_ptr->set_parent(cluster_ptr);
+        cluster_ptr->set_parent(other_side);
+
+        // // mark both of these as not live
+        edge_ptr->state&=(~live);
+        cluster_ptr->state&=(~live);
+
+        cluster_ptr->state|=unary_cluster;
+        cluster_ptr->state|=internal;
+    }
+    else 
+    if (cluster_ptr->get_neighbour_count() == 2)
+    {
+        // find left and right vertices/nodes
+        cluster<T,D>* left_edge_ptr = nullptr;
+        cluster<T,D>* right_edge_ptr = nullptr;
+        cluster<T,D>* left_node_ptr = nullptr;
+        cluster<T,D>* right_node_ptr = nullptr;
+
+        cluster_ptr->get_two_neighbours_edges(left_node_ptr, left_edge_ptr, right_node_ptr, right_edge_ptr);
+
+        left_node_ptr->overwrite_neighbour(cluster_ptr, right_node_ptr, cluster_ptr);
+
+        right_node_ptr->overwrite_neighbour(cluster_ptr, left_node_ptr, cluster_ptr);
+        
+        left_edge_ptr->set_parent(cluster_ptr);
+        right_edge_ptr->set_parent(cluster_ptr);
+
+        cluster_ptr->change_to_child(left_edge_ptr);
+        cluster_ptr->change_to_child(right_edge_ptr);
+
+        
+        cluster_ptr->state&=(~live);
+
+        cluster_ptr->state|=binary_cluster;
+        cluster_ptr->state|=internal;
+    }
+
+}
+
+/*
+    Get two hop neighbours at that level
+*/
+template<typename T, typename D>
+parlay::sequence<cluster<T,D>*> get_3dp1(const parlay::sequence<cluster<T,D>*>& aff_ptrs, parlay::sequence<cluster<T,D>>& clusters, const unsigned char level)
+{
+    parlay::sequence<cluster<T,D>*> frontier;
+    
+    frontier = parlay::flatten(
+        parlay::delayed_tabulate(aff_ptrs.size(), [&] (T i) {
+            auto& ptr = aff_ptrs[i];
+            auto ret_seq = parlay::sequence<cluster<T,D>*>(max_neighbours, nullptr);
+
+            if(ptr->alternate_adjacency.size() > 0)
+            {
+                auto& w_node = *ptr->alternate_adjacency[level];
+                for(short i = 0; i < w_node.size(); i++)
+                {
+                    auto& w = w_node[i];
+                    if(w != -1)
+                        ret_seq[i] = &clusters[w];
+                }
+            }
+            else
+            {
+                auto& w_node = *ptr->adjacency[level];
+                for(short i = 0; i < w_node.size(); i++)
+                {
+                    auto& w = w_node[i];
+                    if(w != -1)
+                        ret_seq[i] = &clusters[w];
+                }
+            }
+            return ret_seq;
+        }));
+
+    // TODO merge?
+    frontier = parlay::flatten(
+        parlay::delayed_tabulate(frontier.size(), [&] (T i) {
+            auto& ptr = frontier[i];
+            auto ret_seq = parlay::sequence<cluster<T,D>*>(max_neighbours + 1, nullptr);
+
+            if(ptr == nullptr)
+                return ret_seq;
+
+            if(ptr->alternate_adjacency.size() > 0)
+            {
+                auto& w_node = *ptr->alternate_adjacency[level];
+                for(short i = 0; i < w_node.size(); i++)
+                {
+                    auto& w = w_node[i];
+                    if(w != -1)
+                        ret_seq[i] = &clusters[w];
+                }
+            }
+            else
+            {
+                auto& w_node = *ptr->adjacency[level];
+                for(short i = 0; i < w_node.size(); i++)
+                {
+                    auto& w = w_node[i];
+                    if(w != -1)
+                        ret_seq[i] = &clusters[w];
+                }
+            }
+            ret_seq[max_neighbours] = ptr;
+            return ret_seq;
+        }));
+    
+    parlay::parallel_for(0, frontier.size(), [&] (T i) {
+        auto& ptr = frontier[i];
+        if(ptr != nullptr)
+            ptr->counter = i+1;
+    });
+    parlay::parallel_for(0, frontier.size(), [&] (T i) {
+        auto& ptr = frontier[i];
+        if(ptr != nullptr && ptr->counter != i+1)
+            ptr = nullptr;
+    });
+
+    parlay::filter(frontier, [] (auto ptr){
+        if(ptr != nullptr)
+        {
+            ptr->counter = 0;
+            return true;
+        }
+        return false;
+    });
+    
+    return frontier;
+}
+
+template<typename T, typename D>
+bool first_condition(cluster<T,D>* ptr)
+{
+    
+    return false;
+}
+
+template<typename T, typename D>
+bool second_condition(cluster<T,D>* ptr)
+{
+    return false;
+}
+
+template<typename T, typename D>
+bool third_condition(cluster<T,D>* ptr)
+{
+    return false;
+}
+
 
 /**
  * Assumes that "clusters" contains a bunch of ALREADY fully contracted trees i.e. a fully contracted
@@ -130,6 +310,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     int count = 0;
     using cluster_allocator = parlay::type_allocator<cluster<T,D>>;
 
+    // TODO MERGE
     auto all_ptrs_pairs = parlay::delayed_tabulate(delete_edges.size() + add_edges.size(), [&] (T i) {
         T v, w;
         if(i < delete_edges.size())
@@ -210,6 +391,13 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             {
                 ptr->ptrs[i] = &clusters[w];
                 ptr->ptrs[i+1] = getEdge(v, w, clusters);
+                ptr->types[i] = neighbour_type;
+                ptr->types[i+1] = edge_type;
+            }
+            else if (other_ptr != nullptr)
+            {
+                ptr->types[i] = neighbour_type;
+                ptr->types[i+1] = edge_type;
             }
         }
         ptr->counter = 0;
@@ -317,15 +505,65 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         add_edges_wflags = parlay::filter(add_edges_wflags, [] (auto edge) {return edge.valid;});
     }while(add_edges_wflags.size() > 0);
 
-
     do
     {
+        // Find MIS of update-eligible affected vertices in F/F'_{i-1}
+        set_MIS(aff_ptrs);
+        auto mis_set = parlay::filter(aff_ptrs, [] (auto ptr) {
+            return ptr->state & IS_MIS_SET;;
+        });
 
+        parlay::parallel_for(0, mis_set.size(), [&] (T i) {
+            auto& ptr = mis_set[i];
+            contract(ptr);
+            ptr->adjacency.adopt(&(ptr->alternate_adjacency)); // already contracted, we don't need to keep track of the adjacents
+            ptr->state &= (~affected);
+        });
+        
+        parlay::parallel_for(0, aff_ptrs.size(), [&] (T i){
+            auto& ptr = aff_ptrs[i];
+            if(ptr->state & affected)
+                ptr->add_alternate_level(ptr->state, count);
+        });
 
+        aff_ptrs = get_3dp1(aff_ptrs, clusters, count+1);
+
+        aff_ptrs = parlay::filter(aff_ptrs, [] (auto ptr) {
+            return first_condition(ptr) || second_condition(ptr) || third_condition(ptr);
+        });
+
+        // set alternate adjacencies for new aff_ptrs?
+        parlay::parallel_for(0, aff_ptrs.size(), [&] (T i) {
+            auto& ptr = aff_ptrs[i];
+            if(ptr->alternate_adjacency.size() == 0)
+            {
+                ptr->alternate_adjacency.copy_till_level(&ptr->adjacency, count+1);
+            }
+            for(short i = 0; i < ptr->size; i+=2)
+            {
+                auto& w_node = *ptr->alternate_adjacency.get_tail();
+                auto& w = w_node[i/2];
+                auto& other_ptr = ptr->ptrs[i];
+                // get ptrs to all the edges?
+                if(other_ptr != nullptr && w != -1 && other_ptr->index != w)
+                {
+                    ptr->ptrs[i+1] = getEdge(w, ptr->index, clusters);
+                    if(ptr->ptrs[i+1] == nullptr) // TODO remove
+                    {
+                        std::cout << red << "nullptr" << reset << std::endl;
+                        exit(1);
+                    }
+                    ptr->ptrs[i] = &clusters[w];
+                    ptr->types[i] = neighbour_type;
+                }
+            }
+        });
+
+        // ensure ptrs haven't already contracted this session? done because we only care about live ones and the adjacency list is short
         count++;
-    }while(!(count > 1000));    
+    }while(!(count > 100) && aff_ptrs.size() > 0);    
 
-    if(count > 1000)
+    if(count > 100)
         std::cout << red << "[dynamic] definitely went into an infinite loop" << reset << std::endl; 
 
     return;
