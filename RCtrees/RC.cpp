@@ -132,9 +132,12 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
     // create insertion edges
     auto insert_edges = parlay::tabulate(batch_insertion_size < 1 ? 1 : batch_insertion_size, [&] (vertex i) {
         auto r = gen[i];
-        auto random_number = dis(r);
+        // auto random_number = dis(r);
+        auto jump_size = parents.size()/(batch_insertion_size < 1 ? 1 : batch_insertion_size);
+        
+        // auto& child_index = r;
+        auto child_index = i * jump_size/2 + 1;
 
-        auto& child_index = random_number;
         auto random_parent = (child_index == 0) ? 0 : dis(r) % child_index;
 
         datatype new_val = (datatype) graph_size * 10 * child_index; // some large value

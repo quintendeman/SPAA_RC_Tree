@@ -40,6 +40,11 @@ struct node
     {
         return this->adjacents[index];
     }
+
+    short size(void)
+    {
+        return this->adjacents.size();
+    }
 };
 
 template <typename T>

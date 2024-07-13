@@ -37,7 +37,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
         std::uniform_real_distribution<double> dis(0, 1);
         auto random_val = dis(gen);
 
-        static const double anywhere_left_weight = 1;
+        static const double anywhere_left_weight = 90;
         static const double immediate_left_weight = 30;
         static const double root_weight = 0.0; /* warning, does not represet probability of a null cluster as degree capping may create more forests */
 
@@ -97,25 +97,17 @@ void degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
        return std::atomic<T>(0); // Initialize each element with the value 0
     });
 
-    std::vector<std::mutex> mutexes(parents.size());
 
-    parlay::parallel_for(0, parents.size(), [&] (T chld) {
-        auto parent = parents[chld];
-        if(parent != chld)
+    parlay::parallel_for(0, parents.size(), [&] (T v) {
+        if(v == parents[v])
+            return;
+        T parent_count = counts[parents[v]].fetch_add(1);
+        if(parent_count < (max_degree - 2))
         {
-            mutexes[parent].lock();
-            if(counts[parent] < max_neighbours - 2)
-            {
-                counts[parents[chld]]++;
-            }
-            else if ((counts[parent] == (max_neighbours - 1)) && (parents[parent] == parent))
-            {
-                counts[parents[chld]]++;
-            }
-            else
-                parents[chld] = chld;
-            mutexes[parent].unlock();
+            return;
         }
+        else
+            parents[v] = v;
     });
 
 }
@@ -123,38 +115,52 @@ void degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
 template<typename T, typename D>
 void degree_cap_add_edge(parlay::sequence<T> &parents, const T max_degree, parlay::sequence<std::tuple<T, T, D> >& tuples)
 {
-    parlay::sequence<T> counts = parlay::sequence<T>(parents.size(), 0);
+    parlay::sequence<std::atomic<T>> counts = parlay::tabulate(parents.size(), [] (size_t) {
+       return std::atomic<T>(0); // Initialize each element with the value 0
+    });
 
     std::vector<std::mutex> mutexes(counts.size());
-
 
     parlay::parallel_for(0, counts.size(), [&] (T chld) {
         if(parents[chld] != chld)
         {
-            mutexes[parents[chld]].lock();
-            counts[parents[chld]]++;
-            mutexes[parents[chld]].unlock();
+            counts[parents[chld]].fetch_add(1);
         }
     });
 
-    
     tuples = parlay::filter(tuples, [&] (auto tple) {
         auto& child = std::get<0>(tple);
         auto& parent = std::get<1>(tple);
+        if(child == parent)
+            return false;
+        bool ret_val = false;
+
         mutexes[parent].lock();
-        if(counts[parent] < max_neighbours-1)
+        mutexes[child].lock();
+        if(counts[child] < max_neighbours)
         {
-            counts[parent]++;
-            parents[child] = parent;
-            mutexes[parent].unlock();
-            return true;
+            if(counts[parent] < max_neighbours - 2)
+            {
+                counts[parent]++;
+                parents[child] = parent;
+                ret_val = true;
+            }
+            else if(counts[parent] == max_neighbours - 1 && parents[parent] == parent)
+            {
+                counts[parent]++;
+                parents[child] = parent;
+                ret_val = true;        
+            }
         }
         mutexes[parent].unlock();
-        return false;
+        mutexes[child].unlock();
+        return ret_val;
     });
+    
 
     return;
 }
+
 
 /**
  * Extracts a particular bit (counted from the right) from an element
@@ -877,7 +883,7 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, 
         const auto& weight = std::get<2>(edge_tuple);
         const auto& v = std::get<1>(edge_tuple);
         const auto& w = std::get<0>(edge_tuple);
-
+        
         cluster<T,D>* cluster_ptr = getEdge(v, w, clusters);
 
         if(cluster_ptr == nullptr)

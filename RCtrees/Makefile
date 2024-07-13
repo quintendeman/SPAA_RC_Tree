@@ -3,7 +3,7 @@ CXX = g++
 CXXFLAGS = -O3 -std=c++17 -pthread -g
 INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/
 LDFLAGS = -ljemalloc
-TARGET = RC.o
+TARGET = RC.out
 SRC = RC.cpp
 
 # Default target

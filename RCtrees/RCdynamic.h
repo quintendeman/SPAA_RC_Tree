@@ -192,24 +192,6 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         return;
     });
 
-    // // revert aff_ptrs to initial state
-    // std::vector<cluster<T,D>*> temp_ptrs_vector(aff_ptrs.size() * max_neighbours, nullptr);
-    // parlay::parallel_for(0, aff_ptrs.size(), [&] (T inp) {
-    //     auto offset_within_temp_ptrs = inp*max_neighbours;
-    //     const auto& ptr = aff_ptrs[inp];
-    //     const auto& w_arr = *(ptr->adjacency[0]);
-    //     const auto& v = ptr->index;
-    //     for(short i = 0; i < ptr->size; i+=2)
-    //     {
-    //         auto& other_ptr = ptr->ptrs[i];
-    //         const auto& w = 
-    //         if(other_ptr != nullptr && other_ptr->index != w_arr[i/2])
-    //             temp_ptrs_vector[offset_within_temp_ptrs + i/2] = getEdge()
-    //     }
-    // });
-
-
-
     parlay::parallel_for(0, aff_ptrs.size(), [&] (T i) {
         auto& ptr = aff_ptrs[i];
         const auto& v = ptr->index;
@@ -230,8 +212,102 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
                 ptr->ptrs[i+1] = getEdge(v, w, clusters);
             }
         }
+        ptr->counter = 0;
         ptr->add_alternate_level(affected | live, 0);
     });
+
+    auto add_edges_wflags = parlay::tabulate(add_edges.size(), [&] (T i) {
+        edge_with_flag<std::tuple<T, T, D>> ret_edge;
+        ret_edge.valid = true;
+        ret_edge.E = add_edges[i];
+        return std::move(ret_edge);
+    });
+
+    auto reduce_edges = add_edges_wflags;
+    
+    bool first_time = true;
+    do
+    {
+        parlay::parallel_for(0, reduce_edges.size(), [&] (T i) {
+            auto& edge = reduce_edges[i];
+            auto& v = std::get<0>(edge.E);
+            auto& w = std::get<1>(edge.E);
+            if(v < w)
+                std::swap(v, w);
+            clusters[v].counter = i + 1;
+        });
+        parlay::parallel_for(0, reduce_edges.size(), [&] (T i) {
+            auto& edge = reduce_edges[i];
+            auto& v = std::get<0>(edge.E);
+            auto& w = std::get<1>(edge.E);
+            if(v < w)
+                std::swap(v, w);
+
+            
+            if(clusters[v].counter == (i+1))
+            {
+                reduce_edges[i].valid = false;
+
+                auto newEdgePtr = cluster_allocator::alloc();
+                newEdgePtr->state = live | base_edge;
+                newEdgePtr->data = std::get<2>(edge.E);
+                newEdgePtr->add_initial_neighbours(&clusters[v], &clusters[w]);
+                clusters[v].add_neighbour(&clusters[w], newEdgePtr);
+            
+                // auto& w_arr = *(clusters[v].adjacency[0]);
+                // for(short ii = 0; ii < w_arr.size(); ii++)
+                // {
+                //     if(w_arr[ii] == -1)
+                //     {
+                //         w_arr[ii] = w;
+                //         break;
+                //     }
+                // }
+                clusters[v].counter = 0;
+
+            }
+
+        });
+
+        reduce_edges = parlay::filter(reduce_edges, [] (auto r) {return r.valid;});
+    }while(reduce_edges.size() > 0);
+
+    do
+    {
+        parlay::parallel_for(0, add_edges_wflags.size(), [&] (T i) {
+            auto& edge = add_edges_wflags[i];
+            auto& v = std::get<0>(edge.E);
+            auto& w = std::get<1>(edge.E);
+            if(v < w)
+                std::swap(v, w);
+            clusters[w].counter = i + 1;
+        });
+
+        parlay::parallel_for(0, add_edges_wflags.size(), [&] (T i) {
+            auto& edge = add_edges_wflags[i];
+            auto& v = std::get<0>(edge.E);
+            auto& w = std::get<1>(edge.E);
+            if(v < w)
+                std::swap(v, w);
+            if(clusters[w].counter == (i+1))
+            {
+                add_edges_wflags[i].valid = false;
+
+                auto new_edge = getEdge(v, w, clusters);
+                if(new_edge == nullptr) // TODO: REMOVE
+                {
+                    std::cout << red << "nullptr??" << reset << std::endl;
+                    clusters[v].print();clusters[w].print();
+                    exit(1);
+                }
+                clusters[w].add_neighbour(&clusters[v], new_edge);
+                clusters[w].counter = 0;
+            }
+        });
+
+        add_edges_wflags = parlay::filter(add_edges_wflags, [] (auto edge) {return edge.valid;});
+    }while(add_edges_wflags.size() > 0);
+
 
     do
     {
