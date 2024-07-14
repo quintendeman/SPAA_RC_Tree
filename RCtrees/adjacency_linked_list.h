@@ -13,11 +13,14 @@ const short binary_cluster = 8;
 const short nullary_cluster = 16;
 const short IS_MIS_SET = 32;
 const short live = 64;
-const short carrying_weight = 128;
-const short internal = 256;
-const short affected = 512;
-const short adjacency_changed = 1024;
-const short all_contracted_affected = 2048;
+const short affected = 128;
+const short adjacency_changed = 256;
+const short all_contracted_affected = 512;
+const short debug_state = 1024;
+const short contracts_this_round = 2048;
+const short C1 = 4096;
+const short C2 = 8192;
+const short C3 = 8192 * 2;
 
 const int max_neighbours = 3;
 
@@ -36,7 +39,7 @@ struct node
     {
         
     }
-    T& operator[](short index)
+    T& operator[](const short index)
     {
         return this->adjacents[index];
     }
@@ -140,17 +143,21 @@ class adjacency_list
         /*
             Best effort attempt
         */
-        node<T>* operator[](unsigned char level) const
+        node<T>* operator[](const unsigned char level) const
         {
             if(this->numel == 0)
                 return nullptr;
+            else if (level == 0)
+                return this->head;
             auto ret_ptr = this->head;
             auto prev_ptr = ret_ptr;
             while(ret_ptr != nullptr && ret_ptr->contraction_level != level)
             {
                 prev_ptr = ret_ptr;
                 ret_ptr = ret_ptr->next;
-            }   
+                if(ret_ptr != nullptr && ret_ptr->contraction_level == level)
+                    return ret_ptr;
+            }
             return prev_ptr;
         }
 
@@ -195,8 +202,5 @@ class adjacency_list
 
 
 };
-
-
-
 
 #endif

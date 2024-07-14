@@ -495,8 +495,8 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
             {
                 cluster_ptr->state&=(~live);
                 cluster_ptr->state|=(nullary_cluster);
-                cluster_ptr->state|=internal;
                 cluster_ptr->contraction_time = contraction_round;
+                cluster_ptr->adjacency.get_tail()->state |= contracts_this_round;
             }
             else if(cluster_ptr->get_neighbour_count() == 1)
             {
@@ -526,8 +526,8 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
                 cluster_ptr->state&=(~live);
 
                 cluster_ptr->state|=unary_cluster;
-                cluster_ptr->state|=internal;
                 cluster_ptr->contraction_time = contraction_round;
+                cluster_ptr->adjacency.get_tail()->state |= contracts_this_round;
             }
             else 
             if (cluster_ptr->get_neighbour_count() == 2)
@@ -554,8 +554,8 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
                 cluster_ptr->state&=(~live);
 
                 cluster_ptr->state|=binary_cluster;
-                cluster_ptr->state|=internal;
                 cluster_ptr->contraction_time = contraction_round;
+                cluster_ptr->adjacency.get_tail()->state |= contracts_this_round;
             }
         });
 

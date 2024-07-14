@@ -134,20 +134,13 @@ public:
     void add_level(short state, unsigned char contraction_time)
     {
         std::array<T, max_neighbours> arr;
-        for(short i = 0; i <= this->size; i+=2)
+        for(short i = 0; i < this->size; i+=2)
         {
             if(this->ptrs[i] != nullptr && this->types[i] == neighbour_type)
                 arr[i/2] = ptrs[i]->index;
             else
                 arr[i/2] = -1;
         }
-        if(this->adjacency.size() > 0)
-            for(auto j = 0; j < this->adjacency.get_tail()->size(); j++)
-            {
-                auto& cmp = this->adjacency.get_tail()->adjacents[j];
-                if(cmp != arr[j])
-                    state = state |= adjacency_changed;
-            }
         
         this->adjacency.add_level(arr, state, contraction_time);
     }
@@ -155,20 +148,13 @@ public:
     void add_alternate_level(short state, unsigned char contraction_time)
     {
         std::array<T, max_neighbours> arr;
-        for(short i = 0; i <= this->size; i+=2)
+        for(short i = 0; i < this->size; i+=2)
         {
             if(this->ptrs[i] != nullptr && this->types[i] == neighbour_type)
                 arr[i/2] = ptrs[i]->index;
             else
                 arr[i/2] = -1;
         }
-        if(this->alternate_adjacency.size() > 0)
-            for(auto j = 0; j < this->alternate_adjacency.get_tail()->size(); j++)
-            {
-                auto& cmp = this->alternate_adjacency.get_tail()->adjacents[j];
-                if(cmp != arr[j])
-                    state = state |= adjacency_changed;
-            }
         this->alternate_adjacency.add_level(arr, state, contraction_time);    
     }
 
@@ -480,7 +466,22 @@ public:
 
     void print(void)
     {
-        if(this->state & binary_cluster)
+        if(!(this->state & debug_state))
+        {
+        if(this->state & C1)
+            std::cout << "1";
+        if(this->state & C2)
+            std::cout << "2";
+        if(this->state & C3)
+            std::cout << "3";
+        if(this->state & (C1 | C2 | C3))
+            std::cout << " ";
+        }
+        if(!(this->state & debug_state) && this->state & (C1 | C2 | C3))
+            std::cout << bold << green;
+        else if (this->state & debug_state)
+            std::cout << bold << white;
+        else if(this->state & binary_cluster)
             std::cout << red;
         else if (this->state & unary_cluster)
             std::cout << cyan;
@@ -532,17 +533,20 @@ public:
             std::cout << reset << " ";
             std::cout << ")   ";
         }
+
         if(this->adjacency.size())
         {
             std::cout << magenta << std::endl;
             for(uint i = 0; i < this->adjacency.size(); i++)
             {
+                auto ptr = this->adjacency[i];
+                if(ptr->state & contracts_this_round)
+                    std::cout << bold << white << "F" << reset << magenta;
+                    
                 std::cout << "[ ";
                 for(uint j = 0; j < max_neighbours; j++)
                 {
-                    auto ptr = this->adjacency[i];
-
-                    if(ptr->state & adjacency_changed)
+                   if(ptr->state & adjacency_changed)
                         std::cout << green;   
 
                     std::cout << (*this->adjacency[i])[j] << " ";
@@ -557,12 +561,12 @@ public:
             std::cout << yellow << std::endl;
             for(uint i = 0; i < this->alternate_adjacency.size(); i++)
             {
+                auto ptr = this->alternate_adjacency[i];
+                if(ptr->state & contracts_this_round)
+                    std::cout << bold << white << "F" << reset << yellow;
                 std::cout << "[ ";
                 for(uint j = 0; j < max_neighbours; j++)
                 {
-                    auto ptr = this->alternate_adjacency[i];
-
-
 
                     if(ptr->state & adjacency_changed)
                         std::cout << green;                    

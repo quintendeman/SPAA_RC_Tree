@@ -121,7 +121,6 @@ void contract(cluster<T,D>* cluster_ptr)
     {
         cluster_ptr->state&=(~live);
         cluster_ptr->state|=(nullary_cluster);
-        cluster_ptr->state|=internal;
     }
     else if(cluster_ptr->get_neighbour_count() == 1)
     {
@@ -151,7 +150,6 @@ void contract(cluster<T,D>* cluster_ptr)
         cluster_ptr->state&=(~live);
 
         cluster_ptr->state|=unary_cluster;
-        cluster_ptr->state|=internal;
     }
     else 
     if (cluster_ptr->get_neighbour_count() == 2)
@@ -178,7 +176,6 @@ void contract(cluster<T,D>* cluster_ptr)
         cluster_ptr->state&=(~live);
 
         cluster_ptr->state|=binary_cluster;
-        cluster_ptr->state|=internal;
     }
 
 }
@@ -263,7 +260,7 @@ parlay::sequence<cluster<T,D>*> get_3dp1(const parlay::sequence<cluster<T,D>*>& 
             ptr = nullptr;
     });
 
-    parlay::filter(frontier, [] (auto ptr){
+    frontier = parlay::filter(frontier, [] (auto ptr){
         if(ptr != nullptr)
         {
             ptr->counter = 0;
@@ -276,21 +273,108 @@ parlay::sequence<cluster<T,D>*> get_3dp1(const parlay::sequence<cluster<T,D>*>& 
 }
 
 template<typename T, typename D>
-bool first_condition(cluster<T,D>* ptr)
+bool first_condition(cluster<T,D>* ptr, const unsigned char level)
 {
+    // is it live in Fi and not in Fip /opposite?
+    node<T>* node_ptr = ptr->adjacency[level];
+    bool live_in_fi = false;
+    if(node_ptr != nullptr && node_ptr->contraction_level == level)
+        live_in_fi = true;
+    bool live_in_fip = false;
+
+    if(ptr->alternate_adjacency.size() == 0)
+        live_in_fip = live_in_fi;
+    else
+    {
+    node_ptr = ptr->alternate_adjacency[level];
+    if(node_ptr->contraction_level == level)
+        live_in_fip = true;
+    }
+
+    bool ret_flag = (!live_in_fi && live_in_fip) || (live_in_fi && !live_in_fip);
+
+    return ret_flag;
+}
+
+template<typename T, typename D>
+bool second_condition(cluster<T,D>* ptr, const unsigned char level)
+{
+    // is it live in both but has different adjacency lists
+    node<T>* node_ptr = ptr->adjacency[level];
+    bool live_in_fi = false;
+    if(node_ptr != nullptr && node_ptr->contraction_level == level)
+        live_in_fi = true;
     
+    bool live_in_fip = false;
+    node_ptr = ptr->alternate_adjacency[level];
+    if(node_ptr != nullptr && node_ptr->contraction_level == level)
+        live_in_fip = true;
+    
+    if(live_in_fip && live_in_fi)
+    {
+        // are adjacency lists different?
+        if(ptr->adjacency[level]->adjacents != ptr->alternate_adjacency[level]->adjacents)
+        {
+            return true;
+        }
+    }
+    if(live_in_fi && ptr->alternate_adjacency[level] == nullptr)
+    {
+        return false;
+    }
+
     return false;
 }
 
 template<typename T, typename D>
-bool second_condition(cluster<T,D>* ptr)
+bool third_condition(cluster<T,D>* ptr, const unsigned char level, parlay::sequence<cluster<T,D>>& clusters)
 {
-    return false;
-}
+    // is it live
+    if(ptr->adjacency[level] != nullptr && ptr->adjacency[level]->state & contracts_this_round)
+        return false;
 
-template<typename T, typename D>
-bool third_condition(cluster<T,D>* ptr)
-{
+
+    // is it live in Fi and not in Fip /opposite?
+    node<T>* node_ptr = ptr->adjacency[level];
+    bool live_in_fi = false;
+    if(node_ptr != nullptr && node_ptr->contraction_level == level)
+        live_in_fi = true;
+    bool live_in_fip = false;
+
+    if(ptr->alternate_adjacency.size() == 0)
+        live_in_fip = live_in_fi;
+    else
+    {
+    node_ptr = ptr->alternate_adjacency[level];
+    if(node_ptr->contraction_level == level)
+        live_in_fip = true;
+    }
+    
+    if(live_in_fip && live_in_fi)
+    {
+
+        for(short i = 0; i < ptr->adjacency[level]->size(); i++)
+        {
+            auto& w = (*ptr->adjacency[level])[i];
+            if(w == -1)
+                continue;
+            // did it contract in Fi
+            if(clusters[w].adjacency[level]->state & contracts_this_round) // i.e. it is still live at the current level
+            {
+                // is it not affected
+                if(clusters[w].alternate_adjacency.size() == 0)
+                {
+                    return false;
+                }
+                else if((clusters[w].alternate_adjacency[level]->state & affected) == 0)
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     return false;
 }
 
@@ -516,50 +600,51 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         parlay::parallel_for(0, mis_set.size(), [&] (T i) {
             auto& ptr = mis_set[i];
             contract(ptr);
-            ptr->adjacency.adopt(&(ptr->alternate_adjacency)); // already contracted, we don't need to keep track of the adjacents
-            ptr->state &= (~affected);
-        });
-        
-        parlay::parallel_for(0, aff_ptrs.size(), [&] (T i){
-            auto& ptr = aff_ptrs[i];
-            if(ptr->state & affected)
-                ptr->add_alternate_level(ptr->state, count);
+            if(!(ptr->state & live))
+                {
+                    ptr->state |= debug_state;
+                    ptr->state &= (~affected);
+                    ptr->alternate_adjacency.get_tail()->state |= contracts_this_round;
+                }
         });
 
+        // put a "contracted" flag in linked list?
         aff_ptrs = get_3dp1(aff_ptrs, clusters, count+1);
 
-        aff_ptrs = parlay::filter(aff_ptrs, [] (auto ptr) {
-            return first_condition(ptr) || second_condition(ptr) || third_condition(ptr);
+        // 1. add alternate level if it doesn't exist etc
+        // a. also modify ptrs list
+        // 2. filter based off conditions.
+
+        aff_ptrs = parlay::filter(aff_ptrs, [&] (auto ptr) {
+            bool c1 = first_condition(ptr, count);
+            bool c2 = second_condition(ptr, count);
+            bool c3 = third_condition(ptr, count, clusters);
+            bool ret_val = c1 || c2 || c3;
+            if(ret_val == true)
+            {
+                if(c1)
+                    ptr->state |= C1;
+                if(c2)
+                    ptr->state |= C2;
+                if(c3)
+                    ptr->state |= C3;
+            }
+            return ret_val;
         });
 
-        // set alternate adjacencies for new aff_ptrs?
-        parlay::parallel_for(0, aff_ptrs.size(), [&] (T i) {
-            auto& ptr = aff_ptrs[i];
-            if(ptr->alternate_adjacency.size() == 0)
-            {
-                ptr->alternate_adjacency.copy_till_level(&ptr->adjacency, count+1);
-            }
-            for(short i = 0; i < ptr->size; i+=2)
-            {
-                auto& w_node = *ptr->alternate_adjacency.get_tail();
-                auto& w = w_node[i/2];
-                auto& other_ptr = ptr->ptrs[i];
-                // get ptrs to all the edges?
-                if(other_ptr != nullptr && w != -1 && other_ptr->index != w)
-                {
-                    ptr->ptrs[i+1] = getEdge(w, ptr->index, clusters);
-                    if(ptr->ptrs[i+1] == nullptr) // TODO remove
-                    {
-                        std::cout << red << "nullptr" << reset << std::endl;
-                        exit(1);
-                    }
-                    ptr->ptrs[i] = &clusters[w];
-                    ptr->types[i] = neighbour_type;
-                }
-            }
-        });
+        // parlay::parallel_for(0, aff_ptrs.size(), [&] (T i) {
+        //     auto& ptr = aff_ptrs[i];
+        //     if(ptr->alternate_adjacency.size() == 0)
+        //         ptr->alternate_adjacency.copy_till_level(&ptr->adjacency, count);
+        //     ptr->add_alternate_level(ptr->state, count+1);
+        // });
 
-        // ensure ptrs haven't already contracted this session? done because we only care about live ones and the adjacency list is short
+        // parlay::parallel_for(0, mis_set.size(), [&] (T i){
+        //     auto& ptr = mis_set[i];
+        //     ptr->adjacency.adopt(&(ptr->alternate_adjacency)); // already contracted, we don't need to keep track of the adjacents    
+        // });
+
+        break;
         count++;
     }while(!(count > 100) && aff_ptrs.size() > 0);    
 
