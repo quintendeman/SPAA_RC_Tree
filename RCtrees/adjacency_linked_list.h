@@ -21,6 +21,7 @@ const short contracts_this_round = 2048;
 const short C1 = 4096;
 const short C2 = 8192;
 const short C3 = 8192 * 2;
+const short C4 = C3 * 2;
 
 const int max_neighbours = 3;
 

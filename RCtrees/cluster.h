@@ -493,8 +493,8 @@ public:
             std::cout << reset;
         std::cout << "Index: " << this->index << reset;
         std::cout << blue << "[" << (int) this->get_height()  << "]" << reset;
-        std::cout << yellow << "[" << this->data << "]" << reset;
-        std::cout << magenta << "[" << (int) this->counter << "]" << reset;
+        // std::cout << yellow << "[" << this->data << "]" << reset;
+        // std::cout << magenta << "[" << (int) this->counter << "]" << reset;
         std::cout << "  ";
         if(this->state&live)
             std::cout << "live ";

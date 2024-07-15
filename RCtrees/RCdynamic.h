@@ -328,12 +328,7 @@ bool second_condition(cluster<T,D>* ptr, const unsigned char level)
 
 template<typename T, typename D>
 bool third_condition(cluster<T,D>* ptr, const unsigned char level, parlay::sequence<cluster<T,D>>& clusters)
-{
-    // is it live
-    if(ptr->adjacency[level] != nullptr && ptr->adjacency[level]->state & contracts_this_round)
-        return false;
-
-
+{      
     // is it live in Fi and not in Fip /opposite?
     node<T>* node_ptr = ptr->adjacency[level];
     bool live_in_fi = false;
@@ -345,10 +340,14 @@ bool third_condition(cluster<T,D>* ptr, const unsigned char level, parlay::seque
         live_in_fip = live_in_fi;
     else
     {
-    node_ptr = ptr->alternate_adjacency[level];
-    if(node_ptr->contraction_level == level)
-        live_in_fip = true;
+        node_ptr = ptr->alternate_adjacency[level];
+        if(node_ptr->contraction_level == level)
+            live_in_fip = true;
     }
+    // is it live in the next round
+    if(ptr->adjacency[level]->state & contracts_this_round)
+        return false;
+    
     
     if(live_in_fip && live_in_fi)
     {
@@ -358,25 +357,39 @@ bool third_condition(cluster<T,D>* ptr, const unsigned char level, parlay::seque
             auto& w = (*ptr->adjacency[level])[i];
             if(w == -1)
                 continue;
-            // did it contract in Fi
-            if(clusters[w].adjacency[level]->state & contracts_this_round) // i.e. it is still live at the current level
-            {
-                // is it not affected
-                if(clusters[w].alternate_adjacency.size() == 0)
-                {
+            // if w contracted in Fi, was it affected
+            auto w_node_at_level = clusters[w].adjacency.get_tail();
+            if(w_node_at_level->contraction_level == level)
+                if((clusters[w].state & affected) == 0)
                     return false;
-                }
-                else if((clusters[w].alternate_adjacency[level]->state & affected) == 0)
-                {
-                    return false;
-                }
-            }
         }
         return true;
     }
-
     return false;
 }
+
+template<typename T, typename D>
+bool is_not_adjacent(cluster<T,D>* ptr, const unsigned char level, parlay::sequence<cluster<T,D>>& clusters)
+{      
+    // is it next to something on the same level that wasn't affected and contracted?
+
+    auto& w_arr = ptr->alternate_adjacency[level]->adjacents;
+
+    for(short i = 0; i < w_arr.size(); i++)
+    {
+        auto& w = w_arr[i];
+        if(w == -1)
+            continue;
+        auto& clstr = clusters[w];
+        if(clstr.contraction_time == level)
+            return false;
+        
+    }
+
+
+    return true;
+}
+
 
 
 /**
@@ -589,13 +602,21 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         add_edges_wflags = parlay::filter(add_edges_wflags, [] (auto edge) {return edge.valid;});
     }while(add_edges_wflags.size() > 0);
 
+
+
     do
     {
-        // Find MIS of update-eligible affected vertices in F/F'_{i-1}
+        // // Find MIS of update-eligible affected vertices in F/F'_{i-1}
         set_MIS(aff_ptrs);
         auto mis_set = parlay::filter(aff_ptrs, [] (auto ptr) {
             return ptr->state & IS_MIS_SET;;
         });
+
+        mis_set = parlay::filter(mis_set, [&] (auto ptr)
+            {
+                return is_not_adjacent(ptr, count, clusters);
+            }
+        );
 
         parlay::parallel_for(0, mis_set.size(), [&] (T i) {
             auto& ptr = mis_set[i];
@@ -603,23 +624,24 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             if(!(ptr->state & live))
                 {
                     ptr->state |= debug_state;
-                    ptr->state &= (~affected);
+                    // ptr->contraction_time = count;
                     ptr->alternate_adjacency.get_tail()->state |= contracts_this_round;
                 }
         });
 
-        // put a "contracted" flag in linked list?
+        // // put a "contracted" flag in linked list?
         aff_ptrs = get_3dp1(aff_ptrs, clusters, count+1);
 
-        // 1. add alternate level if it doesn't exist etc
-        // a. also modify ptrs list
-        // 2. filter based off conditions.
+        // // 1. add alternate level if it doesn't exist etc
+        // // a. also modify ptrs list
+        // // 2. filter based off conditions.
 
         aff_ptrs = parlay::filter(aff_ptrs, [&] (auto ptr) {
             bool c1 = first_condition(ptr, count);
             bool c2 = second_condition(ptr, count);
             bool c3 = third_condition(ptr, count, clusters);
             bool ret_val = c1 || c2 || c3;
+            
             if(ret_val == true)
             {
                 if(c1)
@@ -628,21 +650,11 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
                     ptr->state |= C2;
                 if(c3)
                     ptr->state |= C3;
+                // ptr->state |= affected;
             }
             return ret_val;
         });
 
-        // parlay::parallel_for(0, aff_ptrs.size(), [&] (T i) {
-        //     auto& ptr = aff_ptrs[i];
-        //     if(ptr->alternate_adjacency.size() == 0)
-        //         ptr->alternate_adjacency.copy_till_level(&ptr->adjacency, count);
-        //     ptr->add_alternate_level(ptr->state, count+1);
-        // });
-
-        // parlay::parallel_for(0, mis_set.size(), [&] (T i){
-        //     auto& ptr = mis_set[i];
-        //     ptr->adjacency.adopt(&(ptr->alternate_adjacency)); // already contracted, we don't need to keep track of the adjacents    
-        // });
 
         break;
         count++;
