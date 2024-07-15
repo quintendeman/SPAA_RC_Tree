@@ -24,18 +24,18 @@ const short C3 = 8192 * 2;
 const short C4 = C3 * 2;
 
 const int max_neighbours = 3;
-
+const int max_size = max_neighbours*2;
 
 template <typename T>
 struct node
 {
-    std::array<T, max_neighbours> adjacents; 
+    std::array<T, max_size> adjacents; 
     node* next = nullptr;
     node* prev = nullptr;
     short state = 0; // example value
     unsigned char contraction_level = 0;
     
-    node(std::array<T, max_neighbours> arr, short state_val, unsigned char contraction_level_val, node* next_ptr, node* prev_ptr)
+    node(std::array<T, max_size> arr, short state_val, unsigned char contraction_level_val, node* next_ptr, node* prev_ptr)
         : adjacents(arr), state(state_val), contraction_level(contraction_level_val), next(next_ptr), prev(prev_ptr)
     {
         
@@ -69,7 +69,7 @@ class adjacency_list
             this->tail = nullptr;
             this->numel = 0;
         }
-        adjacency_list(std::array<T, max_neighbours> arr)
+        adjacency_list(std::array<T, max_size> arr)
         {
             this->head = node_allocator::create(arr, live, 0, nullptr, nullptr);
             // new node(arr, live, 0, nullptr, nullptr);/
@@ -77,7 +77,7 @@ class adjacency_list
             this->numel = 1;
         }
 
-        node<T>* add_tail(std::array<T, max_neighbours> arr, short state, unsigned char level)
+        node<T>* add_tail(std::array<T, max_size> arr, short state, unsigned char level)
         {
             if(this->numel == 0)
             {
@@ -94,7 +94,7 @@ class adjacency_list
             return this->tail;
         }
         
-        node<T>* add_level(std::array<T, max_neighbours> arr, short state, unsigned char contraction_time)
+        node<T>* add_level(std::array<T, max_size> arr, short state, unsigned char contraction_time)
         {
             return this->add_tail(arr, state, contraction_time);
         }

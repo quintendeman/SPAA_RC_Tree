@@ -64,8 +64,8 @@ struct cluster
 public:
     static const short size = max_neighbours*2;
     std::array<cluster<T, D>*, size> ptrs;
-    adjacency_list<T> adjacency;
-    adjacency_list<T> alternate_adjacency;
+    adjacency_list<cluster<T,D>*> adjacency;
+    adjacency_list<cluster<T,D>*> alternate_adjacency;
     T index = -1;
     T colour = -1; 
     std::atomic<T> counter; // a node will not have more than 255 edges
@@ -133,13 +133,16 @@ public:
 
     void add_level(short state, unsigned char contraction_time)
     {
-        std::array<T, max_neighbours> arr;
+        std::array<cluster<T,D>*, this->size> arr;
         for(short i = 0; i < this->size; i+=2)
         {
             if(this->ptrs[i] != nullptr && this->types[i] == neighbour_type)
-                arr[i/2] = ptrs[i]->index;
+            {
+                arr[i] = this->ptrs[i];
+                arr[i+1] = this->ptrs[i+1];
+            }
             else
-                arr[i/2] = -1;
+                arr[i] = arr[i+1] = nullptr;
         }
         
         this->adjacency.add_level(arr, state, contraction_time);
@@ -147,15 +150,19 @@ public:
 
     void add_alternate_level(short state, unsigned char contraction_time)
     {
-        std::array<T, max_neighbours> arr;
+        std::array<cluster<T,D>*, this->size> arr;
         for(short i = 0; i < this->size; i+=2)
         {
             if(this->ptrs[i] != nullptr && this->types[i] == neighbour_type)
-                arr[i/2] = ptrs[i]->index;
+            {
+                arr[i] = this->ptrs[i];
+                arr[i+1] = this->ptrs[i+1];
+            }
             else
-                arr[i/2] = -1;
+                arr[i] = arr[i+1] = nullptr;
         }
-        this->alternate_adjacency.add_level(arr, state, contraction_time);    
+        
+        this->alternate_adjacency.add_level(arr, state, contraction_time); 
     }
 
 
@@ -544,12 +551,16 @@ public:
                     std::cout << bold << white << "F" << reset << magenta;
                     
                 std::cout << "[ ";
-                for(uint j = 0; j < max_neighbours; j++)
+                for(uint j = 0; j < this->size; j+=2)
                 {
                    if(ptr->state & adjacency_changed)
                         std::cout << green;   
 
-                    std::cout << (*this->adjacency[i])[j] << " ";
+                    auto& other_ptr =   (*this->adjacency[i])[j];       
+                    if(other_ptr == nullptr)
+                        std::cout << "-1 ";
+                    else
+                        std::cout << other_ptr->index << " ";
                     std::cout << magenta;
                 }
                 std::cout << "] ";
@@ -565,14 +576,17 @@ public:
                 if(ptr->state & contracts_this_round)
                     std::cout << bold << white << "F" << reset << yellow;
                 std::cout << "[ ";
-                for(uint j = 0; j < max_neighbours; j++)
+                for(uint j = 0; j < this->size; j+=2)
                 {
 
                     if(ptr->state & adjacency_changed)
-                        std::cout << green;                    
-                    std::cout << (*this->alternate_adjacency[i])[j] << " ";
-                    
-                        std::cout << yellow;
+                        std::cout << green;           
+                    auto& other_ptr =   (*this->alternate_adjacency[i])[j];       
+                    if(other_ptr == nullptr)
+                        std::cout << "-1 ";
+                    else
+                        std::cout << other_ptr->index << " ";
+                    std::cout << yellow;
 
                 }
                 std::cout << "] ";
