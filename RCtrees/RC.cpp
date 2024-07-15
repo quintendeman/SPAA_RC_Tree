@@ -231,8 +231,6 @@ int main(int argc, char* argv[]) {
 
     test_dynamic_rc(parents, clusters);
 
-    if(graph_size <= 100)
-        printTree(clusters);
 
 
     deleteRCtree(clusters);

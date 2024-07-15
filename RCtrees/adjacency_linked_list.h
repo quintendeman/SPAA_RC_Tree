@@ -21,7 +21,7 @@ const short contracts_this_round = 2048;
 const short C1 = 4096;
 const short C2 = 8192;
 const short C3 = 8192 * 2;
-const short C4 = C3 * 2;
+const short needs_adjustment = C3 * 2;
 
 const int max_neighbours = 3;
 const int max_size = max_neighbours*2;
@@ -94,7 +94,7 @@ class adjacency_list
             return this->tail;
         }
         
-        node<T>* add_level(std::array<T, max_size> arr, short state, unsigned char contraction_time)
+        node<T>* add_level(std::array<T, max_size> arr, short state, unsigned char contraction_time) // TODO change name from contraction time to level 
         {
             return this->add_tail(arr, state, contraction_time);
         }
@@ -135,6 +135,7 @@ class adjacency_list
             while(other_head != nullptr && other_head->contraction_level <= level)
             {
                 this->add_level(other_head);
+                this->get_tail()->state &= (~contracts_this_round);
                 other_head = other_head->next;
             }
             
@@ -198,10 +199,6 @@ class adjacency_list
         {
             this->clear_all();
         }
-
-
-
-
 };
 
 #endif

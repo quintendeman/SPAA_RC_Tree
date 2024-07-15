@@ -428,10 +428,10 @@ public:
             if(this->ptrs[i] == old_neighbour)
             {
                 this->ptrs[i] = new_neighbour;
-                this->types[i]|=neighbour_type;
+                this->types[i] =neighbour_type;
 
                 this->ptrs[i+1] = new_edge;
-                this->types[i+1]|= edge_type;
+                this->types[i+1] = edge_type;
                 this->types[i+1]&= (~neighbour_type);
 
                 return i;
@@ -473,8 +473,6 @@ public:
 
     void print(void)
     {
-        if(!(this->state & debug_state))
-        {
         if(this->state & C1)
             std::cout << "1";
         if(this->state & C2)
@@ -483,7 +481,8 @@ public:
             std::cout << "3";
         if(this->state & (C1 | C2 | C3))
             std::cout << " ";
-        }
+        if(this->state & needs_adjustment)
+            std::cout << bold << red;
         if(!(this->state & debug_state) && this->state & (C1 | C2 | C3))
             std::cout << bold << green;
         else if (this->state & debug_state)
