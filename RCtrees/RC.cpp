@@ -96,6 +96,7 @@ void test_rc_valid(const parlay::sequence<vertex>& parents, parlay::sequence<clu
     return;
 }
 
+/*
 void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster<vertex, datatype>>& clusters)
 {
 
@@ -160,6 +161,7 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
 
     return;
 }
+*/
 
 
 int main(int argc, char* argv[]) {
@@ -222,14 +224,12 @@ int main(int argc, char* argv[]) {
     std::chrono::duration<double> creation_time = end_creation - start_creation;
 
 
-    test_rc_valid(parents, clusters);
+    // test_rc_valid(parents, clusters);
     
-    vertex test_index = std::sqrt(graph_size);
+    if(graph_size <= 100)
+        printTree(clusters);
 
-    // if(graph_size <= 100)
-    //     printTree(clusters);
-
-    test_dynamic_rc(parents, clusters);
+    // test_dynamic_rc(parents, clusters);
 
 
 

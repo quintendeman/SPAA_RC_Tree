@@ -62,540 +62,114 @@ template <typename T, typename D>
 struct cluster
 {
 public:
-    static const short size = max_neighbours*2;
-    std::array<cluster<T, D>*, size> ptrs;
-    adjacency_list<cluster<T,D>*> adjacency;
-    adjacency_list<cluster<T,D>*> alternate_adjacency;
-    T index = -1;
-    T colour = -1; 
-    std::atomic<T> counter; // a node will not have more than 255 edges
-    D data = -1.0;
-    short state = 0; // unaffected, affected or update eligible
-    std::array<char, size> types;
-    // char types[max_neighbours * 2];
-    unsigned char contraction_time = 0;
-    
-    // Default constructor
-    cluster() :  counter(0) {
-        for(uint i = 0; i < this->size; i++)
-        {
-            this->ptrs[i] = nullptr;
-            this->types[i] = 0;
-        }
-    }
+    T index;
+    adjacency_list adjacency;
+    std::atomic<T> counter;
+    T tiebreak;
+    cluster<T,D>* parent = nullptr;
+    D data;
+    int state;
 
-    // Copy constructor only for initialization when creating a sequence
-    cluster(const cluster& other)
-        : index(other.index),
-          colour(other.colour),
-          data(other.data),
-          counter(other.counter.load()), // Load the atomic value
-          state(other.state),
-          contraction_time(other.contraction_time)
+    cluster(void) : counter(0)
     {
-        for(uint i = 0; i < this->size; i++)
-        {
-            this->ptrs[i] = nullptr;
-            this->types[i] = 0;
-        }
-        return;
+
     }
 
-    // Method to get colour based off memory address
-    unsigned long get_default_colour(void) const
+    cluster(const cluster& other) :
+        counter(other.counter.load())
+    {
+
+    }
+    
+    short get_height(void)
+    {
+        if(this->adjacency.size() > 0)
+        {
+            return this->adjacency.get_tail()->contraction_level;
+        }
+        assert(true && "Shouldn't ever get the height of an uncontracted node");
+    }
+
+    short get_parent()
+    {
+        return this->parent;
+    }
+
+    unsigned long get_default_colour(void)
     {
         return reinterpret_cast<unsigned long>(this);
     }
 
-    // To be used only for connecting the base_edges to base_nodes
-    void add_initial_neighbours(cluster<T, D>* V,  cluster<T, D>* W)
+    // Filled with null pointers and no state
+    void add_empty_level(void)
     {
-        this->ptrs[0] = V;
-        this->ptrs[1] = W;
-        this->types[0] = neighbour_type;
-        this->types[1] = neighbour_type;
+        std::array<node*, max_neighbours> arr = { nullptr };
+        if(this->adjacency.size())
+            this->adjacency.add_level(arr, empty_type, this->adjacency.get_tail()->contraction_level, this->index);
+        else
+            this->adjacency.add_level(arr, empty_type, 0, this->index);
     }
 
-
-    short isPtr(T ngbr_index, short defretval = -1) const
+    void add_empty_level(int state, unsigned char level)
     {
-        for(short i = 0; i < this->size; i+=2)
-            if(this->ptrs[i] != nullptr && this->ptrs[i]->index  == ngbr_index)
-                return i;
-        return defretval;
-    }
-    short isPtr(const cluster<T, D>* ngbr_ptr, short defretval = -1) const
-    {
-        if(ngbr_ptr == nullptr)
-            return defretval;
-        return this->isPtr(ngbr_ptr->index, defretval);
+        std::array<node*, max_neighbours> arr = { nullptr };
+        this->adjacency.add_level(arr, state, level, this->index);
     }
 
-    void add_level(short state, unsigned char contraction_time)
+    void add_ptr_to_highest_level(node* nodeptr)
     {
-        std::array<cluster<T,D>*, this->size> arr;
-        for(short i = 0; i < this->size; i+=2)
-        {
-            if(this->ptrs[i] != nullptr && this->types[i] == neighbour_type)
+        auto& w_ptr_arr = this->adjacency.get_tail()->adjacents;
+        for(auto& w_ptr : w_ptr_arr)
+            if(w_ptr == nullptr)
             {
-                arr[i] = this->ptrs[i];
-                arr[i+1] = this->ptrs[i+1];
+                w_ptr = nodeptr;
+                break;
             }
-            else
-                arr[i] = arr[i+1] = nullptr;
-        }
-        
-        this->adjacency.add_level(arr, state, contraction_time);
     }
 
-    void add_alternate_level(short state, unsigned char contraction_time)
+    void replicate_last_level(int state, unsigned char level)
     {
-        std::array<cluster<T,D>*, this->size> arr;
-        for(short i = 0; i < this->size; i+=2)
+        if(this->adjacency.size() == 0)
+            this->add_empty_level(state, level);
+        else
         {
-            if(this->ptrs[i] != nullptr && this->types[i] == neighbour_type)
-            {
-                arr[i] = this->ptrs[i];
-                arr[i+1] = this->ptrs[i+1];
-            }
-            else
-                arr[i] = arr[i+1] = nullptr;
-        }
-        
-        this->alternate_adjacency.add_level(arr, state, contraction_time); 
-    }
-
-
-    // index of neighbour if successful, -1 if not
-    // Note, if that pointer already exists, set its type to neighbour
-    // and returns that index
-    // index i+1 will contain edge for easier management
-    short add_neighbour(cluster<T, D>* neighbour, cluster<T, D>* edge)
-    {
-        for(short i = 0; i < this->size; i+=2)
-        {
-            if(this->ptrs[i] == nullptr || this->ptrs[i] == neighbour)
-            {
-                this->ptrs[i] = neighbour;
-                this->ptrs[i+1] = edge;
-                this->types[i] |= neighbour_type;
-                this->types[i+1] |= edge_type;
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    /**
-     * Removes a node as a neighbour and returns the index
-    */
-    short remove_neighbour(cluster<T, D>* neighbour)
-    {
-        for(short i = 0; i < this->size; i++)
-        {
-            if(this->ptrs[i] == neighbour)
-            {
-                this->types[i]&=(~neighbour_type);
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    short change_to_neighbour(cluster<T, D>* neighbour)
-    {
-        for(short i = 0; i < this->size; i++)
-        {
-            if(this->ptrs[i] == neighbour)
-            {
-                this->types[i]&=(~child_type);
-                this->types[i]&=(~edge_type);
-                this->types[i]|=neighbour_type;
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    // changes a ptr from neighbour_type or edge_type to child_type
-    short change_to_child(cluster<T, D>* child)
-    {
-        for(short i = 0; i < this->size; i++)
-        {
-            if(this->ptrs[i] == child)
-            {
-                // this->types[i]&=(~neighbour_type);
-                // this->types[i]&=(~edge_type);
-                this->types[i]=child_type;
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    /**
-     * designates a neighbour as a parent
-    */
-    short set_parent(cluster<T, D>* node)
-    {
-        for(short i = 0; i < this->size; i++)
-        {
-            if(this->ptrs[i] == node)
-            {
-                this->types[i]=parent_type;
-                this->types[i]&=(~neighbour_type);
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    cluster<T, D>* get_parent(void) const
-    {
-        for(short i = 0; i < this->size; i++)
-        {
-            if(this->types[i]&parent_type)
-            {
-                return this->ptrs[i];
-            }
-        }
-        return nullptr;
-    }
-
-    cluster<T, D>* get_parent(short& parent_index) const
-    {
-        parent_index = -1;
-        for(short i = 0; i < this->size; i++)
-        {
-            if(this->types[i] & parent_type)
-            {
-                parent_index = i;
-                return this->ptrs[i];
-            }
-        }
-        return nullptr;
-    }
-
-    // set the neighbours MIS to val
-    // useful when colouring
-    void set_neighbour_mis(bool val)
-    {
-        for(short i = 0; i < this->size; i+=2)
-        {
-            if(this->ptrs[i])
-                if(val)
-                    this->ptrs[i]->state |= IS_MIS_SET;
-                else
-                    this->ptrs[i]->state &= (~IS_MIS_SET);
+            auto& w_ptr_arr = this->adjacency.get_tail()->adjacents;
+            this->adjacency.add_level(w_ptr_arr, state, level, this->index);
         }
     }
-
-    void set_neighbour_colour(T input_colour)
+    void replicate_last_level(void)
     {
-        for(short i = 0; i < this->size; i+=2)
-        {
-            if(this->ptrs[i] && this->types[i] & neighbour_type)
-                this->ptrs[i]->colour = input_colour;
-        }
-    }
-
-    bool is_max_neighbour_colour(void)
-    {
-        T max_colour = this->colour;
-        for(short i = 0; i < this->size; i+=2)
-        {
-            if(this->ptrs[i] && this->ptrs[i]->colour > max_colour && this->types[i] & neighbour_type)
-                max_colour = this->ptrs[i]->colour;
-        }
-        if(max_colour == this->colour)
-            return true;
-        return false;
-    }
-
-    cluster<T, D>* get_one_neighbour(void) const
-    {
-        for(short i = 0; i < this->size; i++)
-        {
-            if(this->types[i] & neighbour_type)
-                return this->ptrs[i];
-        }
-        return nullptr;
-    }
-
-    /*
-        return true if any neighbours are in MIS
-        else return false
-    */
-    bool get_neighbour_MIS(void) const
-    {
-        for(short i = 0; i < this->size; i+=2)
-        {
-            if(this->ptrs[i] && this->ptrs[i]->state & IS_MIS_SET)
-                return true;
-        }
-        return false;
-    }
-
-    short get_neighbour_count(void) const
-    {
-        short num_neighbours = 0;
-        for(short i = 0; i < this->size; i++)
-        {
-            if(this->types[i] & neighbour_type)
-                num_neighbours++;
-        }
-
-        return num_neighbours;
-    }
-
-    short get_children_count(void) const
-    {
-        short num_children = 0;
-        for(const auto& t : this->types)
-            if (t & child_type)
-                num_children++;
-        return num_children;
-    }
-
-    void get_two_neighbours_edges(cluster<T, D>*& neighbour1, cluster<T, D>*& edge1, cluster<T, D>*& neighbour2, cluster<T, D>*& edge2) const
-    {
-        bool first_neighbour_found = false;
-        for(short i = 0; i < this->size; i+=2)
-        {
-            if(this->types[i]&neighbour_type)
-            {
-                if(first_neighbour_found == false)
-                {
-                    first_neighbour_found = true;
-                    neighbour1 = this->ptrs[i];
-                    edge1 = this->ptrs[i+1];
-                }
-                else
-                {
-                    neighbour2 = this->ptrs[i];
-                    edge2 = this->ptrs[i+1];
-                    return;
-                }
-            }
-        }
-    }
-
-    // Find boundary vertices by observing own state and ajdacent edges
-    void find_boundary_vertices(cluster<T, D>* &l, D& lval, cluster<T, D>* &r, D& rval, const D& defretval) const
-    {
-        lval = rval = defretval;
-        if(this->state & nullary_cluster)
-        {
-            l = r = nullptr;
-            return;
-        }
-        if(this->state & unary_cluster)
-        {
-            short parent_index = 0;
-            l = r = this->get_parent(parent_index);
-            /* l CAN NEVER BE NULLPTR*/
-            lval = rval = this->ptrs[parent_index+1]->data;
-            return;
-        }
-        if(this->state & binary_cluster)
-        {
-            short parent_index;
-            r = this->get_parent(parent_index);
-            rval = this->ptrs[parent_index+1]->data;
-            for(uint i = 0; i < this->size; i+=2)
-            {
-                if(this->types[i] & neighbour_type && this->ptrs[i] != r)
-                {
-                    l = this->ptrs[i];
-                    lval = this->ptrs[i+1]->data;
-                    return;
-                }
-            }
-
-        }
-        return;
-    }
-
-    /*
-        Mainly used when doing compress
-
-    */
-    short overwrite_neighbour(cluster<T, D>* old_neighbour, cluster<T, D>* new_neighbour, cluster<T, D>* new_edge)
-    {
-
-        for(short i = 0; i < this->size; i++)
-        {
-            if(this->ptrs[i] == old_neighbour)
-            {
-                this->ptrs[i] = new_neighbour;
-                this->types[i] =neighbour_type;
-
-                this->ptrs[i+1] = new_edge;
-                this->types[i+1] = edge_type;
-                this->types[i+1]&= (~neighbour_type);
-
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    inline unsigned char get_height() const
-    {
-        return this->contraction_time;
-    }
-
-    void set_height()
-    {
-        this->height = -1;
-        for(uint i = 0; i < this->size; i++)
-        {
-            if(this->types[i] & child_type && this->ptrs[i] != nullptr)
-                this->height = std::max(this->height, this->ptrs[i]->height);
-        }
-        this->height = this->height + 1;
-        return;
-    }
-
-    void print_as_edge(void)
-    {
-        if(this == nullptr)
-            return;
-        for(uint i = 0; i < this->size; i++)
-        {
-            if(this->ptrs[i] != nullptr)
-                std::cout << " " << this->ptrs[i]->index;
-        }
-        std::cout << ((this->state & base_edge) ? ""  : ("[" + std::to_string(this->index) + "]"));
-        return;
+        this->replicate_last_level(empty_type, 1);
     }
 
     void print(void)
     {
-        if(this->state & C1)
-            std::cout << "1";
-        if(this->state & C2)
-            std::cout << "2";
-        if(this->state & C3)
-            std::cout << "3";
-        if(this->state & (C1 | C2 | C3))
-            std::cout << " ";
-        if(this->state & needs_adjustment)
-            std::cout << bold << red;
-        if(!(this->state & debug_state) && this->state & (C1 | C2 | C3))
-            std::cout << bold << green;
-        else if (this->state & debug_state)
-            std::cout << bold << white;
-        else if(this->state & binary_cluster)
-            std::cout << red;
-        else if (this->state & unary_cluster)
-            std::cout << cyan;
-        else if (this->state & nullary_cluster)
-            std::cout << green;
-        else if (this->state & live)
-            std::cout << bright_yellow;
-        else
-            std::cout << reset;
-        std::cout << "Index: " << this->index << reset;
-        std::cout << blue << "[" << (int) this->get_height()  << "]" << reset;
-        // std::cout << yellow << "[" << this->data << "]" << reset;
-        // std::cout << magenta << "[" << (int) this->counter << "]" << reset;
-        std::cout << "  ";
-        if(this->state&live)
-            std::cout << "live ";
-        else
-            std::cout << "dead ";
-        for(uint i = 0; i < this->size; i+=2)
+        std::cout << bold << white << this->index << " " << reset;
+        for(auto i = 0; i < this->adjacency.size(); i++)
         {
-            auto cluster_ptr = this->ptrs[i];
-            if(cluster_ptr == nullptr)
-                continue;
-            std::cout << cluster_ptr->index;
-            std::cout << " ";
-            auto ptr_type = this->types[i];
-            if(ptr_type & neighbour_type)
-                std::cout << "N";
-            if(ptr_type & edge_type)
-                std::cout << "E";
-            if(ptr_type & parent_type)
-                std::cout << "P";
-            if(ptr_type & child_type)
-                std::cout << "C";
-            std::cout << "(";
-            this->ptrs[i+1]->print_as_edge();
-            std::cout << " ";
-            ptr_type = this->types[i+1];
-            if(ptr_type & neighbour_type)
-                std::cout << "N";
-            if(ptr_type & edge_type)
-                std::cout << "E";
-            if(ptr_type & parent_type)
-                std::cout << "P";
-            if(ptr_type & child_type)
-                std::cout << "C";
-            std::cout << " " << green;
-            std::cout << this->ptrs[i+1]->data;
-            std::cout << reset << " ";
-            std::cout << ")   ";
-        }
+            std::cout << magenta << "[ ";
 
-        if(this->adjacency.size())
-        {
-            std::cout << magenta << std::endl;
-            for(uint i = 0; i < this->adjacency.size(); i++)
+
+            const auto& node_ptr_arr = this->adjacency[i]->adjacents;
+            for(const auto& ptr : node_ptr_arr)
             {
-                auto ptr = this->adjacency[i];
-                if(ptr->state & contracts_this_round)
-                    std::cout << bold << white << "F" << reset << magenta;
-                    
-                std::cout << "[ ";
-                for(uint j = 0; j < this->size; j+=2)
+                if(ptr != nullptr && ptr->index != -1)
+                    std::cout << bold << blue << "(" << ptr->index <<") "<< reset << magenta;
+
+                if(ptr != nullptr)
                 {
-                   if(ptr->state & adjacency_changed)
-                        std::cout << green;   
-
-                    auto& other_ptr =   (*this->adjacency[i])[j];       
-                    if(other_ptr == nullptr)
-                        std::cout << "-1 ";
-                    else
-                        std::cout << other_ptr->index << " ";
-                    std::cout << magenta;
+                    const auto& nbr_nodes_list = ptr->adjacents;
+                    for(const auto& nbr_node : nbr_nodes_list)
+                        if(nbr_node != nullptr && nbr_node->index != this->index)
+                            std::cout << nbr_node->index << " ";
                 }
-                std::cout << "] ";
-            } 
-        std::cout << reset << std::endl;
+                std::cout << " ";
+            }
+            std::cout << "] ";
         }
-        if(this->alternate_adjacency.size())
-        {
-            std::cout << yellow << std::endl;
-            for(uint i = 0; i < this->alternate_adjacency.size(); i++)
-            {
-                auto ptr = this->alternate_adjacency[i];
-                if(ptr->state & contracts_this_round)
-                    std::cout << bold << white << "F" << reset << yellow;
-                std::cout << "[ ";
-                for(uint j = 0; j < this->size; j+=2)
-                {
-
-                    if(ptr->state & adjacency_changed)
-                        std::cout << green;           
-                    auto& other_ptr =   (*this->alternate_adjacency[i])[j];       
-                    if(other_ptr == nullptr)
-                        std::cout << "-1 ";
-                    else
-                        std::cout << other_ptr->index << " ";
-                    std::cout << yellow;
-
-                }
-                std::cout << "] ";
-            } 
         std::cout << reset << std::endl;
-        }
-
-        // std::cout << " colour(" << this->colour << ") ";
-        std::cout << std::endl;
     }
+
 };
 
 

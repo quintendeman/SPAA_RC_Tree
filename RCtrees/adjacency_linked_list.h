@@ -5,62 +5,54 @@
 #include <parlay/alloc.h>
 
 
-const short empty_type = 0;
-const short base_vertex = 1;
-const short base_edge = 2;
-const short unary_cluster = 4;
-const short binary_cluster = 8;
-const short nullary_cluster = 16;
-const short IS_MIS_SET = 32;
-const short live = 64;
-const short affected = 128;
-const short adjacency_changed = 256;
-const short all_contracted_affected = 512;
-const short debug_state = 1024;
-const short contracts_this_round = 2048;
-const short C1 = 4096;
-const short C2 = 8192;
-const short C3 = 8192 * 2;
-const short needs_adjustment = C3 * 2;
+const int empty_type = 0;
+const int base_vertex = 1;
+const int base_edge = 2;
+const int unary_cluster = 4;
+const int binary_cluster = 8;
+const int nullary_cluster = 16;
+const int IS_MIS_SET = 32;
+const int live = 64;
+const int affected = 128;
+const int adjacency_changed = 256;
+const int all_contracted_affected = 512;
+const int debug_state = 1024;
+const int contracts_this_round = 2048;
 
 const int max_neighbours = 3;
-const int max_size = max_neighbours*2;
 
-template <typename T>
 struct node
 {
-    std::array<T, max_size> adjacents; 
+    std::array<node*, max_neighbours> adjacents; 
     node* next = nullptr;
     node* prev = nullptr;
-    short state = 0; // example value
+    long index = -1;
+    int state = 0; // example value
     unsigned char contraction_level = 0;
     
-    node(std::array<T, max_size> arr, short state_val, unsigned char contraction_level_val, node* next_ptr, node* prev_ptr)
+    node(std::array<node*, max_neighbours> arr, int state_val, unsigned char contraction_level_val, node* next_ptr, node* prev_ptr)
         : adjacents(arr), state(state_val), contraction_level(contraction_level_val), next(next_ptr), prev(prev_ptr)
     {
         
     }
-    T& operator[](const short index)
+    node*& operator[](const int index)
     {
         return this->adjacents[index];
     }
 
-    inline short size(void)
+    inline int size(void)
     {
         return this->adjacents.size();
     }
 };
 
-template <typename T>
 class adjacency_list
 {
-    using node_allocator = parlay::type_allocator<node<T>>;
+    using node_allocator = parlay::type_allocator<node>;
     private:
-        node<T>* head;
-        node<T>* tail;
+        node* head;
+        node* tail;
         unsigned char numel;
-
-        
 
     public:
         adjacency_list(void)
@@ -69,7 +61,7 @@ class adjacency_list
             this->tail = nullptr;
             this->numel = 0;
         }
-        adjacency_list(std::array<T, max_size> arr)
+        adjacency_list(std::array<node*, max_neighbours> arr)
         {
             this->head = node_allocator::create(arr, live, 0, nullptr, nullptr);
             // new node(arr, live, 0, nullptr, nullptr);/
@@ -77,7 +69,8 @@ class adjacency_list
             this->numel = 1;
         }
 
-        node<T>* add_tail(std::array<T, max_size> arr, short state, unsigned char level)
+
+        node* add_tail(std::array<node*, max_neighbours> arr, int state, unsigned char level, long index_in)
         {
             if(this->numel == 0)
             {
@@ -85,23 +78,25 @@ class adjacency_list
                 // new node(arr, live, 0, nullptr, nullptr);/
                 this->tail = this->head;
                 this->numel = 1;
+                this->tail->index = index_in;
                 return this->head;
             }
             auto new_node = node_allocator::create(arr, state, level, nullptr, this->tail);
             this->tail->next = new_node;
             this->tail = new_node;
             this->numel++;
+            this->tail->index = index_in;
             return this->tail;
         }
         
-        node<T>* add_level(std::array<T, max_size> arr, short state, unsigned char contraction_time) // TODO change name from contraction time to level 
+        node* add_level(std::array<node*, max_neighbours> arr, int state, unsigned char contraction_time, long index_in) // TODO change name from contraction time to level 
         {
-            return this->add_tail(arr, state, contraction_time);
+            return this->add_tail(arr, state, contraction_time, index_in);
         }
 
-        node<T>* add_level(node<T>* node_ptr)
+        node* add_level(node* node_ptr, long index_in)
         {
-            return this->add_tail(node_ptr->adjacents, node_ptr->state, node_ptr->contraction_level);
+            return this->add_tail(node_ptr->adjacents, node_ptr->state, node_ptr->contraction_level, index_in);
         }
 
         unsigned char size(void)
@@ -110,7 +105,7 @@ class adjacency_list
         }
         
 
-        node<T>* delete_tail()
+        node* delete_tail()
         {
             if(this->numel == 0)
             {
@@ -127,25 +122,10 @@ class adjacency_list
             return this->tail;
         }
 
-        node<T>* copy_till_level(adjacency_list* adj, const unsigned char& level)
-        {
-            this->clear_all(); // assume that there is nothing in this list
-
-            node<T>* other_head = adj->get_head();
-            while(other_head != nullptr && other_head->contraction_level <= level)
-            {
-                this->add_level(other_head);
-                this->get_tail()->state &= (~contracts_this_round);
-                other_head = other_head->next;
-            }
-            
-            return this->get_tail();
-        }
-
         /*
             Best effort attempt
         */
-        node<T>* operator[](const unsigned char level) const
+        node* operator[](const unsigned char level) const
         {
             if(this->numel == 0)
                 return nullptr;
@@ -163,7 +143,7 @@ class adjacency_list
             return prev_ptr;
         }
 
-        node<T>* adopt(adjacency_list* alt_adj)
+        node* adopt(adjacency_list* alt_adj)
         {  
             this->clear_all();
             this->head = alt_adj->head;
@@ -185,12 +165,12 @@ class adjacency_list
             while(this->delete_tail() != nullptr);
         }    
 
-        node<T>* get_head()
+        node* get_head()
         {
             return this->head;
         }
         
-        node<T>* get_tail()
+        node* get_tail()
         {
             return this->tail;
         }
