@@ -102,7 +102,7 @@ void degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
         if(v == parents[v])
             return;
         T parent_count = counts[parents[v]].fetch_add(1);
-        if(parent_count < (max_degree - 2))
+        if(parent_count < (max_degree - 1))
         {
             return;
         }
