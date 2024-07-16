@@ -11,10 +11,9 @@
 #include <algorithm>
 #include <iostream>
 #include <mutex>
-#include "cluster.h"
 #include "../examples/helper/graph_utils.h"
 #include <parlay/alloc.h>
-
+#include "cluster.h"
 
 
 /*
@@ -215,10 +214,6 @@ static unsigned char get_single_colour_contribution(const T vcolour, const T wco
     return final_returned_character;
 }
 
-
-
-
-
 // /*
 //     Given a set of cluster ptrs, colours them.
 //     The clusters must have an initial valid colouring stored in their temp_colour folder
@@ -226,9 +221,54 @@ static unsigned char get_single_colour_contribution(const T vcolour, const T wco
 //     and two hops away is a vertex representing a neighbouring node
 // */
 template<typename T, typename D>
-void colour_clusters(parlay::sequence<cluster<T,D>*> clusters)
+void colour_nodes(parlay::sequence<node<T,D>*> tree_nodes, parlay::sequence<cluster<T,D>>& clusters)
 {
+    static const T local_maximum_colour = (T) 0;
+    static const T local_minimum_colour = (T) 1;    
 
+    parlay::parallel_for(0, tree_nodes.size(), [&] (T I) {
+        auto& cluster_ptr = clusters[tree_nodes[I]->index];
+        unsigned long local_maximum = cluster_ptr->get_default_colour();
+        unsigned long local_minimum = local_maximum;
+        unsigned long my_colour = local_maximum;
+
+        auto& node = *tree_nodes[I];
+
+        for(uint i = 0; i < tree_nodes[I]->size(); i++)
+        {
+            // get other side
+            const auto& node_ptr = node[i];
+            if(node_ptr == nullptr || node_ptr->state & (binary_cluster | base_edge))
+                continue;
+            cluster<T,D>* other_ptr = nullptr;
+            
+            for(const auto& pot_other_ptr : node->adjacents)
+                if(pot_other_ptr != nullptr && pot_other_ptr->index != cluster_ptr->index)
+                    other_ptr = clusters[pot_other_ptr->index];
+            if(other_ptr == nullptr)
+                continue;
+
+            unsigned long compared_colour = other_ptr->get_default_colour();
+            if(compared_colour > local_maximum)
+                local_maximum = compared_colour;
+            if(compared_colour < local_minimum)
+                local_minimum = compared_colour;   
+        }
+        if(local_maximum == my_colour) // This node is a local maximum, give it a unique colour
+        {
+            cluster_ptr->colour = local_maximum_colour;
+        }
+        else if(local_minimum == my_colour)
+        {
+            cluster_ptr->colour = local_minimum_colour;
+        }
+        else
+        {
+            cluster_ptr->colour = 2 + (get_single_colour_contribution(my_colour, local_maximum) / 2); // adding 2 and removing indicator bit
+        }
+    });
+
+    return;
 }
 
 // /*
@@ -237,8 +277,9 @@ void colour_clusters(parlay::sequence<cluster<T,D>*> clusters)
 //     These clusters must have a maximum degree of 2
 // */
 template<typename T, typename D>
-void set_MIS(parlay::sequence<cluster<T,D>*> clusters, bool randomized = false)
+void set_MIS(parlay::sequence<node<T,D>*> tree_nodes, parlay::sequence<cluster<T, D> > &base_clusters, bool randomized = false)
 {
+    colour_nodes(tree_nodes, base_clusters);
 
 }
 
@@ -298,7 +339,7 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
             // find the edge that corresponds/joins to the other side
             const auto& node_ptr_arr = base_clusters[w].adjacency.get_tail()->adjacents;
 
-            node* edge_ptr = nullptr;
+            node<T,D>* edge_ptr = nullptr;
             bool found = false;
             for(auto& ptr : node_ptr_arr)
             {
@@ -307,7 +348,7 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
                     const auto& final_adjacency_ptr_arr = ptr->adjacents;
                     for(const auto& v_ptr : final_adjacency_ptr_arr)
                     {
-                        if(v_ptr != nullptr && v_ptr->index == v)
+                        if(v_ptr != nullptr && v_ptr->cluster_ptr == cluster_ptr)
                         {    
                             edge_ptr = ptr;
                             found = true;

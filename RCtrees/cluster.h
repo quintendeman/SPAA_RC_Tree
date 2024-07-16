@@ -1,17 +1,13 @@
 #ifndef CLUSTER_H
 #define CLUSTER_H
 
-// Declarations and definitions
-
-
 
 #include <atomic>
 #include <algorithm>
+#include "adjacency_linked_list.h"
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
-#include "../examples/counting_sort.h"
-#include "adjacency_linked_list.h"
-
+#include <atomic>
 
 
 const char neighbour_type = 1;
@@ -20,6 +16,7 @@ const char child_type = 4;
 const char edge_type = 8;
 const char added_type = 16;
 const char deleted_type = 32;
+
 
 
 
@@ -50,22 +47,25 @@ const char* hidden = "\033[8m";
 const char* backspace = "\033[D";
 
 
-
 /*
     This represents a cluster in an RC tree.
     All these variables might be excessive but these flags and such are necessary since will be relying on pointer chasing
 */
-#include <atomic>
-#include <cstring> // for std::memcpy if needed
+template<typename T, typename D>
+class adjacency_list;
+
+template<typename T, typename D>
+class node;
 
 template <typename T, typename D>
 struct cluster
 {
 public:
     T index;
-    adjacency_list adjacency;
+    adjacency_list<T,D> adjacency;
     std::atomic<T> counter;
     T tiebreak;
+    T& colour = tiebreak;
     cluster<T,D>* parent = nullptr;
     D data;
     int state;
@@ -103,20 +103,20 @@ public:
     // Filled with null pointers and no state
     void add_empty_level(void)
     {
-        std::array<node*, max_neighbours> arr = { nullptr };
+        std::array<node<T,D>*, max_neighbours> arr = { nullptr };
         if(this->adjacency.size())
-            this->adjacency.add_level(arr, empty_type, this->adjacency.get_tail()->contraction_level, this->index);
+            this->adjacency.add_level(arr, empty_type, this->adjacency.get_tail()->contraction_level, this);
         else
-            this->adjacency.add_level(arr, empty_type, 0, this->index);
+            this->adjacency.add_level(arr, empty_type, 0, this);
     }
 
     void add_empty_level(int state, unsigned char level)
     {
-        std::array<node*, max_neighbours> arr = { nullptr };
-        this->adjacency.add_level(arr, state, level, this->index);
+        std::array<node<T,D>*, max_neighbours> arr = { nullptr };
+        this->adjacency.add_level(arr, state, level, this);
     }
 
-    void add_ptr_to_highest_level(node* nodeptr)
+    void add_ptr_to_highest_level(node<T,D>* nodeptr)
     {
         auto& w_ptr_arr = this->adjacency.get_tail()->adjacents;
         for(auto& w_ptr : w_ptr_arr)
@@ -153,15 +153,15 @@ public:
             const auto& node_ptr_arr = this->adjacency[i]->adjacents;
             for(const auto& ptr : node_ptr_arr)
             {
-                if(ptr != nullptr && ptr->index != -1)
-                    std::cout << bold << blue << "(" << ptr->index <<") "<< reset << magenta;
+                if(ptr != nullptr && ptr->cluster_ptr->index != -1)
+                    std::cout << bold << blue << "(" << ptr->cluster_ptr->index <<") "<< reset << magenta;
 
                 if(ptr != nullptr)
                 {
                     const auto& nbr_nodes_list = ptr->adjacents;
                     for(const auto& nbr_node : nbr_nodes_list)
-                        if(nbr_node != nullptr && nbr_node->index != this->index)
-                            std::cout << nbr_node->index << " ";
+                        if(nbr_node != nullptr && nbr_node->cluster_ptr->index != this->index)
+                            std::cout << nbr_node->cluster_ptr->index << " ";
                 }
                 std::cout << " ";
             }
@@ -171,6 +171,7 @@ public:
     }
 
 };
+
 
 
 
