@@ -17,4 +17,11 @@ struct edge_with_flag
     bool valid = true;
 };
 
+
+template<typename T, typename D>
+void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, D>>& add_edges, parlay::sequence<cluster<T, D>>& clusters)
+{
+    return;
+}
+
 #endif

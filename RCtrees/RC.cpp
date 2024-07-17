@@ -98,7 +98,7 @@ void test_rc_valid(const parlay::sequence<vertex>& parents, parlay::sequence<clu
     return;
 }
 
-/*
+
 void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster<vertex, datatype>>& clusters)
 {
 
@@ -163,7 +163,7 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
 
     return;
 }
-*/
+
 
 
 int main(int argc, char* argv[]) {
@@ -231,11 +231,11 @@ int main(int argc, char* argv[]) {
     if(graph_size <= 100)
         printTree(clusters);
 
-    // test_dynamic_rc(parents, clusters);
+    test_dynamic_rc(parents, clusters);
 
 
 
-    deleteRCtree(clusters);
+    // deleteRCtree(clusters);
 
     if (print_creation) {
         std::cout << graph_size << "," << std::setprecision(6) << creation_time.count() << std::endl;

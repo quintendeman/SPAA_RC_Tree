@@ -1056,9 +1056,7 @@ void deleteRCtree(parlay::sequence<cluster<T, D>> &base_clusters)
                 }
             }
         }
-        
     });
-
 }
 
 template<typename T, typename D>
