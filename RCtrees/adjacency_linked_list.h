@@ -45,6 +45,18 @@ struct node
     {
         return this->adjacents.size();
     }
+
+    // Get number of neighbours assuming this node is live
+    // To get boundary vertices, do something else
+    short get_num_neighbours_live(void)
+    {
+        short ret_num = 0;
+        for(const auto& adj_ptr : this->adjacents)
+            if(adj_ptr != nullptr && adj_ptr->state & (base_edge | binary_cluster))
+                ret_num++;
+        return ret_num;
+    }
+
 };
 
 

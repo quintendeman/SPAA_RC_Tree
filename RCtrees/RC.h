@@ -221,13 +221,13 @@ static unsigned char get_single_colour_contribution(const T vcolour, const T wco
 //     and two hops away is a vertex representing a neighbouring node
 // */
 template<typename T, typename D>
-void colour_nodes(parlay::sequence<node<T,D>*> tree_nodes, parlay::sequence<cluster<T,D>>& clusters)
+void colour_nodes(parlay::sequence<node<T,D>*> tree_nodes)
 {
     static const T local_maximum_colour = (T) 0;
     static const T local_minimum_colour = (T) 1;    
 
     parlay::parallel_for(0, tree_nodes.size(), [&] (T I) {
-        auto& cluster_ptr = clusters[tree_nodes[I]->index];
+        auto& cluster_ptr = tree_nodes[I]->cluster_ptr;
         unsigned long local_maximum = cluster_ptr->get_default_colour();
         unsigned long local_minimum = local_maximum;
         unsigned long my_colour = local_maximum;
@@ -242,9 +242,9 @@ void colour_nodes(parlay::sequence<node<T,D>*> tree_nodes, parlay::sequence<clus
                 continue;
             cluster<T,D>* other_ptr = nullptr;
             
-            for(const auto& pot_other_ptr : node->adjacents)
-                if(pot_other_ptr != nullptr && pot_other_ptr->index != cluster_ptr->index)
-                    other_ptr = clusters[pot_other_ptr->index];
+            for(const auto& pot_other_ptr : node.adjacents)
+                if(pot_other_ptr != nullptr && pot_other_ptr->cluster_ptr->index != cluster_ptr->index)
+                    other_ptr = pot_other_ptr->cluster_ptr;
             if(other_ptr == nullptr)
                 continue;
 
@@ -267,7 +267,6 @@ void colour_nodes(parlay::sequence<node<T,D>*> tree_nodes, parlay::sequence<clus
             cluster_ptr->colour = 2 + (get_single_colour_contribution(my_colour, local_maximum) / 2); // adding 2 and removing indicator bit
         }
     });
-
     return;
 }
 
@@ -277,12 +276,131 @@ void colour_nodes(parlay::sequence<node<T,D>*> tree_nodes, parlay::sequence<clus
 //     These clusters must have a maximum degree of 2
 // */
 template<typename T, typename D>
-void set_MIS(parlay::sequence<node<T,D>*> tree_nodes, parlay::sequence<cluster<T, D> > &base_clusters, bool randomized = false)
+void set_MIS(parlay::sequence<node<T, D>*>& tree_nodes)
 {
-    colour_nodes(tree_nodes, base_clusters);
+    auto cluster_ptrs = parlay::tabulate(tree_nodes.size(), [&] (T i) {
+        return tree_nodes[i]->cluster_ptr;
+    });
+    colour_nodes(tree_nodes);
 
+    parlay::parallel_for(0, cluster_ptrs.size(), [&] (T v) {
+        cluster_ptrs[v]->state &= (~IS_MIS_SET);
+        cluster_ptrs[v]->set_neighbour_mis(false);
+    });
+
+    auto colours = parlay::tabulate(cluster_ptrs.size(), [&] (T v) {
+        return cluster_ptrs[v]->colour;
+    });
+
+    auto vertices = parlay::tabulate(cluster_ptrs.size(), [] (T v) {
+        return v;
+    });
+
+    auto result = vertices;
+
+    parlay::sequence<unsigned long> offsets = counting_sort(vertices.begin(), vertices.end(), result.begin(), colours.begin(), 8 * sizeof(unsigned long));
+
+
+    for(uint i = 0; i < offsets.size(); i++)
+    {
+        T start_index;
+        if (i == 0)
+            start_index = 0;
+        else
+            start_index = offsets[i-1];
+        T end_index = offsets[i];
+
+        parlay::parallel_for(start_index, end_index, [&] (T i) {
+            T v = result[i];
+            if(cluster_ptrs[v]->get_neighbour_mis() == true)
+            {
+                cluster_ptrs[v]->state &= (~IS_MIS_SET);
+                return;
+            }
+            cluster_ptrs[v]->state |= IS_MIS_SET;
+        });
+    }
 }
 
+
+/**
+ * MUST have at most 2 neighbours
+ */
+template<typename T, typename D>
+void contract(node<T,D>* node_ptr, short level = -1)
+{
+    
+    if(node_ptr->get_num_neighbours_live() == 0)
+    {
+        node_ptr->state |= contracts_this_round | nullary_cluster;
+        node_ptr->state &= (~live);
+    }
+    else if(node_ptr->get_num_neighbours_live() == 1)
+    {
+        node<T,D>* neighbour_node;
+        node<T,D>* edge_node;
+        for(auto& ptr : node_ptr->adjacents)
+            if(ptr != nullptr && ptr->state & (base_edge | binary_cluster))
+            {
+                edge_node = ptr;
+                break;
+            }
+        neighbour_node = get_other_side(node_ptr, edge_node);
+
+        // do nothing for myself
+        node_ptr->state &= (~live);
+        node_ptr->state |= (unary_cluster | contracts_this_round);
+
+        node_ptr->cluster_ptr->parent = neighbour_node->cluster_ptr;
+        edge_node->cluster_ptr->parent = node_ptr->cluster_ptr;
+
+
+        for(auto& ptr : neighbour_node->adjacents)
+            if(ptr == edge_node)
+                ptr = node_ptr;
+    }
+    else if (node_ptr->get_num_neighbours_live() == 2)
+    {
+        node<T,D>* left_edge;
+        node<T,D>* left_node;
+        node<T,D>* right_edge;
+        node<T,D>* right_node;
+        for(auto& ptr : node_ptr->adjacents)
+            if(ptr != nullptr && ptr->state & (base_edge | binary_cluster))
+            {
+                left_edge = ptr;
+                left_node = get_other_side(node_ptr, left_edge);
+                break;
+            }
+        for(auto& ptr : node_ptr->adjacents)
+            if(ptr != nullptr && ptr->state & (base_edge | binary_cluster) && ptr != left_edge)
+            {
+                right_edge = ptr;
+                right_node = get_other_side(node_ptr, right_edge);
+                break;
+            }
+        
+        node_ptr->state |= binary_cluster | contracts_this_round;
+        node_ptr->state &= (~live);
+        
+        for(auto& ptr : node_ptr->adjacents)
+        {
+            if(ptr == left_edge)
+                ptr = left_node;
+            if(ptr == right_edge)
+                ptr = right_node;
+        }
+
+        for(auto& ptr : left_node->adjacents)
+            if(ptr == left_edge)
+                ptr = node_ptr;
+
+        for(auto& ptr : right_node->adjacents)
+            if(ptr == right_edge)
+                ptr = node_ptr;
+    }
+
+}
 
 /**
  * Given an symmetric graph, creates a set of clusters
@@ -385,7 +503,34 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
 template <typename T, typename D>
 void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool randomized = false, D defretval = 0.00f)
 {
-    
+    auto tree_nodes = parlay::tabulate(base_clusters.size(), [&] (T i){
+        return base_clusters[i].adjacency.get_tail();
+    });
+
+    auto count = 0;
+    do
+    {
+        auto eligible = parlay::filter(tree_nodes, [] (auto node_ptr){
+            return node_ptr->get_num_neighbours_live() <= 2;
+        });
+        set_MIS(eligible);
+        auto candidates = parlay::filter(eligible, [] (auto node_ptr){
+            return node_ptr->cluster_ptr->state & IS_MIS_SET;
+        });
+        parlay::parallel_for(0, candidates.size(), [&] (T i){
+            contract(candidates[i]);
+        });
+        tree_nodes = parlay::filter(tree_nodes, [] (auto node_ptr) {
+            return node_ptr->state & live;
+        });
+
+        
+        printTree(base_clusters);
+        std::cout << "\n\n\n\n" << std::endl;
+
+        count++;
+    }while(tree_nodes.size() > 0 && count < 100);
+
 }
 
 

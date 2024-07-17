@@ -90,10 +90,12 @@ public:
         assert(true && "Shouldn't ever get the height of an uncontracted node");
     }
 
-    short get_parent()
+    cluster<T,D>* get_parent()
     {
         return this->parent;
     }
+
+    
 
     unsigned long get_default_colour(void)
     {
@@ -142,6 +144,45 @@ public:
         this->replicate_last_level(empty_type, 1);
     }
 
+    void set_neighbour_mis(bool IS_MIS, short level = -1)
+    {
+        node<T,D>* this_node;
+        if(level == -1)
+            this_node = this->adjacency.get_tail();
+        else
+            this_node = this->adjacency[level];
+        for(auto& edge_ptr : this_node->adjacents)
+        {
+            if(edge_ptr != nullptr && edge_ptr->state & (base_edge | binary_cluster))
+            {
+                auto other_ptr = get_other_side(this_node, edge_ptr);
+                if(IS_MIS == true)
+                    other_ptr->cluster_ptr->state |= IS_MIS_SET;
+                else
+                    other_ptr->cluster_ptr->state &= (~IS_MIS_SET);
+            }
+        }
+    }
+
+    bool get_neighbour_mis(short level = -1)
+    {
+        node<T,D>* this_node;
+        if(level == -1)
+            this_node = this->adjacency.get_tail();
+        else
+            this_node = this->adjacency[level];
+        for(auto& edge_ptr : this_node)
+        {
+            if(edge_ptr != nullptr && edge_ptr->state & (base_edge | binary_cluster))
+            {
+                auto& other_ptr = get_other_side(this_node, edge_ptr);
+                if(other_ptr->cluster_ptr->state & IS_MIS_SET)
+                    return true;
+            }
+        }
+        return false;
+    }
+
     void print(void)
     {
         std::cout << bold << white << this->index << " " << reset;
@@ -172,7 +213,58 @@ public:
 
 };
 
+template<typename T, typename D>
+node<T,D>* get_other_side(node<T,D>* myself, node<T,D>* edge_ptr)
+{
+    if(edge_ptr != nullptr && edge_ptr->state & (base_edge | binary_cluster))
+    {
+        for(auto& other_ptr : edge_ptr->adjacents)
+            if(other_ptr != nullptr && other_ptr != myself)
+                return other_ptr;
+        return nullptr;
+    }
+    else
+        return nullptr;
+}
 
+template<typename T, typename D>
+std::pair<node<T,D>*,node<T,D>*> get_boundary_vertices_dead(node<T,D>* vertex)
+{
+    // is vertex live?
+    if(vertex->state & nullary_cluster)
+        return std::make_pair(nullptr, nullptr);
+    else if(vertex->state & unary_cluster)
+    {
+        auto ret_pair = std::make_pair(nullptr, nullptr);
+        for(auto& ptr : vertex->adjacents)
+            if(ptr != nullptr && ptr->state & (base_edge | binary_cluster))
+            {
+                ret_pair.first = get_other_side(vertex, ptr);
+                break;
+            }
+        return ret_pair;
+    }
+    else if(vertex->state & binary_cluster)
+    {
+        auto ret_pair = std::make_pair(nullptr, nullptr);
+        for(auto& ptr : vertex->adjacents)
+        {
+            if(ptr != nullptr && ptr->state & (base_edge | binary_cluster))
+            {
+                if(ret_pair.first == nullptr)
+                   ret_pair.first = get_other_side(vertex, ptr);
+                else 
+                {
+                    ret_pair.second = get_other_side(vertex, ptr);
+                    break;
+                }
+            }
+        }
+        return ret_pair;
+    }
+
+
+}
 
 
 #endif
