@@ -28,7 +28,6 @@ struct node
     node<T,D>* next = nullptr;
     node<T,D>* prev = nullptr;
     cluster<T,D>* cluster_ptr = nullptr;
-    T& tiebreak = cluster_ptr->tiebreak;
     int state = 0; // example value
     unsigned char contraction_level = 0;
     
@@ -40,6 +39,16 @@ struct node
     node*& operator[](const int index)
     {
         return this->adjacents[index];
+    }
+
+    T& tiebreak(void)
+    {
+        return this->cluster_ptr->tiebreak;
+    }
+
+    T index(void)
+    {
+        return this->cluster_ptr->index;
     }
 
     inline int size(void)

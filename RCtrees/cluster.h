@@ -250,7 +250,9 @@ public:
     void print(void)
     {
         std::cout << bold;
-        if(this->adjacency.get_tail()->state & nullary_cluster)
+        if(this->adjacency.get_tail()->state & affected)
+            std::cout << bold << bright_yellow;
+        else if(this->adjacency.get_tail()->state & nullary_cluster)
             std::cout << green;
         else if (this->adjacency.get_tail()->state & unary_cluster)
             std::cout << blue;
@@ -261,7 +263,7 @@ public:
         std::cout << this->index << " " << reset;
         std::cout << bright_white <<  this->get_height() << " " << reset;
         std::cout << bright_green << this->data << " " << reset;
-        for(auto i = 0; i < this->adjacency.size(); i++)
+        for(auto i = 0; i < this->adjacency.size() && i < 1; i++)
         {
             const auto& node_ptr_arr = this->adjacency[i]->adjacents;
             if(this->adjacency[i] == this->first_contracted_node)
