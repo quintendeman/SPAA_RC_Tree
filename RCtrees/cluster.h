@@ -220,7 +220,7 @@ public:
         else if (node_ptr->state & binary_cluster)
         {
             if(level == -1)
-                node_ptr = this->first_contracted_node->prev;
+                node_ptr = this->first_contracted_node;
             node<T,D>* left_edge = nullptr;
             // find the one edge going to the other side
             for(auto& ptr : node_ptr->adjacents)

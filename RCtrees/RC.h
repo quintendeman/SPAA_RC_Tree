@@ -628,7 +628,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
 
         
         parlay::parallel_for(0, candidates.size(), [&] (T i){
-            candidates[i]->cluster_ptr->first_contracted_node = candidates[i];
+            candidates[i]->cluster_ptr->first_contracted_node = candidates[i]->prev;
             contract(candidates[i]);
         });
 
@@ -985,7 +985,7 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, 
             if(cluster_ptr != start)
             {
                 D final_val = defretval; 
-                node<T,D>* node_ptr = cluster_ptr->first_contracted_node->prev;
+                node<T,D>* node_ptr = cluster_ptr->first_contracted_node;
                 bool first_child = true;
 
                 for(auto& ptr : node_ptr->adjacents)

@@ -28,6 +28,7 @@ struct node
     node<T,D>* next = nullptr;
     node<T,D>* prev = nullptr;
     cluster<T,D>* cluster_ptr = nullptr;
+    T& tiebreak = cluster_ptr->tiebreak;
     int state = 0; // example value
     unsigned char contraction_level = 0;
     
