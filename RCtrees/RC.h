@@ -484,6 +484,55 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
     return;
 }
 
+/**
+ * Make an exact copy of the current adjacency list, copying over everything (including the state), the only new thing will be the level.
+ * When making a new round, pointers to edges will also get renewed, is that ideal? probably not but we don't have a choice do we 
+ */
+template<typename T, typename D>
+void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
+{
+    parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
+        auto& node_ptr = tree_nodes[i];
+        auto& cluster_ptr = node_ptr->cluster_ptr;
+        cluster_ptr->add_empty_level(node_ptr->state, node_ptr->contraction_level+1);
+        // do the same for all edges and binary clusters
+        auto& v = cluster_ptr->index;
+
+        for(auto& edge_ptr : node_ptr->adjacents)
+        {
+            if(edge_ptr == nullptr || !(edge_ptr->state & (binary_cluster | base_edge)))
+                continue;
+            auto other_node_ptr = get_other_side(node_ptr, edge_ptr);
+            auto& w = other_node_ptr->cluster_ptr->index;
+            if(w < v)
+                continue;
+            edge_ptr->cluster_ptr->add_empty_level(edge_ptr->state, edge_ptr->contraction_level + 1);
+            cluster_ptr->add_ptr_to_highest_level(edge_ptr->next);
+            edge_ptr->cluster_ptr->add_ptr_to_highest_level(node_ptr->next);
+        }
+    });
+    parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
+        auto& node_ptr = tree_nodes[i];
+        auto& cluster_ptr = node_ptr->cluster_ptr;
+        auto& v = cluster_ptr->index;
+
+        for(auto& edge_ptr : node_ptr->adjacents)
+        {
+            if(edge_ptr == nullptr || !(edge_ptr->state & (binary_cluster | base_edge)))
+                continue;
+            auto other_node_ptr = get_other_side(node_ptr, edge_ptr);
+            auto& w = other_node_ptr->cluster_ptr->index;
+            if(v < w)
+                continue;
+            cluster_ptr->add_ptr_to_highest_level(edge_ptr->next);
+            edge_ptr->cluster_ptr->add_ptr_to_highest_level(node_ptr->next);
+        }
+        tree_nodes[i] = node_ptr->next;
+    });
+
+
+}
+
 
 /**
  * The main workhorse, populates the set base_clusters with internal_clusters
@@ -510,6 +559,8 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
     if(base_clusters.size() <= 100)
         printTree(base_clusters);
 
+    recreate_last_levels(tree_nodes);
+
     auto count = 0;
     do
     {
@@ -527,10 +578,14 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
         tree_nodes = parlay::filter(tree_nodes, [] (auto node_ptr) {
             return node_ptr->state & live;
         });
-    
-        printTree(base_clusters);
-        std::cout << "\n\n\n\n" << std::endl;
 
+        recreate_last_levels(tree_nodes);
+    
+        if(base_clusters.size() <= 100)
+        {   
+            printTree(base_clusters);
+            std::cout << "\n\n\n\n" << std::endl;
+        }
         count++;
     }while(tree_nodes.size() > 0 && count < 100);
 
