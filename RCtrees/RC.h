@@ -37,7 +37,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
         auto random_val = dis(gen);
 
         static const double anywhere_left_weight = 15;
-        static const double immediate_left_weight = 300;
+        static const double immediate_left_weight = 3;
         static const double root_weight = 0.0; /* warning, does not represet probability of a null cluster as degree capping may create more forests */
 
         static const double anywhere_prob = (anywhere_left_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
@@ -232,27 +232,19 @@ void colour_nodes(parlay::sequence<node<T,D>*> tree_nodes)
         unsigned long local_minimum = local_maximum;
         unsigned long my_colour = local_maximum;
 
-        auto& node = *tree_nodes[I];
+        auto& node_ptr = tree_nodes[I];
 
-        for(uint i = 0; i < tree_nodes[I]->size(); i++)
+        for(auto& edge_ptr : node_ptr->adjacents)
         {
-            // get other side
-            const auto& node_ptr = node[i];
-            if(node_ptr == nullptr || node_ptr->state & (binary_cluster | base_edge))
+            if(edge_ptr == nullptr || !(edge_ptr->state & (binary_cluster | base_edge)))
                 continue;
-            cluster<T,D>* other_ptr = nullptr;
-            
-            for(const auto& pot_other_ptr : node.adjacents)
-                if(pot_other_ptr != nullptr && pot_other_ptr->cluster_ptr->index != cluster_ptr->index)
-                    other_ptr = pot_other_ptr->cluster_ptr;
-            if(other_ptr == nullptr)
-                continue;
-
+            cluster<T,D>* other_ptr = get_other_side(node_ptr, edge_ptr)->cluster_ptr;
             unsigned long compared_colour = other_ptr->get_default_colour();
             if(compared_colour > local_maximum)
                 local_maximum = compared_colour;
             if(compared_colour < local_minimum)
                 local_minimum = compared_colour;   
+            
         }
         if(local_maximum == my_colour) // This node is a local maximum, give it a unique colour
         {
@@ -484,6 +476,53 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
     return;
 }
 
+
+/**
+ * Make sure the base clusters are consistent i.e. that every neighbour of mine has me as their neighbour too
+ */
+template <typename T, typename D>
+void check_consistency(parlay::sequence<node<T, D>*>& tree_nodes)
+{
+    parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
+        auto& node_ptr = tree_nodes[i];
+        for(auto& ptr : node_ptr->adjacents)
+        {
+            if(ptr == nullptr || !(ptr->state & (base_edge | binary_cluster)))
+                continue;
+            auto other_node_ptr = get_other_side(node_ptr, ptr);
+            if(get_other_side(other_node_ptr, ptr) != node_ptr)
+            {
+                std::cout << "Base clusters inconsistent" << std::endl;
+                exit(1);
+            }
+        }
+    });
+
+    return;
+}
+
+template <typename T, typename D>
+void check_mis(parlay::sequence<node<T, D>*>& tree_nodes)
+{
+    parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
+        auto& node_ptr = tree_nodes[i];
+        for(auto& ptr : node_ptr->adjacents)
+        {
+            if(ptr == nullptr || !(ptr->state & (base_edge | binary_cluster)))
+                continue;
+            auto other_node_ptr = get_other_side(node_ptr, ptr);
+            if(other_node_ptr->cluster_ptr->state & IS_MIS_SET && node_ptr->cluster_ptr->state & IS_MIS_SET )
+            {
+                std::cout << red << "Neighbours are not MIS!" << reset << std::endl;
+                exit(1);
+            }
+        }
+    });
+
+    return;
+}
+
+
 /**
  * Make an exact copy of the current adjacency list, copying over everything (including the state), the only new thing will be the level.
  * When making a new round, pointers to edges will also get renewed, is that ideal? probably not but we don't have a choice do we 
@@ -492,10 +531,12 @@ template<typename T, typename D>
 void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
 {
     parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
+    // for(T i = 0; i < tree_nodes.size(); i++)
+    // {
         auto& node_ptr = tree_nodes[i];
         auto& cluster_ptr = node_ptr->cluster_ptr;
         cluster_ptr->add_empty_level(node_ptr->state, node_ptr->contraction_level+1);
-        // do the same for all edges and binary clusters
+         // do the same for all edges and binary clusters
         auto& v = cluster_ptr->index;
 
         for(auto& edge_ptr : node_ptr->adjacents)
@@ -510,8 +551,11 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
             cluster_ptr->add_ptr_to_highest_level(edge_ptr->next);
             edge_ptr->cluster_ptr->add_ptr_to_highest_level(node_ptr->next);
         }
+    // }
     });
     parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
+    // for(T i = 0; i < tree_nodes.size(); i++)
+    // {
         auto& node_ptr = tree_nodes[i];
         auto& cluster_ptr = node_ptr->cluster_ptr;
         auto& v = cluster_ptr->index;
@@ -528,9 +572,8 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
             edge_ptr->cluster_ptr->add_ptr_to_highest_level(node_ptr->next);
         }
         tree_nodes[i] = node_ptr->next;
+    // }
     });
-
-
 }
 
 
@@ -552,6 +595,8 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
 template <typename T, typename D>
 void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool randomized = false, D defretval = 0.00f)
 {
+
+
     auto tree_nodes = parlay::tabulate(base_clusters.size(), [&] (T i){
         return base_clusters[i].adjacency.get_tail();
     });
@@ -564,20 +609,34 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
     auto count = 0;
     do
     {
+        check_consistency(tree_nodes); // TODO remove
         // break;
         auto eligible = parlay::filter(tree_nodes, [] (auto node_ptr){
             return node_ptr->get_num_neighbours_live() <= 2;
         });
+
+        std::cout << "filtered" << std::endl;
+
         set_MIS(eligible);
         auto candidates = parlay::filter(eligible, [] (auto node_ptr){
             return node_ptr->cluster_ptr->state & IS_MIS_SET;
         });
+
+        check_mis(candidates); // TODO remove
+
+        std::cout << "MISd" << std::endl;
+
         parlay::parallel_for(0, candidates.size(), [&] (T i){
             contract(candidates[i]);
         });
+
+        std::cout << "contracted" << std::endl;
+
         tree_nodes = parlay::filter(tree_nodes, [] (auto node_ptr) {
             return node_ptr->state & live;
         });
+
+        std::cout << "filtered again" << std::endl;
 
         recreate_last_levels(tree_nodes);
     
@@ -586,6 +645,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
             printTree(base_clusters);
             std::cout << "\n\n\n\n" << std::endl;
         }
+        std::cout << "count:" << count  << " " << tree_nodes.size() << std::endl;
         count++;
     }while(tree_nodes.size() > 0 && count < 100);
 
@@ -615,9 +675,49 @@ cluster<T, D>* getEdge(const T v, const T w, parlay::sequence<cluster<T, D>>& cl
     return nullptr;
 }
 
+template<typename T, typename D>
+node<T,D>* get_edge(T v, T w, parlay::sequence<cluster<T,D>>& clusters, unsigned char level = 0)
+{
+    auto& v_cluster = clusters[v];
+    auto v_node_ptr = v_cluster.adjacency.get_head();
+    for(auto& edge_ptr : v_node_ptr->adjacents)
+    {
+        if(edge_ptr == nullptr)
+            continue;
+        auto w_node_ptr = get_other_side(v_node_ptr, edge_ptr);
+        if(w_node_ptr->cluster_ptr->index == w)
+            return edge_ptr;
+    }
+
+    auto& w_cluster = clusters[w];
+    auto w_node_ptr = w_cluster.adjacency.get_head();
+    for(auto& edge_ptr : w_node_ptr->adjacents)
+    {
+        if(edge_ptr == nullptr)
+            continue;
+        v_node_ptr = get_other_side(w_node_ptr, edge_ptr);
+        if(v_node_ptr->cluster_ptr->index == v)
+            return edge_ptr;
+    }
+    return nullptr;
+}
+
 template<typename T, typename D, typename assocfunc>
 void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, assocfunc func, parlay::sequence<cluster<T, D>>& clusters, const D& defretval = 0.00f)
 {   
+    auto edge_ptrs = parlay::tabulate(edges.size(), [&] (T i){
+        T v = std::get<0>(edges[i]);
+        T w = std::get<1>(edges[i]);
+        D data = std::get<2>(edges[i]);
+
+        auto edge_ptr = get_edge(v, w, clusters);
+        if(edge_ptr == nullptr) // TODO REMOVE
+        {
+            std::cout << red << "Got a nullptr" << reset << std::endl;
+            exit(1);
+        }
+        return edge_ptr;
+    });
 
     return;
 }

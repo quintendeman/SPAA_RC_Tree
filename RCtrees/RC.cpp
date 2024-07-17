@@ -224,7 +224,7 @@ int main(int argc, char* argv[]) {
     std::chrono::duration<double> creation_time = end_creation - start_creation;
 
 
-    // test_rc_valid(parents, clusters);
+    test_rc_valid(parents, clusters);
     
     if(graph_size <= 100)
         printTree(clusters);
