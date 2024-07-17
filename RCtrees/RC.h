@@ -14,7 +14,7 @@
 #include "../examples/helper/graph_utils.h"
 #include <parlay/alloc.h>
 #include "cluster.h"
-
+#include "../examples/counting_sort.h"
 
 /*
     Generate a simple, single rooted graph with each node having two children
@@ -37,7 +37,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
         auto random_val = dis(gen);
 
         static const double anywhere_left_weight = 15;
-        static const double immediate_left_weight = 30;
+        static const double immediate_left_weight = 300;
         static const double root_weight = 0.0; /* warning, does not represet probability of a null cluster as degree capping may create more forests */
 
         static const double anywhere_prob = (anywhere_left_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
@@ -507,9 +507,13 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
         return base_clusters[i].adjacency.get_tail();
     });
 
+    if(base_clusters.size() <= 100)
+        printTree(base_clusters);
+
     auto count = 0;
     do
     {
+        // break;
         auto eligible = parlay::filter(tree_nodes, [] (auto node_ptr){
             return node_ptr->get_num_neighbours_live() <= 2;
         });
@@ -523,8 +527,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
         tree_nodes = parlay::filter(tree_nodes, [] (auto node_ptr) {
             return node_ptr->state & live;
         });
-
-        
+    
         printTree(base_clusters);
         std::cout << "\n\n\n\n" << std::endl;
 

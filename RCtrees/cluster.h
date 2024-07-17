@@ -171,11 +171,11 @@ public:
             this_node = this->adjacency.get_tail();
         else
             this_node = this->adjacency[level];
-        for(auto& edge_ptr : this_node)
+        for(auto& edge_ptr : this_node->adjacents)
         {
             if(edge_ptr != nullptr && edge_ptr->state & (base_edge | binary_cluster))
             {
-                auto& other_ptr = get_other_side(this_node, edge_ptr);
+                auto other_ptr = get_other_side(this_node, edge_ptr);
                 if(other_ptr->cluster_ptr->state & IS_MIS_SET)
                     return true;
             }
@@ -189,29 +189,36 @@ public:
         for(auto i = 0; i < this->adjacency.size(); i++)
         {
             std::cout << magenta << "[ ";
-
-
-            const auto& node_ptr_arr = this->adjacency[i]->adjacents;
-            for(const auto& ptr : node_ptr_arr)
+            if(this->adjacency[i]->state & live)
             {
-                if(ptr != nullptr && ptr->cluster_ptr->index != -1)
-                    std::cout << bold << blue << "(" << ptr->cluster_ptr->index <<") "<< reset << magenta;
-
-                if(ptr != nullptr)
+                const auto& node_ptr_arr = this->adjacency[i]->adjacents;
+                for(const auto& ptr : node_ptr_arr)
                 {
-                    const auto& nbr_nodes_list = ptr->adjacents;
-                    for(const auto& nbr_node : nbr_nodes_list)
-                        if(nbr_node != nullptr && nbr_node->cluster_ptr->index != this->index)
-                            std::cout << nbr_node->cluster_ptr->index << " ";
+                    if(ptr != nullptr && ptr->cluster_ptr->index != -1)
+                        std::cout << bold << blue << "(" << ptr->cluster_ptr->index <<") "<< reset << magenta;
+
+                    if(ptr != nullptr)
+                    {
+                        const auto& nbr_nodes_list = ptr->adjacents;
+                        for(const auto& nbr_node : nbr_nodes_list)
+                            if(nbr_node != nullptr && nbr_node->cluster_ptr->index != this->index)
+                                std::cout << nbr_node->cluster_ptr->index << " ";
+                    }
+                    std::cout << " ";
                 }
-                std::cout << " ";
+                
+                std::cout << white << this->adjacency[i]->get_num_neighbours_live() << " " << magenta;
             }
-            std::cout << "] ";
+            std::cout << "]";
         }
+        
         std::cout << reset << std::endl;
     }
 
 };
+
+
+
 
 template<typename T, typename D>
 node<T,D>* get_other_side(node<T,D>* myself, node<T,D>* edge_ptr)

@@ -52,7 +52,7 @@ struct node
     {
         short ret_num = 0;
         for(const auto& adj_ptr : this->adjacents)
-            if(adj_ptr != nullptr && adj_ptr->state & (base_edge | binary_cluster))
+            if(adj_ptr != nullptr && (adj_ptr->state & (base_edge | binary_cluster)))
                 ret_num++;
         return ret_num;
     }
@@ -89,7 +89,7 @@ class adjacency_list
         {
             if(this->numel == 0)
             {
-                this->head = node_allocator::create(arr, live, 0, nullptr, nullptr);
+                this->head = node_allocator::create(arr, state, 0, nullptr, nullptr);
                 // new node(arr, live, 0, nullptr, nullptr);/
                 this->tail = this->head;
                 this->numel = 1;
