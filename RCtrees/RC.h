@@ -1032,6 +1032,33 @@ void deleteRCtree(parlay::sequence<cluster<T, D>> &base_clusters)
 {
     using cluster_allocator = parlay::type_allocator<cluster<T,D>>;
 
+    parlay::parallel_for(0, base_clusters.size(), [&] (T i){
+        auto& clstr = base_clusters[i];
+        auto& node_ptr = clstr.first_contracted_node;
+        if(node_ptr->state & binary_cluster)
+        {
+            node_ptr = node_ptr->prev;
+            for(auto& ptr : node_ptr->adjacents)
+            {
+                if(ptr != nullptr && ptr->state & base_edge)
+                {
+                    cluster_allocator::destroy(ptr->cluster_ptr);
+                }
+            }
+        }
+        else
+        {
+            for(auto& ptr : node_ptr->adjacents)
+            {
+                if(ptr != nullptr && ptr->state & base_edge)
+                {
+                    cluster_allocator::destroy(ptr->cluster_ptr);
+                }
+            }
+        }
+        
+    });
+
 }
 
 template<typename T, typename D>
