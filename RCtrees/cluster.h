@@ -57,6 +57,9 @@ class adjacency_list;
 template<typename T, typename D>
 class node;
 
+template<typename T, typename D>
+std::pair<node<T,D>*,node<T,D>*> get_boundary_vertices_dead(node<T,D>* vertex);
+
 template <typename T, typename D>
 struct cluster
 {
@@ -67,6 +70,7 @@ public:
     T tiebreak;
     T& colour = tiebreak;
     cluster<T,D>* parent = nullptr;
+    node<T,D>* first_contracted_node = nullptr;
     D data;
     int state;
 
@@ -83,11 +87,12 @@ public:
     
     short get_height(void)
     {
-        if(this->adjacency.size() > 0)
+        if(this->adjacency.size() > 0 && this->first_contracted_node != nullptr)
         {
-            return this->adjacency.get_tail()->contraction_level;
+            return this->first_contracted_node->contraction_level;
         }
         assert(true && "Shouldn't ever get the height of an uncontracted node");
+        return -1;
     }
 
     cluster<T,D>* get_parent()
@@ -164,6 +169,8 @@ public:
         }
     }
 
+    // void find
+
     bool get_neighbour_mis(short level = -1)
     {
         node<T,D>* this_node;
@@ -183,15 +190,85 @@ public:
         return false;
     }
 
+    void find_boundary_vertices(cluster<T,D>*& left, D& lval, cluster<T,D>*& right, D& rval, D defretval, short level = -1)
+    {
+        left = right = nullptr;
+        lval = rval = defretval;
+        node<T,D>* node_ptr = nullptr;
+        if(level == -1)
+            node_ptr = this->adjacency.get_tail();
+        else
+            node_ptr = this->adjacency[level];
+        
+        if(node_ptr->state & nullary_cluster)
+            return;
+        else if (node_ptr->state & unary_cluster)
+        {
+            // find the one edge going to the other side
+            for(auto& ptr : node_ptr->adjacents)
+            {
+                if(ptr != nullptr && ptr->state & (base_edge | binary_cluster))
+                {
+                    left = get_other_side(node_ptr, ptr)->cluster_ptr;
+                    lval = ptr->cluster_ptr->data;
+                    right = left;
+                    rval = lval;
+                    return;
+                }
+            }
+        }
+        else if (node_ptr->state & binary_cluster)
+        {
+            if(level == -1)
+                node_ptr = this->first_contracted_node->prev;
+            node<T,D>* left_edge = nullptr;
+            // find the one edge going to the other side
+            for(auto& ptr : node_ptr->adjacents)
+            {
+                if(ptr != nullptr && ptr->state & (base_edge | binary_cluster))
+                {
+                    left = get_other_side(node_ptr, ptr)->cluster_ptr;
+                    lval = ptr->cluster_ptr->data;
+                    left_edge = ptr;
+                    break;
+                }
+            }
+            // find the one edge going to the other side
+            for(auto& ptr : node_ptr->adjacents)
+            {
+                if(ptr != nullptr && ptr->state & (base_edge | binary_cluster) && ptr != left_edge)
+                {
+                    right = get_other_side(node_ptr, ptr)->cluster_ptr;
+                    rval = ptr->cluster_ptr->data;
+                    return;
+                }
+            }
+        }
+
+    }
+
     void print(void)
     {
-        std::cout << bold << white << this->index << " " << reset;
+        std::cout << bold;
+        if(this->adjacency.get_tail()->state & nullary_cluster)
+            std::cout << green;
+        else if (this->adjacency.get_tail()->state & unary_cluster)
+            std::cout << blue;
+        else if (this->adjacency.get_tail()->state & binary_cluster)
+            std::cout << red;
+        else
+            std::cout << white;
+        std::cout << this->index << " " << reset;
+        std::cout << bright_white <<  this->get_height() << " " << reset;
+        std::cout << bright_green << this->data << " " << reset;
         for(auto i = 0; i < this->adjacency.size(); i++)
         {
-            std::cout << magenta << "[ ";
-            if(this->adjacency[i]->state & live)
-            {
-                const auto& node_ptr_arr = this->adjacency[i]->adjacents;
+            const auto& node_ptr_arr = this->adjacency[i]->adjacents;
+            if(this->adjacency[i] == this->first_contracted_node)
+                std::cout << bright_yellow << "[ ";
+            else
+                std::cout << magenta << "[ ";
+            
                 for(const auto& ptr : node_ptr_arr)
                 {
                     if(ptr != nullptr && ptr->cluster_ptr->index != -1)
@@ -208,7 +285,6 @@ public:
                 }
                 
                 std::cout << white << this->adjacency[i]->get_num_neighbours_live() << " " << magenta;
-            }
             std::cout << "]";
         }
         
@@ -216,9 +292,6 @@ public:
     }
 
 };
-
-
-
 
 template<typename T, typename D>
 node<T,D>* get_other_side(node<T,D>* myself, node<T,D>* edge_ptr)
@@ -232,45 +305,6 @@ node<T,D>* get_other_side(node<T,D>* myself, node<T,D>* edge_ptr)
     }
     else
         return nullptr;
-}
-
-template<typename T, typename D>
-std::pair<node<T,D>*,node<T,D>*> get_boundary_vertices_dead(node<T,D>* vertex)
-{
-    // is vertex live?
-    if(vertex->state & nullary_cluster)
-        return std::make_pair(nullptr, nullptr);
-    else if(vertex->state & unary_cluster)
-    {
-        auto ret_pair = std::make_pair(nullptr, nullptr);
-        for(auto& ptr : vertex->adjacents)
-            if(ptr != nullptr && ptr->state & (base_edge | binary_cluster))
-            {
-                ret_pair.first = get_other_side(vertex, ptr);
-                break;
-            }
-        return ret_pair;
-    }
-    else if(vertex->state & binary_cluster)
-    {
-        auto ret_pair = std::make_pair(nullptr, nullptr);
-        for(auto& ptr : vertex->adjacents)
-        {
-            if(ptr != nullptr && ptr->state & (base_edge | binary_cluster))
-            {
-                if(ret_pair.first == nullptr)
-                   ret_pair.first = get_other_side(vertex, ptr);
-                else 
-                {
-                    ret_pair.second = get_other_side(vertex, ptr);
-                    break;
-                }
-            }
-        }
-        return ret_pair;
-    }
-
-
 }
 
 

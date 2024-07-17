@@ -36,8 +36,8 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
         std::uniform_real_distribution<double> dis(0, 1);
         auto random_val = dis(gen);
 
-        static const double anywhere_left_weight = 15;
-        static const double immediate_left_weight = 3;
+        static const double anywhere_left_weight = 1;
+        static const double immediate_left_weight = 10;
         static const double root_weight = 0.0; /* warning, does not represet probability of a null cluster as degree capping may create more forests */
 
         static const double anywhere_prob = (anywhere_left_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
@@ -374,6 +374,9 @@ void contract(node<T,D>* node_ptr, short level = -1)
         
         node_ptr->state |= binary_cluster | contracts_this_round;
         node_ptr->state &= (~live);
+
+        left_edge->cluster_ptr->parent = node_ptr->cluster_ptr;
+        right_edge->cluster_ptr->parent = node_ptr->cluster_ptr;
         
         for(auto& ptr : node_ptr->adjacents)
         {
@@ -547,7 +550,7 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
             auto& w = other_node_ptr->cluster_ptr->index;
             if(w < v)
                 continue;
-            edge_ptr->cluster_ptr->add_empty_level(edge_ptr->state, edge_ptr->contraction_level + 1);
+            edge_ptr->cluster_ptr->add_empty_level(edge_ptr->state, edge_ptr->contraction_level); // don't update the contraction level of edge_ptrs
             cluster_ptr->add_ptr_to_highest_level(edge_ptr->next);
             edge_ptr->cluster_ptr->add_ptr_to_highest_level(node_ptr->next);
         }
@@ -615,8 +618,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
             return node_ptr->get_num_neighbours_live() <= 2;
         });
 
-        std::cout << "filtered" << std::endl;
-
+        
         set_MIS(eligible);
         auto candidates = parlay::filter(eligible, [] (auto node_ptr){
             return node_ptr->cluster_ptr->state & IS_MIS_SET;
@@ -624,28 +626,22 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
 
         check_mis(candidates); // TODO remove
 
-        std::cout << "MISd" << std::endl;
-
+        
         parlay::parallel_for(0, candidates.size(), [&] (T i){
+            candidates[i]->cluster_ptr->first_contracted_node = candidates[i];
             contract(candidates[i]);
         });
 
-        std::cout << "contracted" << std::endl;
-
+        
         tree_nodes = parlay::filter(tree_nodes, [] (auto node_ptr) {
             return node_ptr->state & live;
         });
 
-        std::cout << "filtered again" << std::endl;
-
+        
         recreate_last_levels(tree_nodes);
     
-        if(base_clusters.size() <= 100)
-        {   
-            printTree(base_clusters);
-            std::cout << "\n\n\n\n" << std::endl;
-        }
-        std::cout << "count:" << count  << " " << tree_nodes.size() << std::endl;
+        
+        std::cout << "[" << count  << "]: " << bold << tree_nodes.size() << reset << std::endl;
         count++;
     }while(tree_nodes.size() > 0 && count < 100);
 
@@ -658,22 +654,257 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
 template <typename T, typename D, typename assocfunc>
 D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc func)
 {
-    return defretval;
-}
-
-/**
- * Given a pair [v,w], returns the  (if it exists)
- * Exploits the fact that an edge [v,w] must be the child of v or w in an RC tree
-*/
-template<typename T, typename D>
-cluster<T, D>* getEdge(const T v, const T w, parlay::sequence<cluster<T, D>>& clusters)
-{
-
     if(v == w)
-        return nullptr;
+        return defretval;
 
-    return nullptr;
+    bool use_v = false;
+
+    cluster<T,D>* prev_boundary_v_l = nullptr;
+    cluster<T,D>* prev_boundary_v_r = nullptr;
+    D prev_val_till_v_l = defretval;
+    D prev_val_till_v_r = defretval;
+    
+    cluster<T,D>* prev_boundary_w_l = nullptr;
+    cluster<T,D>* prev_boundary_w_r = nullptr;
+    D prev_val_till_w_l = defretval;
+    D prev_val_till_w_r = defretval;
+
+
+    while(true)
+    {
+        // Ascend using the lower-height cluster. If either has to ascend above root, they are not connected.
+        if(v == nullptr && w == nullptr && prev_boundary_v_l == nullptr && prev_boundary_v_r == nullptr)
+            return defretval;   
+        else if(v == w)
+            break;
+        else if (v == nullptr && w != nullptr)
+            use_v = false;
+        else if (w == nullptr && v != nullptr)
+            use_v = true;
+        else if(v->get_height() < w->get_height())
+            use_v = true;
+        else
+            use_v = false;
+        
+        if(use_v)
+        {
+            cluster<T,D>* &v_cluster = v;
+
+            // We are at the start
+            if (prev_val_till_v_l == defretval && prev_val_till_v_r == defretval) 
+            {
+                v_cluster->find_boundary_vertices(prev_boundary_v_l, prev_val_till_v_l, prev_boundary_v_r, prev_val_till_v_r, defretval);
+                
+            } 
+            else 
+            {
+                D lval;
+                D rval;
+                cluster<T,D>* l;
+                cluster<T,D>* r;
+
+                v_cluster->find_boundary_vertices(l, lval, r, rval, defretval);
+
+                // Covers both unary to unary and unary to binary case
+                if (prev_boundary_v_l == v && prev_boundary_v_r == v) 
+                {
+                    prev_boundary_v_l = l;
+                    prev_boundary_v_r = r;
+                    
+                    if(l != r) // ascending into unary
+                    {
+                        prev_val_till_v_l = func(prev_val_till_v_l, lval);
+                        prev_val_till_v_r = func(prev_val_till_v_r, rval);
+                    }
+                    else
+                    {
+                        auto v_node_ptr = v_cluster->adjacency.get_tail();
+                        for(auto& ptr : v_node_ptr->adjacents)
+                        {
+                            if(ptr != nullptr && ptr->state & (binary_cluster | base_edge))
+                            {
+                                prev_val_till_v_l = func(prev_val_till_v_l, ptr->cluster_ptr->data);
+                                prev_val_till_v_r = func(prev_val_till_v_r, ptr->cluster_ptr->data);
+
+                            }
+                        }
+                    }
+                }
+                // Covers binary ascending to unary/nullary
+                else if (l == r) 
+                {
+                    if(prev_boundary_v_r == v)
+                    {
+                        prev_val_till_v_r = prev_val_till_v_l;
+                    }
+                    else
+                        prev_val_till_v_l = prev_val_till_v_r;
+
+                    prev_boundary_v_l = prev_boundary_v_r = l;
+                }
+                // Binary to binary
+                else 
+                {
+                    if (prev_boundary_v_l == l) 
+                    {
+                        prev_boundary_v_r = r;
+                        prev_val_till_v_r = func(prev_val_till_v_r, rval);
+                    } 
+                    else if (prev_boundary_v_r == l) 
+                    {
+                        std::swap(prev_boundary_v_r, prev_boundary_v_l);
+                        std::swap(prev_val_till_v_l, prev_val_till_v_r);
+                        
+                        prev_boundary_v_r = r;
+                        prev_val_till_v_r = func(prev_val_till_v_r, rval);
+                    
+                    } 
+                    else if (prev_boundary_v_l == r) 
+                    {
+                        std::swap(r, l);
+                        std::swap(rval, lval);    
+                        
+                        prev_boundary_v_r = r;
+                        prev_val_till_v_r = func(prev_val_till_v_r, rval);
+                    } 
+                    else // prev_boundary_v_r == r 
+                    {     
+                        prev_boundary_v_l = l;
+                        prev_val_till_v_l = func(prev_val_till_v_l, lval);
+                    }
+                }
+            }
+            v = v->get_parent();
+        }
+        else
+        {
+            cluster<T,D>* &w_cluster = w;
+
+            // We are at the start
+            if (prev_val_till_w_l == defretval && prev_val_till_w_r == defretval) 
+            {
+                w_cluster->find_boundary_vertices(prev_boundary_w_l, prev_val_till_w_l, prev_boundary_w_r, prev_val_till_w_r, defretval);
+            } 
+            else 
+            {
+                D lval, rval;
+                cluster<T,D>* l;
+                cluster<T,D>* r;
+                w_cluster->find_boundary_vertices(l, lval, r, rval, defretval);
+
+                // Covers both unary to unary and unary to binary case
+                if (prev_boundary_w_l == w && prev_boundary_w_r == w) 
+                {
+                    
+                    prev_boundary_w_l = l;
+                    prev_boundary_w_r = r;
+
+                    if(l != r)
+                    {
+                        prev_val_till_w_l = func(prev_val_till_w_l, lval);
+                        prev_val_till_w_r = func(prev_val_till_w_r, rval);
+                    }
+                    else
+                    {
+                        auto w_node_ptr = w_cluster->adjacency.get_tail();
+                        for(auto& ptr : w_node_ptr->adjacents)
+                        {
+                            if(ptr != nullptr && ptr->state & (binary_cluster | base_edge))
+                            {
+                                prev_val_till_w_l = func(prev_val_till_w_l, ptr->cluster_ptr->data);
+                                prev_val_till_w_r = func(prev_val_till_w_r, ptr->cluster_ptr->data);
+
+                            }
+                        }
+                    }
+                }
+                // Covers binary ascending to unary/nullary
+                else if (l == r) 
+                {
+                    if(prev_boundary_w_r == w)
+                    {
+                        prev_val_till_w_r = prev_val_till_w_l;
+                    }
+                    else
+                        prev_val_till_w_l = prev_val_till_w_r;
+
+                    prev_boundary_w_l = prev_boundary_w_r = l;
+                }
+                // Binary
+                else 
+                {
+                    if (prev_boundary_w_l == l) 
+                    {
+                        prev_boundary_w_r = r;
+                        prev_val_till_w_r = func(prev_val_till_w_r, rval);
+                    } 
+                    else if (prev_boundary_w_r == l) 
+                    {
+                        
+                        std::swap(prev_boundary_w_l, prev_boundary_w_r);
+                        std::swap(prev_val_till_w_l, prev_val_till_w_r);
+
+                        prev_boundary_w_r = r;
+                        prev_val_till_w_r = func(prev_val_till_w_r, rval);
+
+                    } 
+                    else if (prev_boundary_w_l == r) 
+                    {
+                        std::swap(l, r);
+                        std::swap(lval, rval);
+
+                        prev_boundary_w_r = r;
+                        prev_val_till_w_r = func(prev_val_till_w_r, rval);
+                    } 
+                    else // prev_boundary_w_r == r 
+                    { 
+                        prev_boundary_w_l = l;
+                        prev_val_till_w_l = func(prev_val_till_w_l, lval);
+                    }
+                }
+            }
+            w = w->get_parent();
+        }
+        
+    }
+    std::cout << std::endl;
+
+    if(prev_boundary_v_l == nullptr && prev_boundary_w_l == nullptr)
+    {
+        return defretval;
+    }
+    if(prev_boundary_v_l == nullptr)
+    {
+        if(w == prev_boundary_w_r)
+            return prev_val_till_w_r;
+        else
+            return prev_val_till_w_l;   
+    }
+    if(prev_boundary_w_l == nullptr)
+    {
+        if(v == prev_boundary_v_l)
+            return prev_val_till_v_l;
+        else
+            return prev_val_till_v_r;
+    }
+    
+    D v_contrib, w_contrib;
+    
+    if(v == prev_boundary_v_l)
+        v_contrib = prev_val_till_v_l;
+    else
+        v_contrib = prev_val_till_v_r;
+
+    if(w == prev_boundary_w_l)
+        w_contrib = prev_val_till_w_l;
+    else
+        w_contrib = prev_val_till_w_r;
+
+    return func(v_contrib, w_contrib);
+
 }
+
+
 
 template<typename T, typename D>
 node<T,D>* get_edge(T v, T w, parlay::sequence<cluster<T,D>>& clusters, unsigned char level = 0)
@@ -705,6 +936,8 @@ node<T,D>* get_edge(T v, T w, parlay::sequence<cluster<T,D>>& clusters, unsigned
 template<typename T, typename D, typename assocfunc>
 void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, assocfunc func, parlay::sequence<cluster<T, D>>& clusters, const D& defretval = 0.00f)
 {   
+
+    // TODO merge  with up pass
     auto edge_ptrs = parlay::tabulate(edges.size(), [&] (T i){
         T v = std::get<0>(edges[i]);
         T w = std::get<1>(edges[i]);
@@ -716,13 +949,80 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, 
             std::cout << red << "Got a nullptr" << reset << std::endl;
             exit(1);
         }
-        return edge_ptr;
+        edge_ptr->cluster_ptr->data = data;
+
+        auto ret_ptr = edge_ptr->cluster_ptr;
+        auto cluster_ptr = ret_ptr;
+
+        cluster_ptr->counter = 0;
+
+        while(cluster_ptr != nullptr)
+        {
+            if(cluster_ptr->counter.fetch_add(1))
+                break;
+            cluster_ptr = cluster_ptr->get_parent();
+        }
+
+
+        return ret_ptr;
+    });
+
+
+
+    parlay::parallel_for(0, edge_ptrs.size(), [&] (T i) {
+        if(edge_ptrs[i] == nullptr)
+            return;
+
+        auto cluster_ptr = edge_ptrs[i]; // base edge, technically not a cluster dw
+        
+        auto start = edge_ptrs[i];
+
+        // decrement counter
+        while(cluster_ptr != nullptr)
+        {
+            if(cluster_ptr->counter.fetch_add(-1) > 1)
+                break;
+            if(cluster_ptr != start)
+            {
+                D final_val = defretval; 
+                node<T,D>* node_ptr = cluster_ptr->first_contracted_node->prev;
+                bool first_child = true;
+
+                for(auto& ptr : node_ptr->adjacents)
+                {
+                    if(ptr == nullptr || !(ptr->state & (base_edge | binary_cluster)))
+                        continue;
+                    if(first_child)
+                    {
+                        final_val = ptr->cluster_ptr->data;
+                        first_child = false;
+                    }
+                    else
+                    {
+                        final_val = func(final_val, ptr->cluster_ptr->data);
+                    }
+                    
+                }                
+                cluster_ptr->data = final_val;
+            }
+            cluster_ptr = cluster_ptr->get_parent();
+        }
     });
 
     return;
 }
 
-
+template<typename T, typename D>
+void check_counter(parlay::sequence<cluster<T,D>>& clusters)
+{
+    parlay::parallel_for(0, clusters.size(), [&] (T i) {
+        if(clusters[i].counter)
+        {
+            std::cout << red << "Counter wasn't reset" << reset << std::endl;
+            exit(1);
+        }
+    });
+}
 
 /**
  * Only frees the "floating" edge clusters

@@ -84,6 +84,8 @@ void test_rc_valid(const parlay::sequence<vertex>& parents, parlay::sequence<clu
         return a + b;
     }, clusters);
 
+    check_counter(clusters);
+
     auto retval = PathQuery(&clusters[starting_index], &clusters[ending_index], (datatype) -1, [] (datatype a, datatype b) {
         return a + b;
     });
