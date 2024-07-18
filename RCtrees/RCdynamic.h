@@ -46,8 +46,6 @@ bool third_condition(node<T,D>*& node_ptr)
             if(!(first_condition(other_node) || second_condition(other_node)))
                 if(other_node->cluster_ptr->first_contracted_node == other_node)
                     return false;
-            // if(!(first_condition(other_node) || second_condition(other_node)) && other_node == other_node->cluster_ptr->first_contracted_node) // is it already affected and did it contract in this round?
-            //     return false;
         }
     }
 
@@ -82,6 +80,20 @@ parlay::sequence<node<T,D>*> get_3dp1(parlay::sequence<node<T,D>*>& initial_node
     return tiebreak(frontier);
 }
 
+template<typename T, typename D>
+bool is_update_eligible(node<T,D>* node_ptr)
+{
+    for(auto& edge_ptr : node_ptr->adjacents)
+    {
+        if(edge_ptr == nullptr || !(edge_ptr->state & (binary_cluster|base_edge)))
+            continue;
+        auto other_node_ptr = get_other_side(node_ptr, edge_ptr);
+        if((other_node_ptr->state & affected) == 0 && other_node_ptr->cluster_ptr->first_contracted_node == other_node_ptr)
+            return false;
+    }
+
+    return true;
+}
 
 /** 
  * Filter and remove redundant pointers and nullptrs
@@ -293,6 +305,8 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         }
         return false;
     });
+
+    
 
 
     std::cout << green;

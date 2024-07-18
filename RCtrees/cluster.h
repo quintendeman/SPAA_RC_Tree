@@ -263,6 +263,8 @@ public:
         //     std::cout << red;
         else
             std::cout << black;
+        if(is_update_eligible(this->adjacency.get_head()))
+            std::cout << "E ";
         std::cout << this->index << " " << reset;
         std::cout << bright_white <<  this->get_height() << " " << reset;
         // std::cout << bright_green << this->data << " " << reset;
