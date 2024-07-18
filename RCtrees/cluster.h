@@ -250,16 +250,19 @@ public:
     void print(void)
     {
         std::cout << bold;
-        if(this->adjacency.get_tail()->state & affected)
+        
+        if(this->adjacency.get_head()->state & affected)
             std::cout << bold << bright_yellow;
-        else if(this->adjacency.get_tail()->state & nullary_cluster)
-            std::cout << green;
-        else if (this->adjacency.get_tail()->state & unary_cluster)
-            std::cout << blue;
-        else if (this->adjacency.get_tail()->state & binary_cluster)
-            std::cout << red;
+        else if(this->adjacency.get_head()->state & debug_state)
+            std::cout << bold << bright_cyan;
+        // // else if(this->adjacency.get_tail()->state & nullary_cluster)
+        //     std::cout << green;
+        // else if (this->adjacency.get_tail()->state & unary_cluster)
+        //     std::cout << blue;
+        // else if (this->adjacency.get_tail()->state & binary_cluster)
+        //     std::cout << red;
         else
-            std::cout << white;
+            std::cout << black;
         std::cout << this->index << " " << reset;
         std::cout << bright_white <<  this->get_height() << " " << reset;
         // std::cout << bright_green << this->data << " " << reset;
@@ -298,6 +301,7 @@ public:
 template<typename T, typename D>
 node<T,D>* get_other_side(node<T,D>* myself, node<T,D>* edge_ptr)
 {
+
     if(edge_ptr != nullptr && edge_ptr->state & (base_edge | binary_cluster))
     {
         for(auto& other_ptr : edge_ptr->adjacents)
