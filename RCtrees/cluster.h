@@ -262,12 +262,12 @@ public:
             std::cout << white;
         std::cout << this->index << " " << reset;
         std::cout << bright_white <<  this->get_height() << " " << reset;
-        std::cout << bright_green << this->data << " " << reset;
+        // std::cout << bright_green << this->data << " " << reset;
         for(auto i = 0; i < this->adjacency.size() && i < 1; i++)
         {
             const auto& node_ptr_arr = this->adjacency[i]->adjacents;
             if(this->adjacency[i] == this->first_contracted_node)
-                std::cout << bright_yellow << "[ ";
+                std::cout << bright_blue << "[ ";
             else
                 std::cout << magenta << "[ ";
             

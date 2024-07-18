@@ -43,18 +43,19 @@ template<typename T, typename D>
 void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, D>>& add_edges, parlay::sequence<cluster<T, D>>& clusters)
 {
     using cluster_allocator = parlay::type_allocator<cluster<T,D>>;
-
     auto tree_nodes = parlay::flatten(parlay::tabulate(delete_edges.size() + add_edges.size(), [&] (T i) {
         T v, w;
         if(i < delete_edges.size())
         {
             v = delete_edges[i].first;
             w = delete_edges[i].second;
+            std::cout << v << " -- " << w << " deleted" << std::endl;
         }
         else
         {
             v = std::get<0>(add_edges[i-delete_edges.size()]);
             w = std::get<1>(add_edges[i-delete_edges.size()]);
+            std::cout << v << " -- " << w << " added" << std::endl;
         }
         parlay::sequence<node<T,D>*> ret_seq = {clusters[v].adjacency.get_head(), clusters[w].adjacency.get_head()};
         if(ret_seq[0] == nullptr || ret_seq[1] == nullptr) // TODO remove
@@ -110,14 +111,95 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         cluster_allocator::destroy(edge_node_ptr->cluster_ptr);
     });
 
-    // auto add_edges_wflags = parlay::tabulate(add_edges.size(), [&] (T i) {
-    //     edge_with_flag<std::tuple<T, T, D>> ret_edge;
-    //     ret_edge.valid = true;
-    //     ret_edge.E = add_edges[i];
-    //     return std::move(ret_edge);
-    // });
+    auto add_edges_wflags = parlay::tabulate(add_edges.size(), [&] (T i) {
+        edge_with_flag<std::tuple<T, T, D>> ret_edge;
+        ret_edge.valid = true;
+        ret_edge.E = add_edges[i];
+        return std::move(ret_edge);
+    });
 
+    auto reduce_edges = add_edges_wflags;
 
+    do
+    {
+        parlay::parallel_for(0, reduce_edges.size(), [&] (T i) {
+            auto& edge = reduce_edges[i];
+            auto& v = std::get<0>(edge.E);
+            auto& w = std::get<1>(edge.E);
+            if(v < w)
+                std::swap(v, w);
+            clusters[v].tiebreak = i + 1;
+        });
+
+        parlay::parallel_for(0, reduce_edges.size(), [&] (T i) {
+            auto& edge = reduce_edges[i];
+            auto& v = std::get<0>(edge.E);
+            auto& w = std::get<1>(edge.E);
+            if(v < w)
+                std::swap(v, w);
+
+            auto v_node_ptr = clusters[v].adjacency.get_head();
+            auto w_node_ptr = clusters[w].adjacency.get_head();
+
+            if(clusters[v].tiebreak == (i+1))
+            {
+                auto newEdgeClstrPtr = cluster_allocator::alloc();
+                newEdgeClstrPtr->add_empty_level(base_edge, 0);
+                newEdgeClstrPtr->data = std::get<2>(edge.E);
+                newEdgeClstrPtr->index = -1;
+                auto edge_node = newEdgeClstrPtr->adjacency.get_head();
+                newEdgeClstrPtr->add_ptr_to_highest_level(v_node_ptr);
+                newEdgeClstrPtr->add_ptr_to_highest_level(w_node_ptr);
+                clusters[v].add_ptr_to_highest_level(edge_node);
+                edge.valid = false;
+            }
+
+        });
+        reduce_edges = parlay::filter(reduce_edges, [] (auto r){
+            return r.valid;
+        });
+    }while(reduce_edges.size() > 0);
+
+    do
+    {
+        parlay::parallel_for(0, add_edges_wflags.size(), [&] (T i) {
+            auto& edge = add_edges_wflags[i];
+            auto& v = std::get<0>(edge.E);
+            auto& w = std::get<1>(edge.E);
+            if(v < w)
+                std::swap(v, w);
+            clusters[w].tiebreak = i + 1;
+        });
+
+        parlay::parallel_for(0, add_edges_wflags.size(), [&] (T i) {
+            auto& edge = add_edges_wflags[i];
+            auto& v = std::get<0>(edge.E);
+            auto& w = std::get<1>(edge.E);
+            if(v < w)
+                std::swap(v, w);
+
+            auto v_node_ptr = clusters[v].adjacency.get_head();
+            auto w_node_ptr = clusters[w].adjacency.get_head();
+
+            if(clusters[w].tiebreak == (i+1))
+            {
+                // find other node_ptr
+                for(auto& potential_edge_ptr : v_node_ptr->adjacents)
+                {
+                    if(potential_edge_ptr != nullptr && get_other_side(v_node_ptr, potential_edge_ptr) == w_node_ptr)
+                    {  
+                        clusters[w].add_ptr_to_highest_level(potential_edge_ptr);
+                        break;
+                    }
+                }
+                edge.valid = false;
+            }
+
+        });
+        add_edges_wflags = parlay::filter(add_edges_wflags, [] (auto r){
+            return r.valid;
+        });
+    }while(add_edges_wflags.size() > 0);
 
     return;
 }
