@@ -251,9 +251,9 @@ public:
     {
         std::cout << bold;
         
-        if(this->adjacency.get_head()->state & affected)
+        if(this->adjacency.get_head()->state & debug_state)
             std::cout << bold << bright_yellow;
-        else if(this->adjacency.get_head()->state & debug_state)
+        else if(this->adjacency.get_head()->state & affected)
             std::cout << bold << bright_cyan;
         // // else if(this->adjacency.get_tail()->state & nullary_cluster)
         //     std::cout << green;
@@ -263,12 +263,12 @@ public:
         //     std::cout << red;
         else
             std::cout << black;
-        if(is_update_eligible(this->adjacency.get_head()))
+        if(is_update_eligible(this->adjacency.get_head()) && this->adjacency.get_head()->state & affected)
             std::cout << "E ";
         std::cout << this->index << " " << reset;
         std::cout << bright_white <<  this->get_height() << " " << reset;
         // std::cout << bright_green << this->data << " " << reset;
-        for(auto i = 0; i < this->adjacency.size() && i < 1; i++)
+        for(auto i = 0; i < (this->adjacency.get_head()->state & affected ? 2 :  this->adjacency.size()); i++)
         {
             const auto& node_ptr_arr = this->adjacency[i]->adjacents;
             if(this->adjacency[i] == this->first_contracted_node)
