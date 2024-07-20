@@ -159,6 +159,26 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         return ret_seq;
     }));
 
+    if(clusters.size() <= 100) // TODO remove
+    {
+        for(uint i = 0; i < delete_edges.size() + add_edges.size(); i++)
+        {
+            T v, w;
+            if(i < delete_edges.size())
+            {
+                v = delete_edges[i].first;
+                w = delete_edges[i].second;
+                std::cout << v << " -- " << w << " deleted" << std::endl;
+            }
+            else
+            {
+                v = std::get<0>(add_edges[i-delete_edges.size()]);
+                w = std::get<1>(add_edges[i-delete_edges.size()]);
+                std::cout << v << " -- " << w << " added" << std::endl;
+            }
+        }
+    }
+
     parlay::parallel_for(0, tree_nodes.size(), [&] (T i){
         if(tree_nodes[i]->tiebreak() != i)
             tree_nodes[i] = nullptr;
@@ -185,30 +205,34 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         cluster<T,D>* cluster_edge_ptr = nullptr;
 
         auto v_node_ptr = clusters[v].adjacency.get_head();
+       
+        for(auto& edge_ptr : v_node_ptr->adjacents)
+        {
+            if(edge_ptr != nullptr && edge_ptr->state & base_edge && get_other_side(v_node_ptr, edge_ptr) != nullptr &&get_other_side(v_node_ptr, edge_ptr)->cluster_ptr->index == w)
+            {
+                if(v_node_ptr == clusters[v].adjacency.get_head())
+                    cluster_edge_ptr = edge_ptr->cluster_ptr;
+            }
+        }
+       
         while(v_node_ptr != nullptr)
         {
             for(auto& edge_ptr : v_node_ptr->adjacents)
             {
-                if(edge_ptr != nullptr && edge_ptr->state & base_edge && get_other_side(v_node_ptr, edge_ptr) != nullptr &&get_other_side(v_node_ptr, edge_ptr)->cluster_ptr->index == w)
-                {
-                    if(v_node_ptr == clusters[v].adjacency.get_head())
-                        cluster_edge_ptr = edge_ptr->cluster_ptr;
+                if(edge_ptr != nullptr && (edge_ptr->cluster_ptr == cluster_edge_ptr || edge_ptr->cluster_ptr == &clusters[w]))
                     edge_ptr = nullptr;
-                }
             }
             v_node_ptr = v_node_ptr->next;
         }
+            
 
         auto w_node_ptr = clusters[w].adjacency.get_head();
         while(w_node_ptr != nullptr)
         {
             for(auto& edge_ptr : w_node_ptr->adjacents)
             {
-                if(edge_ptr != nullptr && edge_ptr->state & base_edge && get_other_side(v_node_ptr, edge_ptr) != nullptr &&get_other_side(v_node_ptr, edge_ptr)->cluster_ptr->index == v)
-                {
-                    cluster_edge_ptr = edge_ptr->cluster_ptr;
+                if(edge_ptr != nullptr && (edge_ptr->cluster_ptr == cluster_edge_ptr || edge_ptr->cluster_ptr == &clusters[v]))
                     edge_ptr = nullptr;
-                }
             }
             w_node_ptr = w_node_ptr->next;
         }
@@ -254,7 +278,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
                 auto edge_node = newEdgeClstrPtr->adjacency.get_head();
                 newEdgeClstrPtr->add_ptr_to_highest_level(v_node_ptr);
                 newEdgeClstrPtr->add_ptr_to_highest_level(w_node_ptr);
-                clusters[v].add_ptr_to_highest_level(edge_node);
+                v_node_ptr->add_ptr(edge_node);
                 edge.valid = false;
             }
 
@@ -292,7 +316,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
                 {
                     if(potential_edge_ptr != nullptr && get_other_side(v_node_ptr, potential_edge_ptr) == w_node_ptr)
                     {  
-                        clusters[w].add_ptr_to_highest_level(potential_edge_ptr);
+                        w_node_ptr->add_ptr(potential_edge_ptr); 
                         break;
                     }
                 }

@@ -47,6 +47,18 @@ struct node
         return this->cluster_ptr->tiebreak;
     }
 
+    bool add_ptr(node<T,D>* new_node_ptr)
+    {
+        for(auto& ptr : this->adjacents)
+            if(ptr == nullptr)
+            {
+                ptr = new_node_ptr;
+                return true;
+            }
+
+        return false;
+    }
+
     T index(void)
     {
         return this->cluster_ptr->index;
