@@ -116,20 +116,139 @@ parlay::sequence<node<T,D>*> tiebreak(parlay::sequence<node<T,D>*>& input_nodes)
     return parlay::filter(input_nodes, [] (auto node_ptr) {return node_ptr != nullptr;});
 }
 
-// // does essentially the same thing as recreate last levels but with additional checks if a node has already been allocated in a new layer or not
-// template<typename T, typename D>
-// void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
-// {
-//     parlay::parallel_for(0, affected_nodes.size(), [&] (T i){
-//         auto& aff_node = affected_nodes[i];
-//         if(!is_update_eligible(aff_node)) // if it isn't update eligible, it must be alive in the next round
-//             continue;
-        
-        
-//     });
+// does essentially the same thing as recreate last levels but with additional checks if a node has already been allocated in a new layer or not
+template<typename T, typename D>
+void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
+{
+    // decontract rakes
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T i){
+        auto& aff_node = affected_nodes[i];
+        if(!is_update_eligible(aff_node)) // if it isn't update eligible, it must be alive in the next round
+            return;
+        if(aff_node->next == nullptr)
+            aff_node->cluster_ptr->add_empty_level(aff_node->state, aff_node->contraction_level+1);
 
-//     return;
-// }
+        // for each of the vertices, check if they still exist
+        // if it raked i.e. the other side exists, revert that
+        for(auto& Li_edge_ptr : aff_node->adjacents)
+        {
+            if(Li_edge_ptr == nullptr || !(Li_edge_ptr->state & (base_edge | binary_cluster)))
+                continue;
+            auto Li_neighbour_node = get_other_side(aff_node, Li_edge_ptr);
+
+            auto current_edge_ptr = Li_edge_ptr->next;
+            auto current_neighbour_node = Li_neighbour_node->next;
+            auto current_aff_node = aff_node->next;
+
+            // check if it exists
+            for(auto& cur_edge : current_neighbour_node->adjacents)
+            {
+                if(cur_edge == current_edge_ptr)
+                    break;
+                else if (cur_edge == current_aff_node) // need to revert on both sides
+                {
+                    current_aff_node->state |= affected | adjacency_changed;
+                    current_neighbour_node-> state |= affected | adjacency_changed;
+                    cur_edge = current_edge_ptr; // we now point to edge
+                    for(auto& p : current_aff_node->adjacents)
+                    {
+                        if(p == current_neighbour_node)
+                        {
+                            p = current_edge_ptr;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+    });
+
+    // if an edge doesn't exist, both sides must be considered affected already 
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T i){
+        auto& aff_node = affected_nodes[i];
+        if(aff_node->next == nullptr)
+            aff_node->cluster_ptr->add_empty_level(aff_node->state, aff_node->contraction_level+1);
+
+        // for each of the vertices, check if they still exist
+        // if it raked i.e. the other side exists, revert that
+        for(auto& Li_edge_ptr : aff_node->adjacents)
+        {
+            if(Li_edge_ptr == nullptr || !(Li_edge_ptr->state & (base_edge | binary_cluster)))
+                continue;
+            auto Li_neighbour_node = get_other_side(aff_node, Li_edge_ptr);
+
+            auto current_edge_ptr = Li_edge_ptr->next;
+            auto current_neighbour_node = Li_neighbour_node->next;
+            auto current_aff_node = aff_node->next;
+
+            bool exists = false;
+            // do it exist in the next stage?
+            for(auto& cur_edge : current_aff_node->adjacents)
+            {
+                if(cur_edge != nullptr && (cur_edge == current_edge_ptr || cur_edge == current_neighbour_node))
+                    exists = true;
+            }
+
+            if(!exists)
+            {
+                auto& v = aff_node->cluster_ptr->index;
+                auto& w = Li_neighbour_node->cluster_ptr->index;
+                if(v < w)
+                {
+                    if(current_edge_ptr == nullptr)
+                    {    
+                        Li_edge_ptr->cluster_ptr->add_empty_level      (Li_edge_ptr->state, Li_edge_ptr->contraction_level+1);
+                        current_edge_ptr = Li_edge_ptr->next;
+                    }
+                    current_edge_ptr->add_ptr(current_neighbour_node);
+                    current_edge_ptr->add_ptr(current_aff_node);
+                    current_aff_node->add_ptr(current_edge_ptr);
+                }
+            }
+        }
+        
+    });
+
+    // if an edge doesn't exist, both sides must be considered affected already 
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T i){
+        auto& aff_node = affected_nodes[i];
+        if(aff_node->next == nullptr)
+            aff_node->cluster_ptr->add_empty_level(aff_node->state, aff_node->contraction_level+1);
+
+        // for each of the vertices, check if they still exist
+        // if it raked i.e. the other side exists, revert that
+        for(auto& Li_edge_ptr : aff_node->adjacents)
+        {
+            if(Li_edge_ptr == nullptr || !(Li_edge_ptr->state & (base_edge | binary_cluster)))
+                continue;
+            auto Li_neighbour_node = get_other_side(aff_node, Li_edge_ptr);
+
+            auto current_edge_ptr = Li_edge_ptr->next;
+            auto current_neighbour_node = Li_neighbour_node->next;
+            auto current_aff_node = aff_node->next;
+
+            bool exists = false;
+            // do it exist in the next stage?
+            for(auto& cur_edge : current_aff_node->adjacents)
+            {
+                if(cur_edge != nullptr && (cur_edge == current_edge_ptr || cur_edge == current_neighbour_node))
+                    exists = true;
+            }
+
+            if(!exists)
+            {
+                auto& v = aff_node->cluster_ptr->index;
+                auto& w = Li_neighbour_node->cluster_ptr->index;
+                if(!(v < w))
+                {
+                    current_aff_node->add_ptr(current_edge_ptr);
+                }
+            }
+        }        
+    });
+    return;
+}
 
 
 template<typename T, typename D>
@@ -373,7 +492,10 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     unsigned char count = 0;
     do
     {
+        create_decompressed_affected(frontier);
 
+
+        break;
         count++;
     }while(count < 255 && frontier.size());
 
