@@ -352,6 +352,7 @@ void contract(node<T,D>* node_ptr, bool affect = false)
 
         // do nothing for myself
         node_ptr->state &= (~live);
+        node_ptr->state &= (~(unary_cluster | binary_cluster | nullary_cluster));
         node_ptr->state |= (unary_cluster | contracts_this_round);
 
         node_ptr->cluster_ptr->parent = neighbour_node->cluster_ptr;
@@ -388,7 +389,7 @@ void contract(node<T,D>* node_ptr, bool affect = false)
                 right_node = get_other_side(node_ptr, right_edge);
                 break;
             }
-        
+        node_ptr->state &= (~(unary_cluster | binary_cluster | nullary_cluster));
         node_ptr->state |= binary_cluster | contracts_this_round;
         node_ptr->state &= (~live);
 

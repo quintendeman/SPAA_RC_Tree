@@ -60,6 +60,8 @@ parlay::sequence<node<T,D>*> get_3dp1(parlay::sequence<node<T,D>*>& initial_node
         parlay::sequence<node<T,D>*> ret_seq = parlay::sequence<node<T,D>*>(max_neighbours, nullptr);
         for(short i = 0; i < max_neighbours; i++)
         {
+            if(node_ptr->adjacents[i] == nullptr || node_ptr->adjacents[i]->state & (binary_cluster | base_edge) == 0)
+                continue;
             ret_seq[i] = get_other_side(node_ptr, node_ptr->adjacents[i]);
         }
         return ret_seq;
@@ -71,6 +73,8 @@ parlay::sequence<node<T,D>*> get_3dp1(parlay::sequence<node<T,D>*>& initial_node
         if(node_ptr != nullptr)
             for(short i = 0; i < max_neighbours; i++)
             {
+                if(node_ptr->adjacents[i] == nullptr || node_ptr->adjacents[i]->state & (binary_cluster | base_edge) == 0)
+                    continue;
                 ret_seq[i] = get_other_side(node_ptr, node_ptr->adjacents[i]);
             }
         ret_seq[max_neighbours] = node_ptr;
@@ -120,6 +124,13 @@ parlay::sequence<node<T,D>*> tiebreak(parlay::sequence<node<T,D>*>& input_nodes)
 template<typename T, typename D>
 void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
 {
+
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T i) {
+        auto& aff_node = affected_nodes[i];
+        if(aff_node->next == nullptr)
+            aff_node->cluster_ptr->add_empty_level(aff_node->state & (~(binary_cluster | unary_cluster | nullary_cluster)) | live, aff_node->contraction_level+1);
+    });
+
     // decontract rakes
     parlay::parallel_for(0, affected_nodes.size(), [&] (T i){
         auto& aff_node = affected_nodes[i];
@@ -139,6 +150,8 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
             auto current_edge_ptr = Li_edge_ptr->next;
             auto current_neighbour_node = Li_neighbour_node->next;
             auto current_aff_node = aff_node->next;
+
+            current_aff_node->state &= (~(binary_cluster | unary_cluster | nullary_cluster));
 
             // check if it exists
             for(auto& cur_edge : current_neighbour_node->adjacents)
@@ -204,6 +217,7 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                     current_edge_ptr->add_ptr(current_neighbour_node);
                     current_edge_ptr->add_ptr(current_aff_node);
                     current_aff_node->add_ptr(current_edge_ptr);
+                    current_aff_node->state |= affected | adjacency_changed;
                 }
             }
         }
@@ -244,6 +258,7 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                 {
                     current_aff_node->add_ptr(current_edge_ptr);
                 }
+                current_aff_node->state |= affected | adjacency_changed;
             }
         }        
     });
@@ -510,9 +525,43 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             contract(mis_set[i]->next, true);
         });
 
-        break;
+        if(clusters.size() <= 100)
+        {
+            std::cout << "contracted" << std::endl;
+            printTree(clusters);
+        }
+
+        parlay::parallel_for(0, frontier.size(), [&] (T i){
+            frontier[i] = frontier[i]->next;
+        });
+
+        frontier = parlay::filter(frontier, [] (auto node_ptr) {
+            return node_ptr->state & affected;
+        });
+        frontier = get_3dp1(frontier);
+
+        frontier = parlay::filter(frontier, [] (auto node_ptr){
+            if(node_ptr == nullptr) // TODO remove
+            {
+                std::cout << "nullptr?????";
+                exit(1);
+            }
+            if(first_condition(node_ptr) || second_condition(node_ptr) || third_condition(node_ptr))
+            {
+                // if(node->state &)
+                if(node_ptr->state & affected)
+                    node_ptr->state |= debug_state;
+                else
+                    node_ptr->state |= affected;
+                return true;
+            }
+            return false;
+        });
+
+        std::cout << "Frontier size " << frontier.size() << std::endl;        
+
         count++;
-    }while(count < 255 && frontier.size());
+    }while(count < 2 && frontier.size());
 
     if(count == 255)
     {
