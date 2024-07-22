@@ -50,6 +50,12 @@ struct node
     bool add_ptr(node<T,D>* new_node_ptr)
     {
         for(auto& ptr : this->adjacents)
+            if(ptr == new_node_ptr)
+            {
+                return true;
+            }
+
+        for(auto& ptr : this->adjacents)
             if(ptr == nullptr)
             {
                 ptr = new_node_ptr;

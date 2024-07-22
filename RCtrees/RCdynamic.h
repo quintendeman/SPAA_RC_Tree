@@ -116,18 +116,20 @@ parlay::sequence<node<T,D>*> tiebreak(parlay::sequence<node<T,D>*>& input_nodes)
     return parlay::filter(input_nodes, [] (auto node_ptr) {return node_ptr != nullptr;});
 }
 
-// does essentially the same thing as recreate last levels but with additional checks if a node has already been allocated in a new layer or not
-template<typename T, typename D>
-void recreate_last_levels_affected(parlay::sequence<node<T,D>*>& affected_nodes)
-{
-    parlay::parallel_for(0, affected_nodes.size(), [&] (T i) {
-        auto& node_ptr = affected_nodes[i];
+// // does essentially the same thing as recreate last levels but with additional checks if a node has already been allocated in a new layer or not
+// template<typename T, typename D>
+// void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
+// {
+//     parlay::parallel_for(0, affected_nodes.size(), [&] (T i){
+//         auto& aff_node = affected_nodes[i];
+//         if(!is_update_eligible(aff_node)) // if it isn't update eligible, it must be alive in the next round
+//             continue;
+        
+        
+//     });
 
-        return;
-    });
-
-    return;
-}
+//     return;
+// }
 
 
 template<typename T, typename D>
@@ -271,14 +273,28 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
 
             if(clusters[v].tiebreak == (i+1))
             {
-                auto newEdgeClstrPtr = cluster_allocator::alloc();
-                newEdgeClstrPtr->add_empty_level(base_edge, 0);
-                newEdgeClstrPtr->data = std::get<2>(edge.E);
-                newEdgeClstrPtr->index = -1;
-                auto edge_node = newEdgeClstrPtr->adjacency.get_head();
-                newEdgeClstrPtr->add_ptr_to_highest_level(v_node_ptr);
-                newEdgeClstrPtr->add_ptr_to_highest_level(w_node_ptr);
-                v_node_ptr->add_ptr(edge_node);
+                // does it already exist?
+                node<T,D>* edge_node = nullptr;
+                for(auto& edge_ptr : v_node_ptr->adjacents)
+                {
+                    if(edge_ptr != nullptr && get_other_side(v_node_ptr, edge_ptr)->cluster_ptr->index == w)
+                        edge_node = edge_ptr;
+                }
+                if(edge_node == nullptr)
+                {
+                    auto newEdgeClstrPtr = cluster_allocator::alloc();
+                    newEdgeClstrPtr->add_empty_level(base_edge, 0);
+                    newEdgeClstrPtr->data = std::get<2>(edge.E);
+                    newEdgeClstrPtr->index = -1;
+                    edge_node = newEdgeClstrPtr->adjacency.get_head();
+                    newEdgeClstrPtr->add_ptr_to_highest_level(v_node_ptr);
+                    newEdgeClstrPtr->add_ptr_to_highest_level(w_node_ptr);
+                    v_node_ptr->add_ptr(edge_node);
+                }
+                else
+                {
+                    edge_node->cluster_ptr->data = std::get<2>(edge.E);
+                }
                 edge.valid = false;
             }
 
@@ -354,7 +370,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     });
     std::cout << "Which gets reduced to " << frontier.size() << std::endl;
     
-    auto count = 0;
+    unsigned char count = 0;
     do
     {
 
