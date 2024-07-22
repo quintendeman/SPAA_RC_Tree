@@ -268,7 +268,7 @@ void colour_nodes(parlay::sequence<node<T,D>*> tree_nodes)
 //     These clusters must have a maximum degree of 2
 // */
 template<typename T, typename D>
-void set_MIS(parlay::sequence<node<T, D>*>& tree_nodes)
+void set_MIS(parlay::sequence<node<T, D>*>& tree_nodes, bool use_tree_nodes = false)
 {
     auto cluster_ptrs = parlay::tabulate(tree_nodes.size(), [&] (T i) {
         return tree_nodes[i]->cluster_ptr;
@@ -277,7 +277,10 @@ void set_MIS(parlay::sequence<node<T, D>*>& tree_nodes)
 
     parlay::parallel_for(0, cluster_ptrs.size(), [&] (T v) {
         cluster_ptrs[v]->state &= (~IS_MIS_SET);
-        cluster_ptrs[v]->set_neighbour_mis(false);
+        if(use_tree_nodes)
+            cluster_ptrs[v]->set_neighbour_mis(false, tree_nodes[v]);
+        else
+            cluster_ptrs[v]->set_neighbour_mis(false);
     });
 
     auto colours = parlay::tabulate(cluster_ptrs.size(), [&] (T v) {
@@ -304,7 +307,15 @@ void set_MIS(parlay::sequence<node<T, D>*>& tree_nodes)
 
         parlay::parallel_for(start_index, end_index, [&] (T i) {
             T v = result[i];
-            if(cluster_ptrs[v]->get_neighbour_mis() == true)
+            if(use_tree_nodes)
+            {
+                if(cluster_ptrs[v]->get_neighbour_mis(tree_nodes[v]) == true)
+                {
+                    cluster_ptrs[v]->state &= (~IS_MIS_SET);
+                    return;
+                } 
+            }
+            else if(cluster_ptrs[v]->get_neighbour_mis() == true)
             {
                 cluster_ptrs[v]->state &= (~IS_MIS_SET);
                 return;
@@ -319,7 +330,7 @@ void set_MIS(parlay::sequence<node<T, D>*>& tree_nodes)
  * MUST have at most 2 neighbours
  */
 template<typename T, typename D>
-void contract(node<T,D>* node_ptr, short level = -1)
+void contract(node<T,D>* node_ptr, bool affect = false)
 {
     
     if(node_ptr->get_num_neighbours_live() == 0)
@@ -350,6 +361,12 @@ void contract(node<T,D>* node_ptr, short level = -1)
         for(auto& ptr : neighbour_node->adjacents)
             if(ptr == edge_node)
                 ptr = node_ptr;
+        if(affect == true)
+        {
+            neighbour_node->state |= (affected | adjacency_changed);
+            node_ptr->state &= (~affected);
+            node_ptr->state &= (~adjacency_changed);
+        }
     }
     else if (node_ptr->get_num_neighbours_live() == 2)
     {
@@ -393,6 +410,13 @@ void contract(node<T,D>* node_ptr, short level = -1)
         for(auto& ptr : right_node->adjacents)
             if(ptr == right_edge)
                 ptr = node_ptr;
+        if(affect == true)
+        {
+            right_node->state |= (affected | adjacency_changed);
+            left_node->state |= (affected | adjacency_changed);
+            node_ptr->state &= (~affected);
+            node_ptr->state &= (~adjacency_changed);
+        }
     }
 
 }

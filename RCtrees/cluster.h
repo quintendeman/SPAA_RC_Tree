@@ -149,13 +149,11 @@ public:
         this->replicate_last_level(empty_type, 1);
     }
 
-    void set_neighbour_mis(bool IS_MIS, short level = -1)
+    void set_neighbour_mis(bool IS_MIS, node<T,D>* node_ptr = nullptr)
     {
-        node<T,D>* this_node;
-        if(level == -1)
+        node<T,D>* this_node = node_ptr;
+        if(node_ptr == nullptr)
             this_node = this->adjacency.get_tail();
-        else
-            this_node = this->adjacency[level];
         for(auto& edge_ptr : this_node->adjacents)
         {
             if(edge_ptr != nullptr && edge_ptr->state & (base_edge | binary_cluster))
@@ -169,15 +167,11 @@ public:
         }
     }
 
-    // void find
-
-    bool get_neighbour_mis(short level = -1)
+    bool get_neighbour_mis(node<T,D>* node_ptr = nullptr)
     {
-        node<T,D>* this_node;
-        if(level == -1)
+        node<T,D>* this_node = node_ptr;
+        if(node_ptr == nullptr)
             this_node = this->adjacency.get_tail();
-        else
-            this_node = this->adjacency[level];
         for(auto& edge_ptr : this_node->adjacents)
         {
             if(edge_ptr != nullptr && edge_ptr->state & (base_edge | binary_cluster))
@@ -265,6 +259,8 @@ public:
             std::cout << black;
         if(is_update_eligible(this->adjacency.get_head()) && this->adjacency.get_head()->state & affected)
             std::cout << "E ";
+        if(this->state & IS_MIS_SET)
+            std::cout  << "M ";
         std::cout << this->index << " " << reset;
         std::cout << bright_white <<  this->get_height() << " " << reset;
         // std::cout << bright_green << this->data << " " << reset;

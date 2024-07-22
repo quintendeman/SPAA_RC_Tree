@@ -494,6 +494,21 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     {
         create_decompressed_affected(frontier);
 
+        if(clusters.size() <= 100)
+            printTree(clusters);
+
+        auto update_eligible_set = parlay::filter(frontier, [] (auto node_ptr) {
+            return is_update_eligible(node_ptr);
+        });
+        set_MIS(update_eligible_set, true);
+        auto mis_set = parlay::filter(update_eligible_set, [] (auto node_ptr){
+            return node_ptr->cluster_ptr->state & IS_MIS_SET;
+        });
+
+        parlay::parallel_for(0, mis_set.size(), [&] (T i){
+            mis_set[i]->cluster_ptr->first_contracted_node = mis_set[i];
+            contract(mis_set[i]->next, true);
+        });
 
         break;
         count++;
