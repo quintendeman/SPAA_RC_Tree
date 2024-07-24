@@ -1,6 +1,6 @@
 # Variables
 CXX = g++
-CXXFLAGS = -O3 -std=c++17 -pthread -g
+CXXFLAGS = -O0 -std=c++17 -pthread -g
 INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/
 LDFLAGS = -ljemalloc
 TARGET = RC.out

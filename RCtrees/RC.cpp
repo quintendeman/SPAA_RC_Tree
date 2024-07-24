@@ -104,6 +104,8 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
 
     auto graph_size = parents.size();
 
+    auto old_parents = parents;
+
     static const vertex batch_insertion_size = graph_size/2;
     static const vertex batch_deletion_size = graph_size/10;
 
@@ -145,6 +147,11 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
 
         datatype new_val = (datatype) graph_size * 10 * child_index; // some large value
 
+        if(old_parents[child_index] == random_parent)
+        {
+            child_index = random_parent;
+        }
+
         return std::tuple<vertex, vertex, datatype>(child_index, random_parent, new_val);
 
     });
@@ -154,6 +161,7 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
     // remove edges that were leading to an overflow
     insert_edges = parlay::filter(insert_edges, [&] (auto edge) {
         const auto& child_index = std::get<0>(edge);
+        return false;
         return child_index != parents[child_index];
     });
 

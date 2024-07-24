@@ -241,35 +241,40 @@ public:
 
     }
 
-    void print(void)
+    void print(unsigned char level = -1)
     {
-        std::cout << bold;
         
-        if(this->adjacency.get_head()->state & debug_state)
-            std::cout << bold << bright_yellow;
-        else if(this->adjacency.get_head()->state & affected)
-            std::cout << bold << bright_cyan;
         // // else if(this->adjacency.get_tail()->state & nullary_cluster)
         //     std::cout << green;
         // else if (this->adjacency.get_tail()->state & unary_cluster)
         //     std::cout << blue;
         // else if (this->adjacency.get_tail()->state & binary_cluster)
         //     std::cout << red;
-        else
-            std::cout << black;
-        if(is_update_eligible(this->adjacency.get_head()) && this->adjacency.get_head()->state & affected)
-            std::cout << "E ";
-        if(this->state & IS_MIS_SET)
-            std::cout  << "M ";
         std::cout << this->index << " " << reset;
         std::cout << bright_white <<  this->get_height() << " " << reset;
         // std::cout << bright_green << this->data << " " << reset;
-        for(auto i = 0; i < (this->adjacency.get_head()->state & affected ? 2 :  this->adjacency.size()); i++)
+
+        // for(auto i = 0; i < (this->adjacency.get_head()->state & affected ? 2 :  this->adjacency.size()); i++)
+        for(volatile auto i = 0; i < this->adjacency.size(); i++)
         {
+            if(level != -1 && i == level)
+                break;
             const auto& node_ptr_arr = this->adjacency[i]->adjacents;
+            volatile auto node_ptr_test = this->adjacency[i];
+            if(node_ptr_test->state & nullary_cluster)
+                std::cout << red << "N";
+            if(node_ptr_test->state & unary_cluster)
+                std::cout << green << "U";
+            if(node_ptr_test->state & binary_cluster)
+                std::cout << green << "B";
+            
             if(this->adjacency[i] == this->first_contracted_node)
-                std::cout << bright_blue << "[ ";
-            else
+                std::cout << bright_blue << "C";
+            if(this->adjacency[i]->state & affected)
+                std::cout << bright_blue << "A";
+            // if(is_update_eligible(this->adjacency[i]))
+            //     std::cout << bright_blue << "E";
+            
                 std::cout << magenta << "[ ";
             
                 for(const auto& ptr : node_ptr_arr)

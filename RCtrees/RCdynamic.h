@@ -129,6 +129,8 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
         auto& aff_node = affected_nodes[i];
         if(aff_node->next == nullptr)
             aff_node->cluster_ptr->add_empty_level(aff_node->state & (~(binary_cluster | unary_cluster | nullary_cluster)) | live, aff_node->contraction_level+1);
+        // else
+
     });
 
     // decontract rakes
@@ -262,6 +264,9 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
             }
         }        
     });
+
+    // TODO does it not exist before and magically pop up later?
+
     return;
 }
 
@@ -504,19 +509,37 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     });
     std::cout << "Which gets reduced to " << frontier.size() << std::endl;
     
+    // create_decompressed_affected(frontier);
+
+    parlay::sequence<node<T,D>*> mis_set;
+
     unsigned char count = 0;
     do
     {
+        if(clusters.size() < 100)
+        {
+            std::cout << "frontier: ";
+            for(auto& ptr : frontier)
+               std::cout <<  ptr->cluster_ptr->index << " ";
+            std::cout << std::endl;
+        }
+
+        auto new_frontier = get_3dp1(frontier);
+
         create_decompressed_affected(frontier);
 
+        
+
+        // move everything down and do `create_decompressed_affected` once outside of while loop?
+
         if(clusters.size() <= 100)
-            printTree(clusters);
+            printTree(clusters, count+2);
 
         auto update_eligible_set = parlay::filter(frontier, [] (auto node_ptr) {
             return is_update_eligible(node_ptr);
         });
         set_MIS(update_eligible_set, true);
-        auto mis_set = parlay::filter(update_eligible_set, [] (auto node_ptr){
+        mis_set = parlay::filter(update_eligible_set, [] (auto node_ptr){
             return node_ptr->cluster_ptr->state & IS_MIS_SET;
         });
 
@@ -525,11 +548,17 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             contract(mis_set[i]->next, true);
         });
 
+        // make an earlier copy of frontier?
+
+        
+
         if(clusters.size() <= 100)
         {
             std::cout << "contracted" << std::endl;
-            printTree(clusters);
+            printTree(clusters, count+2);
         }
+
+        frontier = new_frontier;
 
         parlay::parallel_for(0, frontier.size(), [&] (T i){
             frontier[i] = frontier[i]->next;
@@ -538,8 +567,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         frontier = parlay::filter(frontier, [] (auto node_ptr) {
             return node_ptr->state & affected;
         });
-        frontier = get_3dp1(frontier);
-
+        
         frontier = parlay::filter(frontier, [] (auto node_ptr){
             if(node_ptr == nullptr) // TODO remove
             {
@@ -562,6 +590,8 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
 
         count++;
     }while(count < 2 && frontier.size());
+
+    std::cout << "[dynamic] exited" << std::endl;
 
     if(count == 255)
     {

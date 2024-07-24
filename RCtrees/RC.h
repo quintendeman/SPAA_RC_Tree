@@ -364,9 +364,10 @@ void contract(node<T,D>* node_ptr, bool affect = false)
                 ptr = node_ptr;
         if(affect == true)
         {
-            neighbour_node->state |= (affected | adjacency_changed);
+            neighbour_node->state |= (affected | adjacency_changed | live);
             node_ptr->state &= (~affected);
             node_ptr->state &= (~adjacency_changed);
+            neighbour_node->state &= (~(binary_cluster | base_edge));
         }
     }
     else if (node_ptr->get_num_neighbours_live() == 2)
@@ -413,8 +414,10 @@ void contract(node<T,D>* node_ptr, bool affect = false)
                 ptr = node_ptr;
         if(affect == true)
         {
-            right_node->state |= (affected | adjacency_changed);
-            left_node->state |= (affected | adjacency_changed);
+            right_node->state |= (affected | adjacency_changed | live);
+            left_node->state |= (affected | adjacency_changed | live);
+            right_node->state &= (~(binary_cluster | base_edge));
+            left_node->state &= (~(binary_cluster | base_edge));
             node_ptr->state &= (~affected);
             node_ptr->state &= (~adjacency_changed);
         }
@@ -1085,11 +1088,11 @@ void deleteRCtree(parlay::sequence<cluster<T, D>> &base_clusters)
 }
 
 template<typename T, typename D>
-void printTree(parlay::sequence<cluster<T, D>> &base_clusters)
+void printTree(parlay::sequence<cluster<T, D>> &base_clusters, unsigned char level = -1)
 {
     for(uint i = 0; i < base_clusters.size(); i++)
     {
-        base_clusters[i].print();
+        base_clusters[i].print(level);
     }   
 }
 
