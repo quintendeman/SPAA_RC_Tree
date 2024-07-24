@@ -184,6 +184,7 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
         auto& aff_node = affected_nodes[i];
         if(aff_node->next == nullptr)
             aff_node->cluster_ptr->add_empty_level(aff_node->state, aff_node->contraction_level+1);
+        aff_node->next->state |= affected;
 
         // for each of the vertices, check if they still exist
         // if it raked i.e. the other side exists, revert that
@@ -270,6 +271,27 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
     return;
 }
 
+template<typename T, typename D>
+void finalize(node<T,D>*& contracted_node)
+{
+    while(contracted_node->cluster_ptr->adjacency.get_tail() != contracted_node)
+    {
+        auto tail = contracted_node->cluster_ptr->adjacency.get_tail();
+
+        for(auto& imm_ngbr : tail->adjacents)
+        {
+            if(imm_ngbr == nullptr)
+                continue;
+            for(auto& bck_ngbr: imm_ngbr->adjacents)
+            {
+                if(bck_ngbr == tail)
+                    bck_ngbr = nullptr;
+            }
+        }
+        contracted_node->cluster_ptr->adjacency.delete_tail();
+    }
+    return;
+}
 
 template<typename T, typename D>
 void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, D>>& add_edges, parlay::sequence<cluster<T, D>>& clusters)
@@ -516,7 +538,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     unsigned char count = 0;
     do
     {
-        if(clusters.size() < 100)
+        if(clusters.size() <= 100)
         {
             std::cout << "frontier: ";
             for(auto& ptr : frontier)
@@ -528,9 +550,13 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
 
         create_decompressed_affected(frontier);
 
+        parlay::parallel_for(0, mis_set.size(), [&] (T i){
+            finalize(mis_set[i]->next);
+        });
         
 
-        // move everything down and do `create_decompressed_affected` once outside of while loop?
+        // TODO delete all ->next+ children of MIS
+        // finalize function -- finalize function should also delete the descendants of any BINARY/EDGES (NOT UNARY clusters) because a cluster that has finalized doesn't need those edges anymore
 
         if(clusters.size() <= 100)
             printTree(clusters, count+2);
@@ -554,7 +580,10 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
 
         if(clusters.size() <= 100)
         {
-            std::cout << "contracted" << std::endl;
+            std::cout << "contracted: " << std::endl;
+            for(auto& ptr : mis_set)
+                std::cout << ptr->cluster_ptr->index << " ";
+            std::cout << std::endl;
             printTree(clusters, count+2);
         }
 
@@ -589,7 +618,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         std::cout << "Frontier size " << frontier.size() << std::endl;        
 
         count++;
-    }while(count < 2 && frontier.size());
+    }while(count < 5 && frontier.size());
 
     std::cout << "[dynamic] exited" << std::endl;
 

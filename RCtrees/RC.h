@@ -335,6 +335,7 @@ void contract(node<T,D>* node_ptr, bool affect = false)
     
     if(node_ptr->get_num_neighbours_live() == 0)
     {
+        node_ptr->state &= (~(unary_cluster | binary_cluster | nullary_cluster));
         node_ptr->state |= contracts_this_round | nullary_cluster;
         node_ptr->state &= (~live);
     }
