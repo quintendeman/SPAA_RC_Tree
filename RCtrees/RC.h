@@ -338,6 +338,10 @@ void contract(node<T,D>* node_ptr, bool affect = false)
         node_ptr->state &= (~(unary_cluster | binary_cluster | nullary_cluster));
         node_ptr->state |= contracts_this_round | nullary_cluster;
         node_ptr->state &= (~live);
+        node_ptr->state &= (~affected);
+        if(affect)
+            for(auto& ptr : node_ptr->adjacents)
+                ptr = nullptr;
     }
     else if(node_ptr->get_num_neighbours_live() == 1)
     {
@@ -365,6 +369,8 @@ void contract(node<T,D>* node_ptr, bool affect = false)
                 ptr = node_ptr;
         if(affect == true)
         {
+            for(auto& ptr : node_ptr->adjacents)
+                ptr = nullptr;
             neighbour_node->state |= (affected | adjacency_changed | live);
             node_ptr->state &= (~affected);
             node_ptr->state &= (~adjacency_changed);
@@ -415,6 +421,11 @@ void contract(node<T,D>* node_ptr, bool affect = false)
                 ptr = node_ptr;
         if(affect == true)
         {
+            for(auto& ptr : node_ptr->adjacents)
+            {
+                if(ptr != left_node && ptr != right_node)
+                    ptr = nullptr;
+            }
             right_node->state |= (affected | adjacency_changed | live);
             left_node->state |= (affected | adjacency_changed | live);
             right_node->state &= (~(binary_cluster | base_edge));

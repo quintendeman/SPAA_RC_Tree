@@ -129,8 +129,6 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
         auto& aff_node = affected_nodes[i];
         if(aff_node->next == nullptr)
             aff_node->cluster_ptr->add_empty_level(aff_node->state & (~(binary_cluster | unary_cluster | nullary_cluster)) | live, aff_node->contraction_level+1);
-        // else
-
     });
 
     // decontract rakes
@@ -267,6 +265,8 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
     });
 
     // TODO does it not exist before and magically pop up later?
+
+    
 
     return;
 }
