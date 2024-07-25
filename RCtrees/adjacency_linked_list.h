@@ -87,7 +87,11 @@ struct node
         return ret_num;
     }
 
-    
+    ~node(void)
+    {
+        this->adjacents.fill(nullptr);
+        // this->state = 3;
+    }
 
 };
 

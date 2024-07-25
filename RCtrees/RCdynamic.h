@@ -130,6 +130,12 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
             aff_node->cluster_ptr->add_empty_level(aff_node->state & (~(binary_cluster | unary_cluster | nullary_cluster)) | live, aff_node->contraction_level+1);
     });
 
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T i) {
+        auto& aff_node = affected_nodes[i];
+        if(aff_node->next == nullptr)
+            aff_node->cluster_ptr->add_empty_level(aff_node->state & (~(binary_cluster | unary_cluster | nullary_cluster)) | live, aff_node->contraction_level+1);
+    });
+
     // decontract rakes
     parlay::parallel_for(0, affected_nodes.size(), [&] (T i){
         auto& aff_node = affected_nodes[i];
@@ -140,10 +146,12 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
 
         // for each of the vertices, check if they still exist
         // if it raked i.e. the other side exists, revert that
-        for(auto& Li_edge_ptr : aff_node->adjacents)
+        for (short n = 0; n < aff_node->adjacents.size(); ++n) 
         {
-            if(Li_edge_ptr == nullptr || !(Li_edge_ptr->state & (base_edge | binary_cluster)))
+            auto Li_edge_ptr = aff_node->adjacents[n];
+            if (Li_edge_ptr == nullptr || !(Li_edge_ptr->state & (base_edge | binary_cluster))) {
                 continue;
+            }
             auto Li_neighbour_node = get_other_side(aff_node, Li_edge_ptr);
 
             auto current_edge_ptr = Li_edge_ptr->next;
@@ -153,26 +161,24 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
             current_aff_node->state &= (~(binary_cluster | unary_cluster | nullary_cluster));
 
             // check if it exists
-            for(auto& cur_edge : current_neighbour_node->adjacents)
-            {
-                if(cur_edge == current_edge_ptr)
+            for (short m = 0; m < current_neighbour_node->adjacents.size(); ++m) {
+                auto cur_edge = current_neighbour_node->adjacents[m];
+                if (cur_edge == current_edge_ptr) {
                     break;
-                else if (cur_edge == current_aff_node) // need to revert on both sides
-                {
+                } else if (cur_edge == current_aff_node) { // need to revert on both sides
                     current_aff_node->state |= affected | adjacency_changed;
-                    current_neighbour_node-> state |= affected | adjacency_changed;
-                    cur_edge = current_edge_ptr; // we now point to edge
-                    for(auto& p : current_aff_node->adjacents)
-                    {
-                        if(p == current_neighbour_node)
-                        {
-                            p = current_edge_ptr;
+                    current_neighbour_node->state |= affected | adjacency_changed;
+                    current_neighbour_node->adjacents[m] = current_edge_ptr; // we now point to edge
+                    for (short p = 0; p < current_aff_node->adjacents.size(); ++p) {
+                        if (current_aff_node->adjacents[p] == current_neighbour_node) {
+                            current_aff_node->adjacents[p] = current_edge_ptr;
                             break;
                         }
                     }
                 }
             }
         }
+
         
     });
 
@@ -185,10 +191,11 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
 
         // for each of the vertices, check if they still exist
         // if it raked i.e. the other side exists, revert that
-        for(auto& Li_edge_ptr : aff_node->adjacents)
-        {
-            if(Li_edge_ptr == nullptr || !(Li_edge_ptr->state & (base_edge | binary_cluster)))
+        for (short n = 0; n < aff_node->adjacents.size(); ++n) {
+            auto Li_edge_ptr = aff_node->adjacents[n];
+            if (Li_edge_ptr == nullptr || !(Li_edge_ptr->state & (base_edge | binary_cluster))) {
                 continue;
+            }
             auto Li_neighbour_node = get_other_side(aff_node, Li_edge_ptr);
 
             auto current_edge_ptr = Li_edge_ptr->next;
@@ -196,22 +203,20 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
             auto current_aff_node = aff_node->next;
 
             bool exists = false;
-            // do it exist in the next stage?
-            for(auto& cur_edge : current_aff_node->adjacents)
-            {
-                if(cur_edge != nullptr && (cur_edge == current_edge_ptr || cur_edge == current_neighbour_node))
+            // does it exist in the next stage?
+            
+            for (short m = 0; m < current_aff_node->adjacents.size(); ++m) {
+                auto cur_edge = current_aff_node->adjacents[m];
+                if (cur_edge != nullptr && (cur_edge == current_edge_ptr || cur_edge == current_neighbour_node)) {
                     exists = true;
+                }
             }
-
-            if(!exists)
-            {
+            if (!exists) {
                 auto& v = aff_node->cluster_ptr->index;
                 auto& w = Li_neighbour_node->cluster_ptr->index;
-                if(v < w)
-                {
-                    if(current_edge_ptr == nullptr)
-                    {    
-                        Li_edge_ptr->cluster_ptr->add_empty_level(Li_edge_ptr->state, Li_edge_ptr->contraction_level+1);
+                if (v < w) {
+                    if (current_edge_ptr == nullptr) {    
+                        Li_edge_ptr->cluster_ptr->add_empty_level(Li_edge_ptr->state, Li_edge_ptr->contraction_level + 1);
                         current_edge_ptr = Li_edge_ptr->next;
                     }
                     current_edge_ptr->state |= dont_finalize;
@@ -235,10 +240,11 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
 
         // for each of the vertices, check if they still exist
         // if it raked i.e. the other side exists, revert that
-        for(auto& Li_edge_ptr : aff_node->adjacents)
-        {
-            if(Li_edge_ptr == nullptr || !(Li_edge_ptr->state & (base_edge | binary_cluster)))
+        for (short n = 0; n < aff_node->adjacents.size(); ++n) {
+            auto Li_edge_ptr = aff_node->adjacents[n];
+            if (Li_edge_ptr == nullptr || !(Li_edge_ptr->state & (base_edge | binary_cluster))) {
                 continue;
+            }
             auto Li_neighbour_node = get_other_side(aff_node, Li_edge_ptr);
 
             auto current_edge_ptr = Li_edge_ptr->next;
@@ -246,24 +252,24 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
             auto current_aff_node = aff_node->next;
 
             bool exists = false;
-            // do it exist in the next stage?
-            for(auto& cur_edge : current_aff_node->adjacents)
-            {
-                if(cur_edge != nullptr && (cur_edge == current_edge_ptr || cur_edge == current_neighbour_node))
+            // does it exist in the next stage?
+            for (short m = 0; m < current_aff_node->adjacents.size(); ++m) {
+                auto cur_edge = current_aff_node->adjacents[m];
+                if (cur_edge != nullptr && (cur_edge == current_edge_ptr || cur_edge == current_neighbour_node)) {
                     exists = true;
+                }
             }
 
-            if(!exists)
-            {
+            if (!exists) {
                 auto& v = aff_node->cluster_ptr->index;
                 auto& w = Li_neighbour_node->cluster_ptr->index;
-                if(!(v < w))
-                {
+                if (!(v < w)) {
                     current_aff_node->add_ptr(current_edge_ptr);
                 }
                 current_aff_node->state |= affected | adjacency_changed;
             }
-        }        
+        }
+   
     });
 
     parlay::parallel_for(0, affected_nodes.size(), [&] (T i){
@@ -344,16 +350,29 @@ void finalize(node<T,D>* contracted_node)
             if(tail->state & dont_finalize)
                 break;
 
-            for (auto imm_ngbr : tail->adjacents) {
-                if (imm_ngbr == nullptr) {
+            for(short i1 = 0; i1 < tail->adjacents.size(); i1++)
+            {
+                auto one_hop_neighbour = tail->adjacents[i1];
+                if(one_hop_neighbour == nullptr)
                     continue;
-                }
-                for (short n = 0; n < imm_ngbr->adjacents.size(); ++n) {
-                    if (imm_ngbr->adjacents[n] == tail) {
-                        imm_ngbr->adjacents[n] = nullptr;
+                for(short i2 = 0; i2 < one_hop_neighbour->adjacents.size(); i2++)
+                {
+                    auto two_hop_neighbour = one_hop_neighbour->adjacents[i2];
+                    if(two_hop_neighbour == nullptr)
+                        continue;
+                    for(short j = 0; j < two_hop_neighbour->adjacents.size(); j++)
+                    {
+                        auto back_ptr = two_hop_neighbour->adjacents[j];
+                        if(back_ptr == tail)
+                            two_hop_neighbour->adjacents[j] = nullptr;
                     }
+                    
+                    if(two_hop_neighbour == tail)
+                        one_hop_neighbour->adjacents[i2] = nullptr;
                 }
+
             }
+            tail->adjacents.fill(nullptr);
             contracted_node->cluster_ptr->adjacency.delete_tail();
         }
     // std::cout << " to " << (int) contracted_node->cluster_ptr->adjacency.size() << std::endl;
