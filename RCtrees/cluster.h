@@ -190,13 +190,13 @@ public:
         lval = rval = defretval;
         node<T,D>* node_ptr = nullptr;
         if(level == -1)
-            node_ptr = this->adjacency.get_tail();
+            node_ptr = this->first_contracted_node;
         else
             node_ptr = this->adjacency[level];
         
-        if(node_ptr->state & nullary_cluster)
+        if(node_ptr->next->state & nullary_cluster)
             return;
-        else if (node_ptr->state & unary_cluster)
+        else if (node_ptr->next->state & unary_cluster)
         {
             // find the one edge going to the other side
             for(auto& ptr : node_ptr->adjacents)
@@ -210,8 +210,10 @@ public:
                     return;
                 }
             }
+            std::cout << "SHOULD NEVER REACH HERE" << std::endl;
+            exit(1);
         }
-        else if (node_ptr->state & binary_cluster)
+        else if (node_ptr->next->state & binary_cluster)
         {
             if(level == -1)
                 node_ptr = this->first_contracted_node;
@@ -238,6 +240,11 @@ public:
                 }
             }
         }
+        else
+        {
+            std::cout << "IT SHOULD NEVER REACH HERE" << std::endl;
+            exit(1);
+        }
 
     }
 
@@ -252,7 +259,7 @@ public:
         //     std::cout << red;
         std::cout << this->index << " " << reset;
         std::cout << bright_white <<  this->get_height() << " " << reset;
-        // std::cout << bright_green << this->data << " " << reset;
+        std::cout << bright_green << this->data << " " << reset;
 
         // for(auto i = 0; i < (this->adjacency.get_head()->state & affected ? 2 :  this->adjacency.size()); i++)
         for(volatile auto i = 0; i < this->adjacency.size(); i++)
@@ -260,11 +267,13 @@ public:
             if(level != -1 && i == level)
                 break;
             const auto& node_ptr_arr = this->adjacency[i]->adjacents;
+            
+
             volatile auto node_ptr_test = this->adjacency[i];
             if(node_ptr_test->state & nullary_cluster)
                 std::cout << red << "N";
             if(node_ptr_test->state & unary_cluster)
-                std::cout << green << "U";
+                std::cout << yellow << "U";
             if(node_ptr_test->state & binary_cluster)
                 std::cout << green << "B";
             
@@ -282,7 +291,8 @@ public:
                     if(ptr != nullptr && ptr->cluster_ptr->index != -1)
                         std::cout << bold << blue << "(" << ptr->cluster_ptr->index <<") "<< reset << magenta;
 
-                    if(ptr != nullptr)
+                    // && ptr->state & (binary_cluster | base_edge)
+                    if(ptr != nullptr )
                     {
                         const auto& nbr_nodes_list = ptr->adjacents;
                         for(const auto& nbr_node : nbr_nodes_list)

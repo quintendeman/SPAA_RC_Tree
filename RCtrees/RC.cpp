@@ -239,7 +239,7 @@ int main(int argc, char* argv[]) {
     if(graph_size <= 100)
         printTree(clusters);
 
-    test_dynamic_rc(parents, clusters);
+    // test_dynamic_rc(parents, clusters);
 
     if(graph_size <= 100)
         printTree(clusters);

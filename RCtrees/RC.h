@@ -36,7 +36,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
         std::uniform_real_distribution<double> dis(0, 1);
         auto random_val = dis(gen);
 
-        static const double anywhere_left_weight = 1;
+        static const double anywhere_left_weight = 10;
         static const double immediate_left_weight = 10;
         static const double root_weight = 0.0; /* warning, does not represet probability of a null cluster as degree capping may create more forests */
 
@@ -535,6 +535,9 @@ void check_consistency(parlay::sequence<node<T, D>*>& tree_nodes)
             auto other_node_ptr = get_other_side(node_ptr, ptr);
             if(get_other_side(other_node_ptr, ptr) != node_ptr)
             {
+                node_ptr->cluster_ptr->print();
+                ptr->cluster_ptr->print();
+                other_node_ptr->cluster_ptr->print();
                 std::cout << "Base clusters inconsistent" << std::endl;
                 exit(1);
             }
@@ -573,14 +576,13 @@ void check_mis(parlay::sequence<node<T, D>*>& tree_nodes)
 template<typename T, typename D>
 void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
 {
+    
+    
     parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
-    // for(T i = 0; i < tree_nodes.size(); i++)
-    // {
         auto& node_ptr = tree_nodes[i];
         auto& cluster_ptr = node_ptr->cluster_ptr;
-        cluster_ptr->add_empty_level(node_ptr->state, node_ptr->contraction_level+1);
-         // do the same for all edges and binary clusters
         auto& v = cluster_ptr->index;
+        cluster_ptr->add_empty_level(node_ptr->state, node_ptr->contraction_level+1);
 
         for(auto& edge_ptr : node_ptr->adjacents)
         {
@@ -590,23 +592,25 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
             auto& w = other_node_ptr->cluster_ptr->index;
             if(w < v)
                 continue;
-            edge_ptr->cluster_ptr->add_empty_level(edge_ptr->state, edge_ptr->contraction_level); // don't update the contraction level of edge_ptrs
+            
+            // std::cout << "Binary added " << edge_ptr->index() << std::endl;
+
+            edge_ptr->cluster_ptr->add_empty_level(edge_ptr->state, edge_ptr->contraction_level + 1); 
             cluster_ptr->add_ptr_to_highest_level(edge_ptr->next);
             edge_ptr->cluster_ptr->add_ptr_to_highest_level(node_ptr->next);
         }
-    // }
     });
     parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
-    // for(T i = 0; i < tree_nodes.size(); i++)
-    // {
         auto& node_ptr = tree_nodes[i];
         auto& cluster_ptr = node_ptr->cluster_ptr;
         auto& v = cluster_ptr->index;
 
         for(auto& edge_ptr : node_ptr->adjacents)
         {
+            
             if(edge_ptr == nullptr || !(edge_ptr->state & (binary_cluster | base_edge)))
                 continue;
+    
             auto other_node_ptr = get_other_side(node_ptr, edge_ptr);
             auto& w = other_node_ptr->cluster_ptr->index;
             if(v < w)
@@ -614,8 +618,24 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
             cluster_ptr->add_ptr_to_highest_level(edge_ptr->next);
             edge_ptr->cluster_ptr->add_ptr_to_highest_level(node_ptr->next);
         }
-        tree_nodes[i] = node_ptr->next;
-    // }
+    });
+
+    parlay::parallel_for(0, tree_nodes.size(), [&] (T i){
+        auto& node_ptr = tree_nodes[i];
+        auto& cluster_ptr = node_ptr->cluster_ptr;
+        for(auto& edge_ptr : node_ptr->adjacents)
+        {
+            if(edge_ptr == nullptr)
+                continue;
+            if(edge_ptr->state & unary_cluster && !(edge_ptr->state & (binary_cluster | base_edge)))
+            {
+                // std::cout << "UNARY added " << edge_ptr->index() << std::endl;
+                edge_ptr->cluster_ptr->add_empty_level(unary_cluster, edge_ptr->contraction_level+1);
+                edge_ptr->next->state = unary_cluster;
+                node_ptr->next->add_ptr(edge_ptr->next);
+            }
+        }
+        tree_nodes[i] = tree_nodes[i]->next;
     });
 }
 
@@ -644,8 +664,8 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
         return base_clusters[i].adjacency.get_tail();
     });
 
-    if(base_clusters.size() <= 100)
-        printTree(base_clusters);
+    // if(base_clusters.size() <= 100)
+    //     printTree(base_clusters);
 
     recreate_last_levels(tree_nodes);
 
@@ -679,6 +699,9 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
 
         
         recreate_last_levels(tree_nodes);
+
+        // if(base_clusters.size() <= 100)
+        //     printTree(base_clusters);
     
         
         std::cout << "[" << count  << "]: " << bold << tree_nodes.size() << reset << std::endl;
@@ -730,11 +753,14 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
         {
             cluster<T,D>* &v_cluster = v;
 
-            // We are at the start
+            D lval_print,rval_print = defretval; // TODO remove
+
+            // We are at the start probably can add a bunch of nullptr checks too TODO
             if (prev_val_till_v_l == defretval && prev_val_till_v_r == defretval) 
             {
                 v_cluster->find_boundary_vertices(prev_boundary_v_l, prev_val_till_v_l, prev_boundary_v_r, prev_val_till_v_r, defretval);
-                
+                lval_print = prev_val_till_v_l;
+                rval_print = prev_val_till_v_r;
             } 
             else 
             {
@@ -748,17 +774,18 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
                 // Covers both unary to unary and unary to binary case
                 if (prev_boundary_v_l == v && prev_boundary_v_r == v) 
                 {
-                    prev_boundary_v_l = l;
-                    prev_boundary_v_r = r;
+                    lval_print = prev_val_till_w_l;
+                    rval_print = prev_val_till_w_r;
                     
                     if(l != r) // ascending into unary
                     {
                         prev_val_till_v_l = func(prev_val_till_v_l, lval);
                         prev_val_till_v_r = func(prev_val_till_v_r, rval);
+                        
                     }
                     else
                     {
-                        auto v_node_ptr = v_cluster->adjacency.get_tail();
+                        auto v_node_ptr = v_cluster->first_contracted_node;
                         for(auto& ptr : v_node_ptr->adjacents)
                         {
                             if(ptr != nullptr && ptr->state & (binary_cluster | base_edge))
@@ -769,6 +796,8 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
                             }
                         }
                     }
+                    prev_boundary_v_l = l;
+                    prev_boundary_v_r = r;
                 }
                 // Covers binary ascending to unary/nullary
                 else if (l == r) 
@@ -813,17 +842,33 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
                         prev_val_till_v_l = func(prev_val_till_v_l, lval);
                     }
                 }
+                lval_print = lval;
+                rval_print = rval;
             }
+            std::cout << bright_magenta << v->index << "[" << (short) v->get_height() << "]" << " ";
+            std::cout << prev_boundary_v_l->index << "(" << prev_val_till_v_l << ") " << prev_boundary_v_r->index << "(" << prev_val_till_v_r << ") ";
+            std::cout << "lval,rval=" << lval_print << "," << rval_print << " ";
+            auto& for_printing = v;
+            if(for_printing->adjacency.get_tail()->state & unary_cluster)
+                std::cout << " unary ";
+            else if (for_printing->adjacency.get_tail()->state & binary_cluster)
+                std::cout << " binary ";
+            else
+                std::cout << " nullary ";
+            std::cout << reset << std::endl;
             v = v->get_parent();
         }
         else
         {
             cluster<T,D>* &w_cluster = w;
+            D lval_print,rval_print = defretval;
 
             // We are at the start
             if (prev_val_till_w_l == defretval && prev_val_till_w_r == defretval) 
             {
                 w_cluster->find_boundary_vertices(prev_boundary_w_l, prev_val_till_w_l, prev_boundary_w_r, prev_val_till_w_r, defretval);
+                lval_print = prev_val_till_w_l;
+                rval_print = prev_val_till_w_r;
             } 
             else 
             {
@@ -846,7 +891,7 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
                     }
                     else
                     {
-                        auto w_node_ptr = w_cluster->adjacency.get_tail();
+                        auto w_node_ptr = w_cluster->first_contracted_node;
                         for(auto& ptr : w_node_ptr->adjacents)
                         {
                             if(ptr != nullptr && ptr->state & (binary_cluster | base_edge))
@@ -857,6 +902,8 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
                             }
                         }
                     }
+                    prev_boundary_w_l = l;
+                    prev_boundary_w_r = r;
                 }
                 // Covers binary ascending to unary/nullary
                 else if (l == r) 
@@ -902,7 +949,20 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
                         prev_val_till_w_l = func(prev_val_till_w_l, lval);
                     }
                 }
+                lval_print = lval;
+                rval_print = rval;
             }
+            std::cout << bright_green << w->index << "[" << (short) w->get_height() << "]" << " ";
+            std::cout << prev_boundary_w_l->index << "(" << prev_val_till_w_l << ") " << prev_boundary_w_r->index << "(" << prev_val_till_w_r << ") ";
+            std::cout << "lval,rval=" << lval_print << "," << rval_print << " ";
+            auto& for_printing = w;
+            if(for_printing->adjacency.get_tail()->state & unary_cluster)
+                std::cout << " unary ";
+            else if (for_printing->adjacency.get_tail()->state & binary_cluster)
+                std::cout << " binary ";
+            else
+                std::cout << " nullary ";
+            std::cout << reset << std::endl;
             w = w->get_parent();
         }
         
