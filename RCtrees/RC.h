@@ -36,7 +36,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
         std::uniform_real_distribution<double> dis(0, 1);
         auto random_val = dis(gen);
 
-        static const double anywhere_left_weight = 10;
+        static const double anywhere_left_weight = 1;
         static const double immediate_left_weight = 10;
         static const double root_weight = 0.0; /* warning, does not represet probability of a null cluster as degree capping may create more forests */
 
@@ -593,57 +593,97 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
         auto& v = cluster_ptr->index;
         cluster_ptr->add_empty_level(node_ptr->state, node_ptr->contraction_level+1);
 
-        for(auto& edge_ptr : node_ptr->adjacents)
+        for(short e = 0; e < node_ptr->adjacents.size(); e++)
         {
+            auto edge_ptr = node_ptr->adjacents[e];
             if(edge_ptr == nullptr || !(edge_ptr->state & (binary_cluster | base_edge)))
                 continue;
             auto other_node_ptr = get_other_side(node_ptr, edge_ptr);
             auto& w = other_node_ptr->cluster_ptr->index;
             if(w < v)
                 continue;
-            
-            // std::cout << "Binary added " << edge_ptr->index() << std::endl;
-
             edge_ptr->cluster_ptr->add_empty_level(edge_ptr->state, edge_ptr->contraction_level + 1); 
-            cluster_ptr->add_ptr_to_highest_level(edge_ptr->next);
-            edge_ptr->cluster_ptr->add_ptr_to_highest_level(node_ptr->next);
+            node_ptr->next->adjacents[e] = edge_ptr->next;
+            edge_ptr->next->add_ptr(node_ptr->next);
+            
         }
+        // for(auto& edge_ptr : node_ptr->adjacents)
+        // {
+        //     if(edge_ptr == nullptr || !(edge_ptr->state & (binary_cluster | base_edge)))
+        //         continue;
+        //     auto other_node_ptr = get_other_side(node_ptr, edge_ptr);
+        //     auto& w = other_node_ptr->cluster_ptr->index;
+        //     if(w < v)
+        //         continue;
+            
+        //     // std::cout << "Binary added " << edge_ptr->index() << std::endl;
+
+        //     edge_ptr->cluster_ptr->add_empty_level(edge_ptr->state, edge_ptr->contraction_level + 1); 
+        //     cluster_ptr->add_ptr_to_highest_level(edge_ptr->next);
+        //     edge_ptr->cluster_ptr->add_ptr_to_highest_level(node_ptr->next);
+        // }
     });
     parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
         auto& node_ptr = tree_nodes[i];
         auto& cluster_ptr = node_ptr->cluster_ptr;
         auto& v = cluster_ptr->index;
 
-        for(auto& edge_ptr : node_ptr->adjacents)
+        for(short e = 0; e < node_ptr->adjacents.size(); e++)
         {
-            
+            auto edge_ptr = node_ptr->adjacents[e];
             if(edge_ptr == nullptr || !(edge_ptr->state & (binary_cluster | base_edge)))
                 continue;
-    
             auto other_node_ptr = get_other_side(node_ptr, edge_ptr);
             auto& w = other_node_ptr->cluster_ptr->index;
             if(v < w)
                 continue;
-            cluster_ptr->add_ptr_to_highest_level(edge_ptr->next);
-            edge_ptr->cluster_ptr->add_ptr_to_highest_level(node_ptr->next);
+            node_ptr->next->adjacents[e] = edge_ptr->next;
+            edge_ptr->next->add_ptr(node_ptr->next);
         }
+
+        // for(auto& edge_ptr : node_ptr->adjacents)
+        // {
+            
+        //     if(edge_ptr == nullptr || !(edge_ptr->state & (binary_cluster | base_edge)))
+        //         continue;
+    
+        //     auto other_node_ptr = get_other_side(node_ptr, edge_ptr);
+        //     auto& w = other_node_ptr->cluster_ptr->index;
+        //     if(v < w)
+        //         continue;
+        //     cluster_ptr->add_ptr_to_highest_level(edge_ptr->next);
+        //     edge_ptr->cluster_ptr->add_ptr_to_highest_level(node_ptr->next);
+        // }
     });
 
     parlay::parallel_for(0, tree_nodes.size(), [&] (T i){
         auto& node_ptr = tree_nodes[i];
         auto& cluster_ptr = node_ptr->cluster_ptr;
-        for(auto& edge_ptr : node_ptr->adjacents)
+        for(short e = 0; e < node_ptr->adjacents.size(); e++)
         {
+            auto edge_ptr = node_ptr->adjacents[e];
             if(edge_ptr == nullptr)
+                continuel
+            if(edge_ptr == nullptr || !(edge_ptr->state & (binary_cluster | base_edge)))
                 continue;
             if(edge_ptr->state & unary_cluster && !(edge_ptr->state & (binary_cluster | base_edge)))
             {
-                // std::cout << "UNARY added " << edge_ptr->index() << std::endl;
                 edge_ptr->cluster_ptr->add_empty_level(unary_cluster, edge_ptr->contraction_level+1);
                 edge_ptr->next->state = unary_cluster;
-                node_ptr->next->add_ptr(edge_ptr->next);
+                node_ptr->next->adjacents[e] = edge_ptr->next;
             }
         }
+        // for(auto& edge_ptr : node_ptr->adjacents)
+        // {
+        //     if(edge_ptr == nullptr)
+        //         continue;
+        //     if(edge_ptr->state & unary_cluster && !(edge_ptr->state & (binary_cluster | base_edge)))
+        //     {
+        //         edge_ptr->cluster_ptr->add_empty_level(unary_cluster, edge_ptr->contraction_level+1);
+        //         edge_ptr->next->state = unary_cluster;
+        //         node_ptr->next->add_ptr(edge_ptr->next);
+        //     }
+        // }
         tree_nodes[i] = tree_nodes[i]->next;
     });
 }

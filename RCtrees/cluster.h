@@ -309,7 +309,7 @@ public:
             std::cout << "]";
         }
 
-        std::cout << reset << bright_white << "F=" << this->finalize_time << " I=" << this->asked_to_increment;
+        // std::cout << reset << bright_white << "F=" << this->finalize_time << " I=" << this->asked_to_increment;
         
         std::cout << reset << std::endl;
     }

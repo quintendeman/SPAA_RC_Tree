@@ -241,13 +241,13 @@ int main(int argc, char* argv[]) {
     if(graph_size <= 100)
         printTree(clusters);
 
-    test_dynamic_rc(parents, clusters);
+    // test_dynamic_rc(parents, clusters);
 
     // if(graph_size <= 100)
     //     printTree(clusters);
 
 
-    // deleteRCtree(clusters);
+    deleteRCtree(clusters);
 
     if (print_creation) {
         std::cout << graph_size << "," << std::setprecision(6) << creation_time.count() << std::endl;
