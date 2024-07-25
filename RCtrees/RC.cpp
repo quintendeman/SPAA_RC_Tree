@@ -116,8 +116,10 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
     // create a selection of delete edges
     auto random_indices = parlay::tabulate(batch_deletion_size < 1 ? 1 : batch_deletion_size, [&] (vertex i) 
     {
-        auto r = gen[i];
-        auto random_index = dis(r);
+        // auto r = gen[i];
+        // auto random_index = dis(r);
+        auto jump_size = parents.size()/(batch_insertion_size < 1 ? 1 : batch_insertion_size);
+        vertex random_index = i * jump_size/2 + 1;
         return random_index;
     });
 
@@ -241,8 +243,8 @@ int main(int argc, char* argv[]) {
 
     test_dynamic_rc(parents, clusters);
 
-    if(graph_size <= 100)
-        printTree(clusters);
+    // if(graph_size <= 100)
+    //     printTree(clusters);
 
 
     // deleteRCtree(clusters);

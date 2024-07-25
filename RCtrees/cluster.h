@@ -72,6 +72,8 @@ public:
     cluster<T,D>* parent = nullptr;
     node<T,D>* first_contracted_node = nullptr;
     D data;
+    short finalize_time = 0; // TODO remove
+    short asked_to_increment = 0; // TODO remove
     int state;
 
     cluster(void) : counter(0)
@@ -267,7 +269,8 @@ public:
             if(level != -1 && i == level)
                 break;
             const auto& node_ptr_arr = this->adjacency[i]->adjacents;
-            
+
+            std::cout << bold << bright_yellow << i << reset;    
 
             volatile auto node_ptr_test = this->adjacency[i];
             if(node_ptr_test->state & nullary_cluster)
@@ -305,6 +308,8 @@ public:
                 std::cout << white << this->adjacency[i]->get_num_neighbours_live() << " " << magenta;
             std::cout << "]";
         }
+
+        std::cout << reset << bright_white << "F=" << this->finalize_time << " I=" << this->asked_to_increment;
         
         std::cout << reset << std::endl;
     }

@@ -19,6 +19,7 @@ const int adjacency_changed = 256;
 const int all_contracted_affected = 512;
 const int debug_state = 1024;
 const int contracts_this_round = 2048;
+const int dont_finalize = 4096;
 
 const int max_neighbours = 3;
 

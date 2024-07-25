@@ -528,6 +528,15 @@ void check_consistency(parlay::sequence<node<T, D>*>& tree_nodes)
 {
     parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
         auto& node_ptr = tree_nodes[i];
+        if(node_ptr->state & live == 0)
+        {
+            return;
+        }
+        if(node_ptr->state & (unary_cluster | binary_cluster | base_edge))
+        {
+            return;
+        }
+
         for(auto& ptr : node_ptr->adjacents)
         {
             if(ptr == nullptr || !(ptr->state & (base_edge | binary_cluster)))
