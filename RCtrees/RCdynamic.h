@@ -264,9 +264,57 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
         }        
     });
 
-    // TODO does it not exist before and magically pop up later?
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T i){
+        auto& aff_node = affected_nodes[i];
+        auto& current_aff_node = aff_node->next;
 
-    
+        for(auto& new_edge : current_aff_node->adjacents)
+        {
+            if(new_edge == nullptr)
+                continue;
+            bool existed = false;
+
+            for(auto& old_edge : aff_node->adjacents)
+            {
+                if(old_edge == nullptr)
+                    continue;
+                if(old_edge->next == new_edge)
+                {
+                    existed = true;
+                    break;
+                }
+                auto old_other_side = get_other_side(aff_node, old_edge);
+                if(old_other_side == nullptr)
+                    continue;
+                if(old_other_side->next == new_edge)
+                {
+                    existed = true;
+                    break;
+                }
+            }
+            if(!existed)
+                new_edge = nullptr;
+        }
+    });
+
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T i){
+        auto& aff_node = affected_nodes[i];
+        auto& current_aff_node = aff_node->next;
+
+        for(auto& new_edge : current_aff_node->adjacents)
+        {
+            if(new_edge == nullptr)
+                continue;
+            if(new_edge->state & unary_cluster && new_edge->next == nullptr)
+            {
+                new_edge->cluster_ptr->add_empty_level(unary_cluster, new_edge->contraction_level+1);
+                new_edge->next->state = unary_cluster;
+                current_aff_node->add_ptr(new_edge->next);
+            }
+        }
+    });
+
+
 
     return;
 }

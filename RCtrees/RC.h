@@ -880,9 +880,6 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
                 // Covers both unary to unary and unary to binary case
                 if (prev_boundary_w_l == w && prev_boundary_w_r == w) 
                 {
-                    
-                    prev_boundary_w_l = l;
-                    prev_boundary_w_r = r;
 
                     if(l != r)
                     {
