@@ -124,7 +124,122 @@ parlay::sequence<node<T,D>*> tiebreak(parlay::sequence<node<T,D>*>& input_nodes)
 template<typename T, typename D>
 void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
 {
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T i){
+        auto& aff_node = affected_nodes[i];
+        if(aff_node->next == nullptr)
+            aff_node->cluster_ptr->add_empty_level(aff_node->state & (~(binary_cluster | unary_cluster | nullary_cluster)) | live, aff_node->contraction_level+1);
+        else
+        {
+            aff_node->next->state = live | affected;
+        }
+        for(short e = 0; e < aff_node->adjacents.size(); e++)
+        {
+            if(aff_node->adjacents[e] == nullptr)
+                aff_node->next->adjacents[e] = nullptr;
+        }
+    });
+
+    // is there something that raked in the same round
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T I){
+        auto& aff_node = affected_nodes[I];
+        if(!is_update_eligible(aff_node))
+            return;
+        
+        for(short i = 0; i < aff_node->adjacents.size(); i++)
+        {
+            const auto old_edge = aff_node->adjacents[i];
+            const auto new_edge = aff_node->next->adjacents[i];            
+            if(old_edge == nullptr)
+                continue;
+            if(new_edge == nullptr)
+                continue;
+
+            if(old_edge->state & (binary_cluster | base_edge))
+            {
+                if ((new_edge->state & binary_cluster) == 0)
+                {
+                    new_edge->state = live | affected;
+                    aff_node->next->adjacents[i] = old_edge->next;
+                }
+            }
+        }
+    });
+
+    // was something a unary cluster before but is missing now
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T I){
+        auto& aff_node = affected_nodes[I];
+        for(short i = 0; i < aff_node->adjacents.size(); i++)
+        {
+            const auto old_edge = aff_node->adjacents[i];
+            const auto new_edge = aff_node->next->adjacents[i];            
+            if(old_edge == nullptr)
+                continue;
+
+            if((old_edge->state & unary_cluster) && (new_edge == nullptr || (new_edge != old_edge->next)))
+            {
+                if(old_edge->next == nullptr)
+                {
+                    old_edge->cluster_ptr->add_empty_level(unary_cluster, old_edge->contraction_level + 1);
+                }
+                old_edge->next->adjacents.fill(nullptr);
+                aff_node->next->adjacents[i] = old_edge->next;
+            }
+        }
+    });
+
+    // is an edge missing?
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T I){
+        auto& aff_node = affected_nodes[I];
+        for(short i = 0; i < aff_node->adjacents.size(); i++)
+        {
+            const auto old_edge = aff_node->adjacents[i];
+            const auto new_edge = aff_node->next->adjacents[i];            
+            if(old_edge == nullptr)
+                continue;
+            if((old_edge->state & (binary_cluster | base_edge)) && new_edge == nullptr)
+            {
+                auto old_neighbour = get_other_side(aff_node, old_edge);
+                auto v = aff_node->index();
+                auto w = old_neighbour->index();
+
+                if(w < v)
+                    continue;
+                if(old_edge->next == nullptr)
+                    old_edge->cluster_ptr->add_empty_level(binary_cluster | base_edge, old_edge->contraction_level + 1);
+                auto newly_created_edge = old_edge->next;
+                newly_created_edge->state = old_edge->state;
+                newly_created_edge->adjacents.fill(nullptr);
+                newly_created_edge->add_ptr(aff_node->next);
+                aff_node->next->adjacents[i] = newly_created_edge;
+            }
+        }
+    });
+
+    // is an edge missing? -- other side
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T I){
+        auto& aff_node = affected_nodes[I];
+        for(short i = 0; i < aff_node->adjacents.size(); i++)
+        {
+            const auto old_edge = aff_node->adjacents[i];
+            const auto new_edge = aff_node->next->adjacents[i];            
+            if(old_edge == nullptr)
+                continue;
+            if((old_edge->state & (binary_cluster | base_edge)) && new_edge == nullptr)
+            {
+                auto old_neighbour = get_other_side(aff_node, old_edge);
+                auto v = aff_node->index();
+                auto w = old_neighbour->index();
+                if(v < w)
+                    continue;
+                auto newly_created_edge = old_edge->next;
+                newly_created_edge->add_ptr(aff_node->next);
+                aff_node->next->adjacents[i] = newly_created_edge;
+            }
+        }
+    });
+
     
+
 
     return;
 }
@@ -132,9 +247,15 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
 template<typename T, typename D>
 void finalize(node<T,D>* contracted_node)
 {
-    
-    return;
+    while(contracted_node->cluster_ptr->adjacency.get_tail() != contracted_node)
+    {
+        auto tail = contracted_node->cluster_ptr->adjacency.get_tail();
+        if(tail->state & dont_finalize)
+            break;
+        contracted_node->cluster_ptr->adjacency.delete_tail();
+    }
 
+    return;
 }
 
 template<typename T, typename D>
@@ -190,9 +311,6 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         if(tree_nodes[i]->tiebreak() != i)
             tree_nodes[i] = nullptr;
     });
-
-
-
 
     tree_nodes = parlay::filter(tree_nodes, [] (auto node_ptr){
         if(node_ptr != nullptr)
@@ -373,9 +491,10 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     parlay::sequence<node<T,D>*> mis_set;
 
     unsigned short count = 0;
-    static const short max_count = 1;
+    static const short max_count = 10;
     do
     {
+        std::cout << "checking level at the start of round " << count << std::endl;
         auto checker_nodes = parlay::tabulate(clusters.size(), [&] (T i){
             return clusters[i].adjacency[count];
         });
@@ -394,29 +513,29 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
 
         create_decompressed_affected(frontier);
 
-
-
-        if(clusters.size() <= 1000)
+        if(clusters.size() <= 100)
         {
             std::cout << "\"finalize\" " << mis_set.size() << "nodes: ";
             for(auto& ptr : mis_set)
                 std::cout << ptr->cluster_ptr->index << " ";
             std::cout << std::endl;
         }
-        parlay::parallel_for(0, mis_set.size(), [&] (T i){
-            finalize(mis_set[i]->next);
-            auto& check_ptr = mis_set[i]; // TODO remove
-        });
+        
 
         
-        std::cout << "checking level " << count+1 << " after decompression and finalizing" << std::endl;
+        std::cout << "checking level " << count+1 << " after decompression " << std::endl;
         checker_nodes = parlay::tabulate(clusters.size(), [&] (T i){
             return clusters[i].adjacency[count+1];
         });
         check_consistency(checker_nodes);
 
         auto update_eligible_set = parlay::filter(frontier, [] (auto node_ptr) {
-            return is_update_eligible(node_ptr);
+            if(is_update_eligible(node_ptr))
+            {
+                node_ptr->state |= update_eligible;
+                return true;
+            }
+            return false;
         });
 
         update_eligible_set = parlay::filter(update_eligible_set, [] (auto node_ptr) {
@@ -432,7 +551,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         {
             printTree(clusters, count+2);
         }
-        if(clusters.size() <= 1000)
+        if(clusters.size() <= 100)
         {
             std::cout << "contracted " << mis_set.size() << "nodes: ";
             for(auto& ptr : mis_set)
@@ -478,9 +597,17 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             }
             return false;
         });
+
         parlay::parallel_for(0, frontier.size(), [&] (T i) {
             frontier[i]->state |= affected;
         });
+
+        std::cout << "Finalizing contracted nodes " << std::endl;
+        parlay::parallel_for(0, mis_set.size(), [&] (T i){
+            finalize(mis_set[i]->next);
+        });
+
+        
 
         std::cout << "Frontier size " << frontier.size() << std::endl;        
 

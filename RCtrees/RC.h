@@ -663,7 +663,7 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
         {
             auto edge_ptr = node_ptr->adjacents[e];
             if(edge_ptr == nullptr)
-                continuel
+                continue;
             if(edge_ptr == nullptr || !(edge_ptr->state & (binary_cluster | base_edge)))
                 continue;
             if(edge_ptr->state & unary_cluster && !(edge_ptr->state & (binary_cluster | base_edge)))

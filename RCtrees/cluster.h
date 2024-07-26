@@ -279,6 +279,8 @@ public:
                 std::cout << yellow << "U";
             if(node_ptr_test->state & binary_cluster)
                 std::cout << green << "B";
+            if(node_ptr_test->state & update_eligible)
+                std::cout << green << "E";
             
             if(this->adjacency[i] == this->first_contracted_node)
                 std::cout << bright_blue << "C";
