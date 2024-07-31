@@ -128,18 +128,29 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
         auto& aff_node = affected_nodes[i];
         if(aff_node->next == nullptr)
             aff_node->cluster_ptr->add_empty_level(aff_node->state & (~(binary_cluster | unary_cluster | nullary_cluster)) | live, aff_node->contraction_level+1);
-        else
-        {
-            aff_node->next->state = live | affected;
-        }
+        
         for(short e = 0; e < aff_node->adjacents.size(); e++)
         {
             if(aff_node->adjacents[e] == nullptr)
                 aff_node->next->adjacents[e] = nullptr;
+            else
+            {
+                if(aff_node->adjacents[e]->next != aff_node->next->adjacents[e])
+                {
+                    auto old_other_side = get_other_side(aff_node,aff_node->adjacents[e]);
+                    if(old_other_side != nullptr && old_other_side->next != aff_node->next->adjacents[e])
+                    {
+                        std::cout << "Deleted " << aff_node->index() << " " << aff_node->adjacents[e]->index() << " " << old_other_side->index() << std::endl;
+                        aff_node->next->adjacents[e] = nullptr;
+                    }
+                    else
+                        return;
+                }
+            }
         }
     });
 
-    // is there something that raked in the same round
+    // Did I originally rake into something?
     parlay::parallel_for(0, affected_nodes.size(), [&] (T I){
         auto& aff_node = affected_nodes[I];
         if(!is_update_eligible(aff_node))
@@ -156,10 +167,53 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
 
             if(old_edge->state & (binary_cluster | base_edge))
             {
-                if ((new_edge->state & binary_cluster) == 0)
+                if(aff_node->next->state & unary_cluster)
                 {
                     new_edge->state = live | affected;
                     aff_node->next->adjacents[i] = old_edge->next;
+                    std::cout << "rake reversed: " << aff_node->index() << " " << old_edge->index() << "->" << new_edge->index() << std::endl;
+                }
+                // if ((new_edge->state & (base_edge)) == 0)
+                // {
+                //     new_edge->state = live | affected;
+                //     aff_node->next->adjacents[i] = old_edge->next;
+                //     std::cout << "compress reversed: " << aff_node->index() << " " << old_edge->index() << "->" << new_edge->index() << std::endl;
+                // }
+            }
+        }
+    });
+
+    // Did I compress into something?
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T I){
+        auto& aff_node = affected_nodes[I];
+        if(!is_update_eligible(aff_node))
+            return;
+        
+        for(short i = 0; i < aff_node->adjacents.size(); i++)
+        {
+            const auto old_edge = aff_node->adjacents[i];
+            const auto new_edge = aff_node->next->adjacents[i];            
+            if(old_edge == nullptr)
+                continue;
+            if(new_edge == nullptr)
+                continue;
+
+            if(old_edge->state & (binary_cluster | base_edge))
+            {
+                if(aff_node->next->state & binary_cluster)
+                {
+                    const auto old_neighbour = get_other_side(aff_node, old_edge);
+                    short k;
+                    for(k = 0; k < old_neighbour->adjacents.size(); k++)
+                    {
+                        if(old_neighbour->adjacents[k] == old_edge)
+                            break;
+                    }
+                    old_neighbour->next->adjacents[k] = old_edge->next;
+                    aff_node->next->adjacents[i] = old_edge->next;
+
+                    std::cout << "compress reversed: " << aff_node->index() << " " << old_edge->index() << "->" << old_neighbour->index() << std::endl;
+                    old_neighbour->next->state |= adjacency_changed;
                 }
             }
         }
@@ -181,8 +235,12 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                 {
                     old_edge->cluster_ptr->add_empty_level(unary_cluster, old_edge->contraction_level + 1);
                 }
+            }
+            if(old_edge->state & unary_cluster)
+            {
                 old_edge->next->adjacents.fill(nullptr);
                 aff_node->next->adjacents[i] = old_edge->next;
+                std::cout << "Unary added: " << aff_node->index() << " " << old_edge->index() << std::endl;
             }
         }
     });
@@ -204,8 +262,12 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
 
                 if(w < v)
                     continue;
+                std::cout << "Binary added one sided added: " << aff_node->index() << " " << old_edge->index() << std::endl;
                 if(old_edge->next == nullptr)
+                {
+                    std::cout << "Binary new constructed " << std::endl;
                     old_edge->cluster_ptr->add_empty_level(binary_cluster | base_edge, old_edge->contraction_level + 1);
+                }
                 auto newly_created_edge = old_edge->next;
                 newly_created_edge->state = old_edge->state;
                 newly_created_edge->adjacents.fill(nullptr);
@@ -231,11 +293,14 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                 auto w = old_neighbour->index();
                 if(v < w)
                     continue;
+                std::cout << "Binary other sided added: " << aff_node->index() << " " << old_edge->index() << std::endl;
                 auto newly_created_edge = old_edge->next;
                 newly_created_edge->add_ptr(aff_node->next);
                 aff_node->next->adjacents[i] = newly_created_edge;
             }
         }
+        aff_node->next->state = live | affected;
+        
     });
 
     
@@ -581,6 +646,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             if(frontier[i]->next == nullptr) // TODO remove
             {
                 std::cout << "Should never happen!" << std::endl;
+                std::cout << "frontier[i] = " << frontier[i]->index() << std::endl;
                 exit(1);
             }
             frontier[i] = frontier[i]->next;
