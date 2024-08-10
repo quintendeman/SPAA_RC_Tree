@@ -60,7 +60,7 @@ parlay::sequence<node<T,D>*> get_3dp1(parlay::sequence<node<T,D>*>& initial_node
         parlay::sequence<node<T,D>*> ret_seq = parlay::sequence<node<T,D>*>(max_neighbours, nullptr);
         for(short i = 0; i < max_neighbours; i++)
         {
-            if(node_ptr->adjacents[i] == nullptr || node_ptr->adjacents[i]->state & (binary_cluster | base_edge) == 0)
+            if(node_ptr->adjacents[i] == nullptr || ((node_ptr->adjacents[i]->state & (binary_cluster | base_edge)) == 0))
                 continue;
             ret_seq[i] = get_other_side(node_ptr, node_ptr->adjacents[i]);
         }
@@ -73,7 +73,7 @@ parlay::sequence<node<T,D>*> get_3dp1(parlay::sequence<node<T,D>*>& initial_node
         if(node_ptr != nullptr)
             for(short i = 0; i < max_neighbours; i++)
             {
-                if(node_ptr->adjacents[i] == nullptr || node_ptr->adjacents[i]->state & (binary_cluster | base_edge) == 0)
+                if(node_ptr->adjacents[i] == nullptr || ((node_ptr->adjacents[i]->state & (binary_cluster | base_edge)) == 0))
                     continue;
                 ret_seq[i] = get_other_side(node_ptr, node_ptr->adjacents[i]);
             }
@@ -127,7 +127,7 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
     parlay::parallel_for(0, affected_nodes.size(), [&] (T i){
         auto& aff_node = affected_nodes[i];
         if(aff_node->next == nullptr)
-            aff_node->cluster_ptr->add_empty_level(aff_node->state & (~(binary_cluster | unary_cluster | nullary_cluster)) | live, aff_node->contraction_level+1);
+            aff_node->cluster_ptr->add_empty_level((aff_node->state & (~(binary_cluster | unary_cluster | nullary_cluster))) | live, aff_node->contraction_level+1);
         
         for(short e = 0; e < aff_node->adjacents.size(); e++)
         {
@@ -254,7 +254,7 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
             const auto new_edge = aff_node->next->adjacents[i];            
             if(old_edge == nullptr)
                 continue;
-            if((old_edge->state & (binary_cluster | base_edge)) && new_edge == nullptr)
+            if((old_edge->state & (binary_cluster | base_edge)) && (new_edge == nullptr))
             {
                 auto old_neighbour = get_other_side(aff_node, old_edge);
                 auto v = aff_node->index();
@@ -262,7 +262,7 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
 
                 if(w < v)
                     continue;
-                std::cout << "Binary added one sided added: " << aff_node->index() << " " << old_edge->index() << std::endl;
+                std::cout << "Binary added one sided added: " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() << std::endl;
                 if(old_edge->next == nullptr)
                 {
                     std::cout << "Binary new constructed " << std::endl;
@@ -273,6 +273,7 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                 newly_created_edge->adjacents.fill(nullptr);
                 newly_created_edge->add_ptr(aff_node->next);
                 aff_node->next->adjacents[i] = newly_created_edge;
+                old_edge->state |= one_sided;
             }
         }
     });
@@ -286,17 +287,19 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
             const auto new_edge = aff_node->next->adjacents[i];            
             if(old_edge == nullptr)
                 continue;
-            if((old_edge->state & (binary_cluster | base_edge)) && new_edge == nullptr)
+            // ((old_edge->state & (binary_cluster | base_edge)) && (new_edge == nullptr || new_edge != old_edge->next)) || 
+            if((old_edge->state & one_sided)) //TODO or it is changed?
             {
                 auto old_neighbour = get_other_side(aff_node, old_edge);
                 auto v = aff_node->index();
                 auto w = old_neighbour->index();
                 if(v < w)
                     continue;
-                std::cout << "Binary other sided added: " << aff_node->index() << " " << old_edge->index() << std::endl;
+                std::cout << "Binary other sided added: " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() <<  std::endl;
                 auto newly_created_edge = old_edge->next;
                 newly_created_edge->add_ptr(aff_node->next);
                 aff_node->next->adjacents[i] = newly_created_edge;
+                old_edge->state &= ~one_sided;
             }
         }
         aff_node->next->state = live | affected;
@@ -309,19 +312,7 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
     return;
 }
 
-template<typename T, typename D>
-void finalize(node<T,D>* contracted_node)
-{
-    while(contracted_node->cluster_ptr->adjacency.get_tail() != contracted_node)
-    {
-        auto tail = contracted_node->cluster_ptr->adjacency.get_tail();
-        if(tail->state & dont_finalize)
-            break;
-        contracted_node->cluster_ptr->adjacency.delete_tail();
-    }
-
-    return;
-}
+ 
 
 template<typename T, typename D>
 void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, D>>& add_edges, parlay::sequence<cluster<T, D>>& clusters)

@@ -21,6 +21,7 @@ const int debug_state = 1024;
 const int contracts_this_round = 2048;
 const int dont_finalize = 4096;
 const int update_eligible = 8192;
+const int one_sided = 8192 * 2;
 
 const int max_neighbours = 3;
 

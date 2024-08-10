@@ -325,6 +325,19 @@ void set_MIS(parlay::sequence<node<T, D>*>& tree_nodes, bool use_tree_nodes = fa
     }
 }
 
+template<typename T, typename D>
+void finalize(node<T,D>* contracted_node)
+{
+    while(contracted_node->cluster_ptr->adjacency.get_tail() != contracted_node)
+    {
+        auto tail = contracted_node->cluster_ptr->adjacency.get_tail();
+        if(tail->state & dont_finalize)
+            break;
+        contracted_node->cluster_ptr->adjacency.delete_tail();
+    }
+
+    return;
+}
 
 /**
  * MUST have at most 2 neighbours
@@ -340,8 +353,11 @@ void contract(node<T,D>* node_ptr, bool affect = false)
         node_ptr->state &= (~live);
         node_ptr->state &= (~affected);
         if(affect)
+        {
             for(auto& ptr : node_ptr->adjacents)
                 ptr = nullptr;
+            finalize(node_ptr);
+        }
     }
     else if(node_ptr->get_num_neighbours_live() == 1)
     {
@@ -369,6 +385,8 @@ void contract(node<T,D>* node_ptr, bool affect = false)
                 ptr = node_ptr;
         if(affect == true)
         {
+            finalize(node_ptr);
+            finalize(edge_node);
             for(auto& ptr : node_ptr->adjacents)
                 ptr = nullptr;
             neighbour_node->state |= (affected | adjacency_changed | live);
@@ -432,6 +450,9 @@ void contract(node<T,D>* node_ptr, bool affect = false)
             left_node->state &= (~(binary_cluster | base_edge));
             node_ptr->state &= (~affected);
             node_ptr->state &= (~adjacency_changed);
+            finalize(node_ptr);
+            finalize(left_edge);
+            finalize(right_edge);
         }
     }
 
@@ -528,7 +549,7 @@ void check_consistency(parlay::sequence<node<T, D>*>& tree_nodes)
 {
     parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
         auto& node_ptr = tree_nodes[i];
-        if(node_ptr->state & live == 0)
+        if((node_ptr->state & live) == 0)
         {
             return;
         }
