@@ -625,8 +625,12 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
                 continue;
             edge_ptr->cluster_ptr->add_empty_level(edge_ptr->state, edge_ptr->contraction_level + 1); 
             node_ptr->next->adjacents[e] = edge_ptr->next;
-            edge_ptr->next->add_ptr(node_ptr->next);
-            
+            // edge_ptr->next->add_ptr(node_ptr->next);
+            for(short k = 0; k < edge_ptr->adjacents.size(); k++)
+            {
+                if(edge_ptr->adjacents[k] == node_ptr)
+                    edge_ptr->next->adjacents[k] = node_ptr->next;
+            }
         }
         // for(auto& edge_ptr : node_ptr->adjacents)
         // {
@@ -659,7 +663,12 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
             if(v < w)
                 continue;
             node_ptr->next->adjacents[e] = edge_ptr->next;
-            edge_ptr->next->add_ptr(node_ptr->next);
+            // edge_ptr->next->add_ptr(node_ptr->next);
+            for(short k = 0; k < edge_ptr->adjacents.size(); k++)
+            {
+                if(edge_ptr->adjacents[k] == node_ptr)
+                    edge_ptr->next->adjacents[k] = node_ptr->next;
+            }
         }
 
         // for(auto& edge_ptr : node_ptr->adjacents)

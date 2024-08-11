@@ -140,11 +140,12 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                     auto old_other_side = get_other_side(aff_node,aff_node->adjacents[e]);
                     if(old_other_side != nullptr && old_other_side->next != aff_node->next->adjacents[e])
                     {
-                        std::cout << "Deleted " << aff_node->index() << " " << aff_node->adjacents[e]->index() << " " << old_other_side->index() << std::endl;
+                        if(affected_nodes.size() <= 100)
+                            std::cout << "Deleted " << aff_node->index() << " " << aff_node->adjacents[e]->index() << " " << old_other_side->index() << std::endl;
                         aff_node->next->adjacents[e] = nullptr;
                     }
                     else
-                        return;
+                        continue;
                 }
             }
         }
@@ -171,7 +172,8 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                 {
                     new_edge->state = live | affected;
                     aff_node->next->adjacents[i] = old_edge->next;
-                    std::cout << "rake reversed: " << aff_node->index() << " " << old_edge->index() << "->" << new_edge->index() << std::endl;
+                    if(affected_nodes.size() <= 100)
+                        std::cout << "rake reversed: " << aff_node->index() << " " << old_edge->index() << "->" << new_edge->index() << std::endl;
                 }
                 // if ((new_edge->state & (base_edge)) == 0)
                 // {
@@ -211,9 +213,9 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                     }
                     old_neighbour->next->adjacents[k] = old_edge->next;
                     aff_node->next->adjacents[i] = old_edge->next;
-
-                    std::cout << "compress reversed: " << aff_node->index() << " " << old_edge->index() << "->" << old_neighbour->index() << std::endl;
-                    old_neighbour->next->state |= adjacency_changed;
+                    if(affected_nodes.size() <= 100)
+                        std::cout << "compress reversed: " << aff_node->index() << " " << old_edge->index() << "->" << old_neighbour->index() << std::endl;
+                    old_neighbour->next->state |= adjacency_changed | affected;
                 }
             }
         }
@@ -240,7 +242,8 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
             {
                 old_edge->next->adjacents.fill(nullptr);
                 aff_node->next->adjacents[i] = old_edge->next;
-                std::cout << "Unary added: " << aff_node->index() << " " << old_edge->index() << std::endl;
+                if(affected_nodes.size() <= 100)
+                    std::cout << "Unary added: " << aff_node->index() << " " << old_edge->index() << std::endl;
             }
         }
     });
@@ -262,16 +265,23 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
 
                 if(w < v)
                     continue;
-                std::cout << "Binary added one sided added: " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() << std::endl;
+                if(affected_nodes.size() <= 100)
+                    std::cout << "Binary added one sided added: " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() << std::endl;
                 if(old_edge->next == nullptr)
                 {
-                    std::cout << "Binary new constructed " << std::endl;
+                    if(affected_nodes.size() <= 100)
+                        std::cout << "Binary new constructed " << std::endl;
                     old_edge->cluster_ptr->add_empty_level(binary_cluster | base_edge, old_edge->contraction_level + 1);
                 }
                 auto newly_created_edge = old_edge->next;
                 newly_created_edge->state = old_edge->state;
                 newly_created_edge->adjacents.fill(nullptr);
-                newly_created_edge->add_ptr(aff_node->next);
+                // newly_created_edge->add_ptr(aff_node->next);
+                for(short k = 0; k < old_edge->adjacents.size(); k++)
+                {
+                    if(old_edge->adjacents[k] == aff_node)
+                        old_edge->next->adjacents[k] = aff_node->next;
+                }
                 aff_node->next->adjacents[i] = newly_created_edge;
                 old_edge->state |= one_sided;
             }
@@ -295,9 +305,15 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                 auto w = old_neighbour->index();
                 if(v < w)
                     continue;
-                std::cout << "Binary other sided added: " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() <<  std::endl;
+                if(affected_nodes.size() <= 100)
+                    std::cout << "Binary other sided added: " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() <<  std::endl;
                 auto newly_created_edge = old_edge->next;
-                newly_created_edge->add_ptr(aff_node->next);
+                // newly_created_edge->add_ptr(aff_node->next);
+                for(short k = 0; k < old_edge->adjacents.size(); k++)
+                {
+                    if(old_edge->adjacents[k] == aff_node)
+                        old_edge->next->adjacents[k] = aff_node->next;
+                }
                 aff_node->next->adjacents[i] = newly_created_edge;
                 old_edge->state &= ~one_sided;
             }
@@ -547,7 +563,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     parlay::sequence<node<T,D>*> mis_set;
 
     unsigned short count = 0;
-    static const short max_count = 10;
+    static const short max_count = 20;
     do
     {
         std::cout << "checking level at the start of round " << count << std::endl;
