@@ -145,6 +145,11 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
         // auto& child_index = r;
         auto child_index = i * jump_size/2 + 1;
 
+        if(!(parents[child_index] == child_index))
+        {
+            return std::tuple<vertex, vertex, datatype>(child_index, child_index, 0);
+        }
+
         auto random_parent = (child_index == 0) ? 0 : dis(r) % child_index;
 
         datatype new_val = (datatype) graph_size * 10 * child_index; // some large value
@@ -163,7 +168,6 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
     // remove edges that were leading to an overflow
     insert_edges = parlay::filter(insert_edges, [&] (auto edge) {
         const auto& child_index = std::get<0>(edge);
-        return false;
         return child_index != parents[child_index];
     });
 

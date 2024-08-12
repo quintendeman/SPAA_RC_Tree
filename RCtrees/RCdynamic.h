@@ -57,13 +57,14 @@ parlay::sequence<node<T,D>*> get_3dp1(parlay::sequence<node<T,D>*>& initial_node
 {
     parlay::sequence<node<T,D>*> frontier = parlay::flatten(parlay::tabulate(initial_nodes.size(), [&] (T I) {
         auto& node_ptr = initial_nodes[I];
-        parlay::sequence<node<T,D>*> ret_seq = parlay::sequence<node<T,D>*>(max_neighbours, nullptr);
+        parlay::sequence<node<T,D>*> ret_seq = parlay::sequence<node<T,D>*>(max_neighbours + 1, nullptr);
         for(short i = 0; i < max_neighbours; i++)
         {
             if(node_ptr->adjacents[i] == nullptr || ((node_ptr->adjacents[i]->state & (binary_cluster | base_edge)) == 0))
                 continue;
             ret_seq[i] = get_other_side(node_ptr, node_ptr->adjacents[i]);
         }
+        ret_seq[max_neighbours] = node_ptr;
         return ret_seq;
     }));
 
