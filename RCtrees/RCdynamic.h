@@ -157,27 +157,62 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
         auto& aff_node = affected_nodes[I];
         if(!is_update_eligible(aff_node))
             return;
-        
+        if((aff_node->next->state & unary_cluster) == 0)
+            return;
+        if(affected_nodes.size() <= 100)
+            std::cout << "rake should be reversed: " << aff_node->index() << std::endl;
+
         for(short i = 0; i < aff_node->adjacents.size(); i++)
         {
             const auto old_edge = aff_node->adjacents[i];
-            const auto new_edge = aff_node->next->adjacents[i];            
-            if(old_edge == nullptr)
-                continue;
-            if(new_edge == nullptr)
+            const auto new_edge = aff_node->next->adjacents[i];
+            if(old_edge == nullptr || new_edge == nullptr)
                 continue;
 
+            // did I rake into someone?
             if(old_edge->state & (binary_cluster | base_edge))
             {
-                if(aff_node->next->state & unary_cluster)
+                auto old_neighbour = get_other_side(aff_node, old_edge);
+                auto new_neighbour = old_neighbour->next;
+                
+                for(short o = 0; o < old_neighbour->adjacents.size(); o++)
                 {
-                    new_edge->state = live | affected;
-                    aff_node->next->adjacents[i] = old_edge->next;
-                    if(affected_nodes.size() <= 100)
-                        std::cout << "rake reversed: " << aff_node->index() << " " << old_edge->index() << "->" << new_edge->index() << std::endl;
+                    if(old_neighbour->adjacents[o] == old_edge && new_neighbour->adjacents[o] == aff_node->next)
+                    {
+                        if(affected_nodes.size() <= 100)
+                            std::cout << "rake got reversed: " << aff_node->index() << std::endl;
+                        
+                        new_neighbour->adjacents[o] = new_edge;
+                        new_neighbour->state |= affected | live;
+                    }
                 }
             }
+            else
+                continue;
+
         }
+
+
+        // for(short i = 0; i < aff_node->adjacents.size(); i++)
+        // {
+        //     const auto old_edge = aff_node->adjacents[i];
+        //     const auto new_edge = aff_node->next->adjacents[i];            
+        //     if(old_edge == nullptr)
+        //         continue;
+        //     if(new_edge == nullptr)
+        //         continue;
+
+        //     if(old_edge->state & (binary_cluster | base_edge))
+        //     {
+        //         if(aff_node->next->state & unary_cluster)
+        //         {
+        //             new_edge->state = live | affected;
+        //             aff_node->next->adjacents[i] = old_edge->next;
+        //             if(affected_nodes.size() <= 100)
+        //                 std::cout << "rake reversed: " << aff_node->index() << " " << old_edge->index() << "->" << new_edge->index() << std::endl;
+        //         }
+        //     }
+        // }
     });
 
     // Did I compress into something?
