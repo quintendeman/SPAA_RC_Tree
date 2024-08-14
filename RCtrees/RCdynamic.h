@@ -301,7 +301,10 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                 {
                     if(affected_nodes.size() <= 100)
                         std::cout << "Binary new constructed " << std::endl;
-                    old_edge->cluster_ptr->add_empty_level(binary_cluster | base_edge, old_edge->contraction_level + 1);
+                    if(old_edge->state & binary_cluster)
+                        old_edge->cluster_ptr->add_empty_level(binary_cluster, old_edge->contraction_level + 1);
+                    else
+                        old_edge->cluster_ptr->add_empty_level(base_edge, old_edge->contraction_level + 1);
                 }
                 auto newly_created_edge = old_edge->next;
                 newly_created_edge->state = old_edge->state;
@@ -351,17 +354,36 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
         aff_node->next->state = live | affected;
         
     });
+    return;
+}
 
-    
+template<typename T, typename D, typename lambdafunc>
+void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func)
+{
 
+    contracted_node->cluster_ptr->data = defretval;
+    bool found = false;
+    for(auto& edge : contracted_node->adjacents)
+    {
+        if(edge != nullptr && edge->state & (binary_cluster | base_edge))
+        {
+            if(!found)
+            {
+                found = true;
+                contracted_node->cluster_ptr->data = edge->cluster_ptr->data;
+            }
+            else
+            {
+                contracted_node->cluster_ptr->data = func(contracted_node->cluster_ptr->data, edge->cluster_ptr->data);
+            }
+        }
+    }
 
     return;
 }
 
- 
-
-template<typename T, typename D>
-void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, D>>& add_edges, parlay::sequence<cluster<T, D>>& clusters)
+template<typename T, typename D, typename lambdafunc>
+void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, D>>& add_edges, parlay::sequence<cluster<T, D>>& clusters, D defretval, lambdafunc func)
 {
     using cluster_allocator = parlay::type_allocator<cluster<T,D>>;
     auto tree_nodes = parlay::flatten(parlay::tabulate(delete_edges.size() + add_edges.size(), [&] (T i) {
@@ -589,11 +611,10 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     std::cout << "Which gets reduced to " << frontier.size() << std::endl;
     
     // create_decompressed_affected(frontier);
-
     parlay::sequence<node<T,D>*> mis_set;
 
     unsigned short count = 0;
-    static const short max_count = 20;
+    static const short max_count = 200;
     do
     {
         std::cout << "checking level at the start of round " << count << std::endl;
@@ -669,6 +690,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
                 exit(1);
             }
             contract(mis_set[i]->next, true);
+            accumulate(mis_set[i], defretval, func);
         });
 
         std::cout << "checking level " << count+1 << " after contracting" << std::endl;

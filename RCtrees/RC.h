@@ -455,7 +455,6 @@ void contract(node<T,D>* node_ptr, bool affect = false)
             finalize(right_edge);
         }
     }
-
 }
 
 /**

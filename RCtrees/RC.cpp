@@ -173,7 +173,9 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
 
     std::cout << "There are " << red << delete_edges.size() << reset << " delete edges and " << green << insert_edges.size() << reset << " add edges" << std::endl;
 
-    batchInsertEdge(delete_edges, insert_edges, clusters);
+    batchInsertEdge(delete_edges, insert_edges, clusters, (datatype) -1, [] (datatype a, datatype b) {
+        return a + b;
+    });
 
     return;
 }
