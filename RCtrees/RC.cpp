@@ -177,6 +177,47 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
         return a + b;
     });
 
+    for(uint TEST = 0; TEST < 100; TEST++)
+    {
+        // start at a random edge
+        auto random_child = (vertex) (rand() % clusters.size());
+        auto start = random_child;
+        auto end = random_child;
+        datatype accumulated_val = (datatype) -1;
+        auto random_parent = parents[random_child];
+        bool found = false;
+        std::cout << bright_yellow << "Path: " << random_child;
+        while(random_parent != random_child)
+        {
+            auto gotten_edge = get_edge(random_parent, random_child, clusters);
+            if(gotten_edge == nullptr)
+                break;
+            if(!found)
+            {
+                accumulated_val = gotten_edge->cluster_ptr->data;
+                found = true;
+            }
+            else
+            {
+                accumulated_val = gotten_edge->cluster_ptr->data + accumulated_val;
+            }
+            end = random_parent;
+            std::cout << "->" << random_parent;
+            random_child = parents[random_child];
+        }
+        std::cout << reset << std::endl;
+
+        std::cout << start << " " << end << std::endl;
+
+        auto retval = PathQuery(&clusters[start], &clusters[end], (datatype) -1, [] (datatype a, datatype b) {
+            return a + b;
+        });
+
+        if(retval != accumulated_val)
+            std::cout << red << "Accumulated val not equal " << retval << " != " << accumulated_val << reset << std::endl;
+        else
+            std::cout << green << "Accumulate val equal " << retval << " == " << retval << reset << std::endl;
+    }
     return;
 }
 

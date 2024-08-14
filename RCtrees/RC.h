@@ -1084,6 +1084,8 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
 template<typename T, typename D>
 node<T,D>* get_edge(T v, T w, parlay::sequence<cluster<T,D>>& clusters, unsigned char level = 0)
 {
+    if(v == w)
+        return nullptr;
     auto& v_cluster = clusters[v];
     auto v_node_ptr = v_cluster.adjacency.get_head();
     for(auto& edge_ptr : v_node_ptr->adjacents)
