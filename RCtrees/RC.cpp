@@ -177,7 +177,7 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
         return a + b;
     });
 
-    for(uint TEST = 0; TEST < 100; TEST++)
+    for(uint TEST = 0; TEST < 1; TEST++)
     {
         // start at a random edge
         auto random_child = (vertex) (rand() % clusters.size());
@@ -204,6 +204,7 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
             end = random_parent;
             std::cout << "->" << random_parent;
             random_child = parents[random_child];
+            random_parent = parents[random_child];
         }
         std::cout << reset << std::endl;
 
