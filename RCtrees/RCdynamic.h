@@ -134,6 +134,8 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
         {
             if(aff_node->adjacents[e] == nullptr)
                 aff_node->next->adjacents[e] = nullptr;
+            else if(aff_node->adjacents[e]->state & unary_cluster)
+                aff_node->next->adjacents[e] = nullptr;    
             else
             {
                 if(aff_node->adjacents[e]->next != aff_node->next->adjacents[e])
@@ -252,31 +254,31 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
     });
 
     // was something a unary cluster before but is missing now
-    parlay::parallel_for(0, affected_nodes.size(), [&] (T I){
-        auto& aff_node = affected_nodes[I];
-        for(short i = 0; i < aff_node->adjacents.size(); i++)
-        {
-            const auto old_edge = aff_node->adjacents[i];
-            const auto new_edge = aff_node->next->adjacents[i];            
-            if(old_edge == nullptr)
-                continue;
+    // parlay::parallel_for(0, affected_nodes.size(), [&] (T I){
+    //     auto& aff_node = affected_nodes[I];
+    //     for(short i = 0; i < aff_node->adjacents.size(); i++)
+    //     {
+    //         const auto old_edge = aff_node->adjacents[i];
+    //         const auto new_edge = aff_node->next->adjacents[i];            
+    //         if(old_edge == nullptr)
+    //             continue;
 
-            if((old_edge->state & unary_cluster) && (new_edge == nullptr || (new_edge != old_edge->next)))
-            {
-                if(old_edge->next == nullptr)
-                {
-                    old_edge->cluster_ptr->add_empty_level(unary_cluster, old_edge->contraction_level + 1);
-                }
-            }
-            if(old_edge->state & unary_cluster)
-            {
-                old_edge->next->adjacents.fill(nullptr);
-                aff_node->next->adjacents[i] = old_edge->next;
-                if(affected_nodes.size() <= 100)
-                    std::cout << "Unary added: " << aff_node->index() << " " << old_edge->index() << std::endl;
-            }
-        }
-    });
+    //         if((old_edge->state & unary_cluster) && (new_edge == nullptr || (new_edge != old_edge->next)))
+    //         {
+    //             if(old_edge->next == nullptr)
+    //             {
+    //                 old_edge->cluster_ptr->add_empty_level(unary_cluster, old_edge->contraction_level + 1);
+    //             }
+    //         }
+    //         if(old_edge->state & unary_cluster)
+    //         {
+    //             old_edge->next->adjacents.fill(nullptr);
+    //             aff_node->next->adjacents[i] = old_edge->next;
+    //             if(affected_nodes.size() <= 100)
+    //                 std::cout << "Unary added: " << aff_node->index() << " " << old_edge->index() << std::endl;
+    //         }
+    //     }
+    // });
 
     // is an edge missing?
     parlay::parallel_for(0, affected_nodes.size(), [&] (T I){
