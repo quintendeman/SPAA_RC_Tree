@@ -365,23 +365,56 @@ void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func)
 
     contracted_node->cluster_ptr->data = defretval;
     bool found = false;
-    for(auto& edge : contracted_node->adjacents)
+    for(auto& child : contracted_node->cluster_ptr->children)
     {
-        if(edge != nullptr && edge->state & (binary_cluster | base_edge))
+        if(child == nullptr)
+            continue;
+        bool valid_child = false;
+        if(child->adjacency.get_head()->state & base_edge)
+            valid_child = true;
+        else if (child->first_contracted_node->state & (binary_cluster | base_edge))
+            valid_child = true;
+        else if (child->first_contracted_node->next == nullptr)
+            valid_child = false;
+        else if (child->first_contracted_node->next->state & (binary_cluster | base_edge))
+        
+        if(valid_child)
         {
             if(!found)
             {
+                contracted_node->cluster_ptr->data = child->data;
                 found = true;
-                contracted_node->cluster_ptr->data = edge->cluster_ptr->data;
             }
             else
-            {
-                contracted_node->cluster_ptr->data = func(contracted_node->cluster_ptr->data, edge->cluster_ptr->data);
-            }
+                contracted_node->cluster_ptr->data = func(contracted_node->cluster_ptr->data, child->data);
         }
+        // if(edge != nullptr && edge->state & (binary_cluster | base_edge))
+        // {
+        //     if(!found)
+        //     {
+        //         found = true;
+        //         contracted_node->cluster_ptr->data = edge->cluster_ptr->data;
+        //     }
+        //     else
+        //     {
+        //         contracted_node->cluster_ptr->data = func(contracted_node->cluster_ptr->data, edge->cluster_ptr->data);
+        //     }
+        // }
     }
-
     return;
+}
+
+template<typename T, typename D>
+void unParent(cluster<T,D>* cluster_ptr)
+{
+    if(cluster_ptr->parent == nullptr)
+        return;
+    for(auto& parents_child : cluster_ptr->parent->children)
+        if(parents_child == cluster_ptr)
+        {
+            parents_child = nullptr;
+            // std::cout << "Resetting child " << cluster_ptr->parent->index << " ˇ " << cluster_ptr->index <<  std::endl;
+        }
 }
 
 template<typename T, typename D, typename lambdafunc>
@@ -486,6 +519,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             }
             w_node_ptr = w_node_ptr->next;
         }
+        unParent(cluster_edge_ptr);
         cluster_allocator::destroy(cluster_edge_ptr);
     });
 
@@ -602,13 +636,16 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     frontier = parlay::filter(frontier, [] (auto node_ptr){
         if(first_condition(node_ptr) || second_condition(node_ptr) || third_condition(node_ptr))
         {
+            unParent(node_ptr->cluster_ptr);
+            node_ptr->state |= affected;
             return true;
         }
         return false;
     });
-    parlay::parallel_for(0, frontier.size(), [&] (T i) {
-        frontier[i]->state |= affected;
-    });
+    
+    // parlay::parallel_for(0, frontier.size(), [&] (T i) {
+    //         frontier[i]->state |= affected;
+    // });
 
     std::cout << "Which gets reduced to " << frontier.size() << std::endl;
     
@@ -720,14 +757,16 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         frontier = parlay::filter(frontier, [] (auto node_ptr){
             if(first_condition(node_ptr) || second_condition(node_ptr) || third_condition(node_ptr))
             {
+                unParent(node_ptr->cluster_ptr);
+                node_ptr->state |= affected;
                 return true;
             }
             return false;
         });
-
-        parlay::parallel_for(0, frontier.size(), [&] (T i) {
-            frontier[i]->state |= affected;
-        });
+        // TODO merge with above
+        // parlay::parallel_for(0, frontier.size(), [&] (T i) {
+        //     frontier[i]->state |= affected;
+        // });
 
         std::cout << "Finalizing contracted nodes " << std::endl;
         parlay::parallel_for(0, mis_set.size(), [&] (T i){
