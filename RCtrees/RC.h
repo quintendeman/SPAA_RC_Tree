@@ -377,8 +377,27 @@ void contract(node<T,D>* node_ptr, bool affect = false)
         node_ptr->state |= (unary_cluster | contracts_this_round);
 
         node_ptr->cluster_ptr->parent = neighbour_node->cluster_ptr;
+        for(short k = 0; k < max_neighbours; k++)
+        {
+            auto& ptr = neighbour_node->adjacents[k];
+            if(ptr == edge_node)
+            {
+                neighbour_node->cluster_ptr->children[k] = node_ptr->cluster_ptr; 
+                break;
+            }
+        }
+
         edge_node->cluster_ptr->parent = node_ptr->cluster_ptr;
 
+        for(short k = 0; k < max_neighbours; k++)
+        {
+            auto& ptr = node_ptr->adjacents[k];
+            if(ptr == edge_node)
+            {
+                node_ptr->cluster_ptr->children[k] = edge_node->cluster_ptr; 
+                break;
+            }
+        }
 
         for(auto& ptr : neighbour_node->adjacents)
             if(ptr == edge_node)
@@ -422,21 +441,40 @@ void contract(node<T,D>* node_ptr, bool affect = false)
         left_edge->cluster_ptr->parent = node_ptr->cluster_ptr;
         right_edge->cluster_ptr->parent = node_ptr->cluster_ptr;
         
-        for(auto& ptr : node_ptr->adjacents)
+        for (short k = 0; k < node_ptr->adjacents.size(); k++)
         {
-            if(ptr == left_edge)
+            auto& ptr = node_ptr->adjacents[k];
+            if (ptr == left_edge)
+            {
                 ptr = left_node;
-            if(ptr == right_edge)
+                node_ptr->cluster_ptr->children[k] = left_edge->cluster_ptr;
+            }
+            if (ptr == right_edge)
+            {
+                node_ptr->cluster_ptr->children[k] = right_edge->cluster_ptr;
                 ptr = right_node;
+            }
         }
 
-        for(auto& ptr : left_node->adjacents)
-            if(ptr == left_edge)
+        for (short k = 0; k < left_node->adjacents.size(); k++)
+        {
+            auto& ptr = left_node->adjacents[k];
+            if (ptr == left_edge)
+            {
                 ptr = node_ptr;
+            }
+        }
 
-        for(auto& ptr : right_node->adjacents)
-            if(ptr == right_edge)
+        for (short k = 0; k < right_node->adjacents.size(); k++)
+        {
+            auto& ptr = right_node->adjacents[k];
+            if (ptr == right_edge)
+            {
                 ptr = node_ptr;
+            }
+        }
+
+
         if(affect == true)
         {
             for(auto& ptr : node_ptr->adjacents)
@@ -702,17 +740,6 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
                 node_ptr->next->adjacents[e] = edge_ptr->next;
             }
         }
-        // for(auto& edge_ptr : node_ptr->adjacents)
-        // {
-        //     if(edge_ptr == nullptr)
-        //         continue;
-        //     if(edge_ptr->state & unary_cluster && !(edge_ptr->state & (binary_cluster | base_edge)))
-        //     {
-        //         edge_ptr->cluster_ptr->add_empty_level(unary_cluster, edge_ptr->contraction_level+1);
-        //         edge_ptr->next->state = unary_cluster;
-        //         node_ptr->next->add_ptr(edge_ptr->next);
-        //     }
-        // }
         tree_nodes[i] = tree_nodes[i]->next;
     });
 }
@@ -1165,21 +1192,35 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, 
                 node<T,D>* node_ptr = cluster_ptr->first_contracted_node;
                 bool first_child = true;
 
-                for(auto& ptr : node_ptr->adjacents)
+                for(auto& child : cluster_ptr->children)
                 {
-                    if(ptr == nullptr || !(ptr->state & (base_edge | binary_cluster)))
+                    if(child == nullptr)
                         continue;
-                    if(first_child)
+                    if((child->adjacency.get_head()->state & base_edge) || (child->first_contracted_node->next->state & (binary_cluster | base_edge)))
                     {
-                        final_val = ptr->cluster_ptr->data;
-                        first_child = false;
+                        if(first_child)
+                        {
+                            final_val = child->data;
+                            first_child = false;
+                        }
+                        else
+                            final_val = func(final_val, child->data);
                     }
-                    else
-                    {
-                        final_val = func(final_val, ptr->cluster_ptr->data);
-                    }
-                    
-                }                
+                }
+                // for(auto& ptr : node_ptr->adjacents)
+                // {
+                //     if(ptr == nullptr || !(ptr->state & (base_edge | binary_cluster)))
+                //         continue;
+                //     if(first_child)
+                //     {
+                //         final_val = ptr->cluster_ptr->data;
+                //         first_child = false;
+                //     }
+                //     else
+                //     {
+                //         final_val = func(final_val, ptr->cluster_ptr->data);
+                //     }
+                // }                
                 cluster_ptr->data = final_val;
             }
             cluster_ptr = cluster_ptr->get_parent();

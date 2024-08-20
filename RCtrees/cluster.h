@@ -70,6 +70,7 @@ public:
     T tiebreak;
     T& colour = tiebreak;
     cluster<T,D>* parent = nullptr;
+    std::array<cluster<T,D>*, max_neighbours> children;
     node<T,D>* first_contracted_node = nullptr;
     D data;
     short finalize_time = 0; // TODO remove
@@ -78,13 +79,15 @@ public:
 
     cluster(void) : counter(0)
     {
-
+        for(short i = 0; i < max_neighbours; i++)
+            this->children[i] = nullptr;
     }
 
     cluster(const cluster& other) :
         counter(other.counter.load())
     {
-
+        for(short i = 0; i < max_neighbours; i++)
+            this->children[i] = other.children[i];
     }
     
     short get_height(void)
@@ -262,6 +265,14 @@ public:
         std::cout << this->index << " " << reset;
         std::cout << bright_white <<  this->get_height() << " " << reset;
         std::cout << bright_green << this->data << " " << reset;
+
+        std::cout << bold << blue << "[ ";
+        for(auto& child : this->children)
+        {
+            if(child != nullptr)
+                std::cout << child->index << " ";
+        }
+        std::cout << "] " << reset;
 
         // for(auto i = 0; i < (this->adjacency.get_head()->state & affected ? 2 :  this->adjacency.size()); i++)
         for(volatile auto i = 0; i < this->adjacency.size(); i++)
