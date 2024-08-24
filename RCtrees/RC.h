@@ -1140,7 +1140,7 @@ template<typename T, typename D>
 D manual_subtree_sum(cluster<T, D>* root, cluster<T, D>* dir_giver, parlay::sequence<cluster<T,D>>& clusters)
 {
     D ret_val = 0.0;
-    if(root == nullptr || dir_giver == nullptr)
+    if(root == nullptr || dir_giver == nullptr || root == dir_giver)
         return 0.0;
     T r = root->index;
     T d = dir_giver->index;
