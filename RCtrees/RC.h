@@ -37,7 +37,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
         auto random_val = dis(gen);
 
         static const double anywhere_left_weight = 1;
-        static const double immediate_left_weight = 100;
+        static const double immediate_left_weight = 1;
         static const double root_weight = 0.0; /* warning, does not represet probability of a null cluster as degree capping may create more forests */
 
         static const double anywhere_prob = (anywhere_left_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
@@ -817,8 +817,6 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
 
 
 
-
-
 template <typename T, typename D, typename assocfunc>
 D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc func)
 {
@@ -1137,6 +1135,151 @@ node<T,D>* get_edge(T v, T w, parlay::sequence<cluster<T,D>>& clusters, unsigned
     return nullptr;
 }
 
+
+template<typename T, typename D>
+D manual_subtree_sum(cluster<T, D>* root, cluster<T, D>* dir_giver, parlay::sequence<cluster<T,D>>& clusters)
+{
+    D ret_val = 0.0;
+    if(root == nullptr || dir_giver == nullptr)
+        return 0.0;
+    T r = root->index;
+    T d = dir_giver->index;
+
+    for(auto& edge_ptr : root->adjacency.get_head()->adjacents)
+    {
+        if(edge_ptr == nullptr)
+            continue;
+        auto other_cluster = get_other_side(root->adjacency.get_head(), edge_ptr)->cluster_ptr;
+        if(other_cluster == dir_giver)
+            continue;
+        T other_index = other_cluster->index;
+        ret_val = ret_val + get_edge(r, other_index, clusters)->cluster_ptr->data + manual_subtree_sum(other_cluster, root, clusters);
+    }
+    return ret_val;
+}
+
+template<typename T, typename D, typename assocfunc>
+D subtree_query(cluster<T, D>* root, cluster<T, D>* dir_giver, D defretval, assocfunc func)
+{
+    D ret_val = defretval;
+    if(root == nullptr || dir_giver == nullptr || root == dir_giver)
+        return defretval;
+
+    std::cout << bold << bright_yellow << "Root: " << root->index << " dir: " << dir_giver->index << reset << std::endl;
+
+    D lval = defretval;
+    D rval = defretval;
+    cluster<T,D>* dir_l = nullptr;
+    cluster<T,D>* dir_r = nullptr;
+
+    dir_giver->find_boundary_vertices(dir_l, lval, dir_r, rval, defretval);
+
+    cluster<T,D>* root_l = nullptr;
+    cluster<T,D>* root_r = nullptr;
+
+    root->find_boundary_vertices(root_l, lval, root_r, lval, defretval);
+
+    std::cout << bold << yellow << "Root's boundary vertices ";
+    if(root_l == nullptr)
+        std::cout << "nl ";
+    else
+        std::cout << root_l->index << " ";
+    if(root_r == nullptr)
+        std::cout << "nl ";
+    else
+        std::cout << root_r->index << " ";
+    std::cout << reset << std::endl;
+
+    std::cout << bold << yellow << "dir_giver's boundary vertices ";
+    if(dir_l == nullptr)
+        std::cout << "nl ";
+    else
+        std::cout << dir_l->index << " ";
+    if(dir_r == nullptr)
+        std::cout << "nl ";
+    else
+        std::cout << dir_r->index << " ";
+    std::cout << reset << std::endl;
+
+    if(root == dir_l || root == dir_r)
+    {
+        std::cout << bold << bright_cyan << "root already boundary vertex of dir giver" << reset << std::endl;
+
+        auto child_with_dir = dir_giver;
+        while(child_with_dir->parent != root)
+            child_with_dir = child_with_dir->parent;
+
+        auto& child_that_contains_u = child_with_dir; // rename
+
+        cluster<T,D>* ign_l = nullptr;
+        cluster<T,D>* ign_r = nullptr;
+        child_that_contains_u->find_boundary_vertices(ign_l, lval, ign_r, rval, defretval);
+
+        std::cout << bold << bright_cyan << "Child to ignore is " << child_with_dir->index << reset << std::endl;
+
+        bool first = true;
+
+        for(const auto& child : root->children)
+        {
+            if(child == nullptr)
+                continue;
+
+            cluster<T,D>* child_l = nullptr;
+            cluster<T,D>* child_r = nullptr;
+            if(child->adjacency.get_head()->state & base_edge)
+                child->find_endpoints(child_l, child_r);
+            else
+                child->find_boundary_vertices(child_l, lval, child_r, rval, defretval);
+            std::cout << bold << bright_cyan << "[" << root->index << "] child " << child->index << " boundary vertices ";
+            if(child_l == nullptr)
+                std::cout << "nl ";
+            else
+                std::cout << child_l->index << " ";
+            if(child_r == nullptr)
+                std::cout << "nl ";
+            else
+                std::cout << child_r->index << " ";
+            std::cout << reset << std::endl;
+
+            if(child == child_with_dir)
+                continue;
+            
+            std::cout << bold << bright_cyan << "Adding value of " << child->index << "/" << child->data << reset << std::endl;
+            
+            if(first)
+            {
+                first = false;
+                ret_val = child->data;
+            }
+            else
+            {
+                ret_val = func(ret_val, child->data);
+            }
+        }
+
+        if(root_l != nullptr && root_l != ign_l && root_l != ign_r)
+        {
+            std::cout << bold << bright_cyan << "recursive call to  " << root_l->index << " wrt " << root << reset << std::endl;
+            auto child_ret_val = subtree_query(root_l, root, defretval, func);
+            ret_val = func(ret_val, child_ret_val);
+        }
+        if(root_r != root_l && root_r != nullptr && root_r != ign_l && root_r != ign_r)
+        {
+            std::cout << bold << bright_cyan << "recursive call to  " << root_r->index << " wrt " << root << reset << std::endl;
+            auto child_ret_val = subtree_query(root_r, root, defretval, func);
+            ret_val = func(ret_val, child_ret_val);    
+        }
+    }
+    else
+    {
+        std::cout << bold << bright_green << "Should only go here once" << reset << std::endl;
+    }
+
+
+    return ret_val;
+}
+
+
 template<typename T, typename D, typename assocfunc>
 void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, assocfunc func, parlay::sequence<cluster<T, D>>& clusters, const D& defretval = 0.00f)
 {   
@@ -1196,31 +1339,16 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, 
                 {
                     if(child == nullptr)
                         continue;
-                    if((child->adjacency.get_head()->state & base_edge) || (child->first_contracted_node->next->state & (binary_cluster | base_edge)))
+                    
+                    if(first_child)
                     {
-                        if(first_child)
-                        {
-                            final_val = child->data;
-                            first_child = false;
-                        }
-                        else
-                            final_val = func(final_val, child->data);
+                        final_val = child->data;
+                        first_child = false;
                     }
-                }
-                // for(auto& ptr : node_ptr->adjacents)
-                // {
-                //     if(ptr == nullptr || !(ptr->state & (base_edge | binary_cluster)))
-                //         continue;
-                //     if(first_child)
-                //     {
-                //         final_val = ptr->cluster_ptr->data;
-                //         first_child = false;
-                //     }
-                //     else
-                //     {
-                //         final_val = func(final_val, ptr->cluster_ptr->data);
-                //     }
-                // }                
+                    else
+                        final_val = func(final_val, child->data);
+                
+                }             
                 cluster_ptr->data = final_val;
             }
             cluster_ptr = cluster_ptr->get_parent();

@@ -189,6 +189,32 @@ public:
         return false;
     }
 
+    void find_endpoints(cluster<T,D>*& left, cluster<T,D>*& right)
+    {
+        left = right = nullptr;
+        if(this->adjacency.get_head()->state & base_edge)
+        {
+            bool first = true;
+            for(auto& adjacent : this->adjacency.get_head()->adjacents)
+            {
+                if(adjacent == nullptr)
+                    continue;
+                if(first)
+                {
+                    first = false;
+                    left = adjacent->cluster_ptr;
+                }
+                else
+                    right = adjacent->cluster_ptr;
+            }
+        }
+        else
+        {
+            std::cout << "NOT A BASE EDGE!" << std::endl;
+            exit(1);
+        }
+    }
+
     void find_boundary_vertices(cluster<T,D>*& left, D& lval, cluster<T,D>*& right, D& rval, D defretval, short level = -1)
     {
         left = right = nullptr;
@@ -256,12 +282,6 @@ public:
     void print(unsigned char level = -1)
     {
         
-        // // else if(this->adjacency.get_tail()->state & nullary_cluster)
-        //     std::cout << green;
-        // else if (this->adjacency.get_tail()->state & unary_cluster)
-        //     std::cout << blue;
-        // else if (this->adjacency.get_tail()->state & binary_cluster)
-        //     std::cout << red;
         std::cout << this->index << " " << reset;
         std::cout << bright_white <<  this->get_height() << " " << reset;
         std::cout << bright_green << this->data << " " << reset;
@@ -270,7 +290,7 @@ public:
         for(auto& child : this->children)
         {
             if(child != nullptr)
-                std::cout << child->index << " ";
+                std::cout << child->index << "/" << child->data << " ";
         }
         std::cout << "] " << reset;
 
