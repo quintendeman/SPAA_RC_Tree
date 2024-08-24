@@ -37,7 +37,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
         auto random_val = dis(gen);
 
         static const double anywhere_left_weight = 1;
-        static const double immediate_left_weight = 1;
+        static const double immediate_left_weight = 100;
         static const double root_weight = 0.0; /* warning, does not represet probability of a null cluster as degree capping may create more forests */
 
         static const double anywhere_prob = (anywhere_left_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
@@ -1273,6 +1273,68 @@ D subtree_query(cluster<T, D>* root, cluster<T, D>* dir_giver, D defretval, asso
     else
     {
         std::cout << bold << bright_green << "Should only go here once" << reset << std::endl;
+
+        bool first = true;
+        for(auto& child : root->children)
+        {
+            if(child == nullptr)
+                continue;
+            
+            cluster<T,D>* child_l = nullptr;
+            cluster<T,D>* child_r = nullptr;
+            if(child->adjacency.get_head()->state & base_edge)
+                child->find_endpoints(child_l, child_r);
+            else
+                child->find_boundary_vertices(child_l, lval, child_r, rval, defretval);
+            std::cout << bold << bright_green << "[" << root->index << "] child " << child->index << " boundary vertices ";
+            if(child_l == nullptr)
+                std::cout << "nl ";
+            else
+                std::cout << child_l->index << " ";
+            if(child_r == nullptr)
+                std::cout << "nl ";
+            else
+                std::cout << child_r->index << " ";
+            std::cout << reset << std::endl;
+
+            if((child->adjacency.get_head()->state & base_edge) || (child->first_contracted_node->next->state & binary_cluster))
+            {
+                if(child_l == dir_giver || child_r == dir_giver)
+                    continue;
+                if(first)
+                {
+                    first = false;
+                    ret_val = child->data;
+                }
+                else
+                {
+                    ret_val = func(ret_val, child->data);
+                }
+                if(child_l != root)
+                {               
+                    auto child_ret_val = subtree_query(child_l, root, defretval, func);
+                    ret_val = func(ret_val, child_ret_val);
+                }
+                if(child_l != child_r && child_r != root)
+                {
+                    auto child_ret_val = subtree_query(child_r, root, defretval, func);
+                    ret_val = func(ret_val, child_ret_val);
+                }
+            }
+            else
+            {
+                if(first)
+                {
+                    first = false;
+                    ret_val = child->data;
+                }
+                else
+                {
+                    ret_val = func(ret_val, child->data);
+                }
+            }
+            
+        }
     }
 
 
