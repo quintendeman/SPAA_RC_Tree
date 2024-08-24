@@ -33,7 +33,7 @@ static bool isNearlyEqual(double a, double b, double epsilon = espilon) {
 void test_rc_valid(const parlay::sequence<vertex>& parents, parlay::sequence<cluster<vertex, datatype>>& clusters)
 {
     parlay::sequence<std::tuple<vertex, vertex, datatype>> weighted_edges = parlay::tabulate(parents.size(), [&] (vertex i) {
-        return std::tuple<vertex, vertex, datatype>(i, parents[i], (datatype) ( 1.0));
+        return std::tuple<vertex, vertex, datatype>(i, parents[i], (datatype) ( i + parents[i]));
     });
 
     // pick a random pair to have a path between
