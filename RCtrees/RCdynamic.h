@@ -434,6 +434,17 @@ void recursive_unParent(cluster<T,D>* cluster_ptr)
     }
 }
 
+template<typename T, typename D>
+void remove_affection_back(node<T,D>* node_ptr)
+{
+    
+    do
+    {
+        node_ptr->state &= (~affected);
+        node_ptr = node_ptr->prev;
+    }while(node_ptr != nullptr && (node_ptr->state & affected));
+}
+
 template<typename T, typename D, typename lambdafunc>
 void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, D>>& add_edges, parlay::sequence<cluster<T, D>>& clusters, D defretval, lambdafunc func)
 {
@@ -749,6 +760,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
                 exit(1);
             }
             contract(mis_set[i]->next, true);
+            remove_affection_back(mis_set[i]->next);
             accumulate(mis_set[i], defretval, func);
         });
 

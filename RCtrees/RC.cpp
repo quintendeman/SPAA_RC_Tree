@@ -365,6 +365,8 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
     
     std::cout << "Subtree query: " << bright_red << query_ret_val << reset << std::endl;
 
+    // std::cout << bold << yellow << "Testing with unaffected vertices " << std::endl;
+
     return;
 }
 
