@@ -134,7 +134,7 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
 
         auto random_parent = (child_index == 0) ? 0 : dis(r) % child_index;
 
-        datatype new_val = (datatype) 1.0; // some large value
+        datatype new_val = (datatype) (i + parents.size()); // some large value
 
         if(old_parents[child_index] == random_parent)
         {
@@ -194,7 +194,84 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
     return;
 }
 
+void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& clusters)
+{
+    auto delete_edges = parlay::flatten(
+        parlay::tabulate(clusters.size(), [&] (vertex i) {
+            parlay::sequence<std::pair<vertex, vertex>> delete_contrib = parlay::sequence<std::pair<vertex, vertex>>(max_neighbours);
+            
+            auto& cluster = clusters[i];
+            auto cluster_head =  cluster.adjacency.get_head();
+            for(short k = 0; k < 3; k ++)
+            {
+                auto& adjacent = cluster_head->adjacents[k];
+                if(adjacent == nullptr)
+                {
+                    delete_contrib[k] = std::make_pair(i, i); 
+                }
+                else
+                {
+                    auto other_head = get_other_side(cluster_head, adjacent);
+                    if(other_head->index() < cluster_head->index())
+                        delete_contrib[k] = std::make_pair(i, i);
+                    else
+                        delete_contrib[k] = std::make_pair(other_head->index(), cluster_head->index()); 
+                }
 
+            }
+
+            return delete_contrib;
+        })
+    );
+
+    delete_edges = parlay::filter(delete_edges, [] (auto delete_edge){
+        return delete_edge.first != delete_edge.second;
+    });
+
+    std::cout << "There would be " << bold << red << delete_edges.size() << reset << " delete edges in the extreme case" << std::endl;
+
+
+    auto add_edges = parlay::tabulate(clusters.size()/2, [&] (vertex i){
+        auto child_index = i * 2;
+        auto parent_index = child_index - 1;
+        
+        // check if child has space
+        auto& child_cluster = clusters[child_index];
+        auto& parent_cluster = clusters[parent_index];
+
+        auto child_head = child_cluster.adjacency.get_head();
+        auto parent_head = child_cluster.adjacency.get_head();
+
+        datatype new_val = (datatype) -1;
+
+        if(child_head->get_num_neighbours_live() < max_neighbours) // there is space
+        {
+            if(parent_head->get_num_neighbours_live() < max_neighbours) // parent has space too
+            {
+                bool already_exists = false;
+                for(auto& edge_node : child_head->adjacents)
+                {
+                    if(get_other_side(child_head, edge_node) == parent_head)
+                        already_exists = true;
+                }
+                if(!already_exists)
+                {
+                    return std::tuple<vertex, vertex, datatype>(child_index, parent_index, (datatype) i);
+                }
+            }
+        }
+        child_index = parent_index;
+        return std::tuple<vertex, vertex, datatype>(child_index, parent_index, new_val);
+    });
+
+    add_edges = parlay::filter(add_edges, [] (auto edge) {
+        return std::get<0>(edge) != std::get<1>(edge);
+    });
+
+    std::cout << "There would be " << bold << yellow << add_edges.size() << reset << " edges in the extreme case" << std::endl;
+
+    return;
+}
 
 int main(int argc, char* argv[]) {
     auto usage = "Usage: RC [--graph-size <graph-size>] [-n <graph-size>] [--num-queries <num-queries>] [--print-creation] [--do-height <true|false>] [--randomized <true|false>]";
@@ -268,6 +345,8 @@ int main(int argc, char* argv[]) {
     //     printTree(clusters);
 
     test_dynamic_rc(parents, clusters);
+
+    test_dynamic_rc_extreme(clusters);
 
     deleteRCtree(clusters);
 
