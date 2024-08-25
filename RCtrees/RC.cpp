@@ -171,18 +171,19 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
 
     auto actual_ret_val = manual_subtree_sum(&clusters[random_index], &clusters[parents[random_index]], clusters);
 
-    std::cout << "Manual subtree sum: " << red << actual_ret_val << reset << std::endl;
-
-    
     auto sub_ret_val = subtree_query(&clusters[random_index], &clusters[parents[random_index]], (datatype) 0.0, [] (datatype a, datatype b) {
         return a+b;
     });
 
-    std::cout << "Subtree query returns: " << bold << red << sub_ret_val << reset << std::endl;
+    std::cout << "[dynamic] Manual subtree sum: " << red << actual_ret_val << reset << std::endl;
+
+    
+
+    std::cout << "[dynamic] Subtree query returns: " << bold << red << sub_ret_val << reset << std::endl;
 
     if(actual_ret_val != sub_ret_val)
     {
-        std::cout << red << "NOT MATCHING!!" << reset << std::endl;
+        std::cout << red << "[dynamic] NOT MATCHING!!" << reset << std::endl;
         clusters[random_index].print();
         clusters[parents[random_index]].print();
         printTree(clusters);
@@ -230,45 +231,50 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
 
     std::cout << "There would be " << bold << red << delete_edges.size() << reset << " delete edges in the extreme case" << std::endl;
 
+    parlay::sequence<std::tuple<vertex, vertex, datatype>> insert_edges;
 
-    auto add_edges = parlay::tabulate(clusters.size()/2, [&] (vertex i){
-        auto child_index = i * 2;
+    batchInsertEdge(delete_edges, insert_edges, clusters, (datatype) 0.0, [] (datatype a, datatype b) {
+        return a + b;
+    });
+
+    std::cout << red << "[extreme] Done deleting everything" << reset << std::endl;
+    if(clusters.size() <= 100)
+        printTree(clusters);
+
+    insert_edges = parlay::tabulate(clusters.size(), [&] (vertex i){
+        auto child_index = i;
         auto parent_index = child_index - 1;
-        
         // check if child has space
         auto& child_cluster = clusters[child_index];
         auto& parent_cluster = clusters[parent_index];
+        datatype new_val = (datatype) 1.0;
 
-        auto child_head = child_cluster.adjacency.get_head();
-        auto parent_head = child_cluster.adjacency.get_head();
-
-        datatype new_val = (datatype) -1;
-
-        if(child_head->get_num_neighbours_live() < max_neighbours) // there is space
+        if((child_index % 2) == 0)
         {
-            if(parent_head->get_num_neighbours_live() < max_neighbours) // parent has space too
-            {
-                bool already_exists = false;
-                for(auto& edge_node : child_head->adjacents)
-                {
-                    if(get_other_side(child_head, edge_node) == parent_head)
-                        already_exists = true;
-                }
-                if(!already_exists)
-                {
-                    return std::tuple<vertex, vertex, datatype>(child_index, parent_index, (datatype) i);
-                }
-            }
+            parent_index = child_index / 2;
         }
-        child_index = parent_index;
+        
         return std::tuple<vertex, vertex, datatype>(child_index, parent_index, new_val);
     });
 
-    add_edges = parlay::filter(add_edges, [] (auto edge) {
+    insert_edges = parlay::filter(insert_edges, [] (auto edge) {
         return std::get<0>(edge) != std::get<1>(edge);
     });
 
-    std::cout << "There would be " << bold << yellow << add_edges.size() << reset << " edges in the extreme case" << std::endl;
+    // if(clusters.size() <= 100)
+    // {
+    //     for(auto& add_edge : insert_edges)
+    //     {
+    //         auto child_index = std::get<0>(add_edge);
+    //         auto parent_index = std::get<1>(add_edge);
+    //         std::cout << "Adding " << child_index << " -> " << parent_index << std::endl;
+    //     }
+    // }
+
+    
+
+
+    std::cout << "There would be " << bold << yellow << insert_edges.size() << reset << " edges in the extreme case" << std::endl;
 
     return;
 }
