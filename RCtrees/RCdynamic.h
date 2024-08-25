@@ -406,16 +406,18 @@ void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func)
 }
 
 template<typename T, typename D>
-void unParent(cluster<T,D>* cluster_ptr)
+bool unParent(cluster<T,D>* cluster_ptr)
 {
     if(cluster_ptr->parent == nullptr)
-        return;
+        return false;
     for(auto& parents_child : cluster_ptr->parent->children)
         if(parents_child == cluster_ptr)
         {
             parents_child = nullptr;
+            return true;
             // std::cout << "Resetting child " << cluster_ptr->parent->index << " ˇ " << cluster_ptr->index <<  std::endl;
         }
+    return false;
 }
 
 template<typename T, typename D>
@@ -426,7 +428,9 @@ void recursive_unParent(cluster<T,D>* cluster_ptr)
     {
         old_cluster_ptr = cluster_ptr;
         cluster_ptr = cluster_ptr->parent;
-        unParent(old_cluster_ptr);
+        bool retval = unParent(old_cluster_ptr);
+        if(retval == false)
+            break;
     }
 }
 
@@ -532,7 +536,8 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             }
             w_node_ptr = w_node_ptr->next;
         }
-        unParent(cluster_edge_ptr);
+        // unParent(cluster_edge_ptr);
+        recursive_unParent(cluster_edge_ptr);
         cluster_allocator::destroy(cluster_edge_ptr);
     });
 
@@ -649,7 +654,8 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     frontier = parlay::filter(frontier, [] (auto node_ptr){
         if(first_condition(node_ptr) || second_condition(node_ptr) || third_condition(node_ptr))
         {
-            unParent(node_ptr->cluster_ptr);
+            // unParent(node_ptr->cluster_ptr);
+            recursive_unParent(node_ptr->cluster_ptr);
             node_ptr->state |= affected;
             return true;
         }
@@ -774,7 +780,8 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         frontier = parlay::filter(frontier, [] (auto node_ptr){
             if(first_condition(node_ptr) || second_condition(node_ptr) || third_condition(node_ptr))
             {
-                unParent(node_ptr->cluster_ptr);
+                // unParent(node_ptr->cluster_ptr);
+                recursive_unParent(node_ptr->cluster_ptr);
                 node_ptr->state |= affected;
                 return true;
             }
