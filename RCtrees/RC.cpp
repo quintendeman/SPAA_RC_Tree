@@ -314,6 +314,8 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
 
     auto add_edge_alternating = parlay::tabulate(clusters.size()/2, [&] (vertex i) {
         auto index = i * 2;
+        if(index == 2)
+            return std::tuple<vertex,vertex,datatype> (index, index, (datatype) 1.0);
         return std::tuple<vertex,vertex,datatype> (index, index/2, (datatype) 1.0);
     });
 
@@ -365,7 +367,60 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
     
     std::cout << "Subtree query: " << bright_red << query_ret_val << reset << std::endl;
 
-    // std::cout << bold << yellow << "Testing with unaffected vertices " << std::endl;
+    std::cout << bold << yellow << "Testing with unaffected vertices " << std::endl;
+
+    auto final_delete_edges = parlay::tabulate(clusters.size()/6, [&] (vertex i) {
+        auto offset = (clusters.size() % 2) + (clusters.size() * 5) / 6;
+        vertex index = i * 2 + offset;
+        if(index >= clusters.size())
+            return std::make_pair(index, index);
+        return std::make_pair(index, index/2);
+    });
+
+    final_delete_edges = parlay::filter(final_delete_edges, [] (auto edge){
+        return edge.first != edge.second;
+    });
+
+    if(clusters.size() <= 100)
+    {
+        for(auto& deledge : final_delete_edges)
+        {
+            std::cout << deledge.first << "-X->" << deledge.second << std::endl;
+        }
+    }
+
+    auto final_insert_edges = parlay::tabulate(clusters.size()/6 + 10, [&] (vertex i) {
+        auto offset = (clusters.size() % 2) + (clusters.size() * 5) / 6;
+        auto index = i * 2 + offset;
+        if(index >= clusters.size())
+            return std::tuple<vertex,vertex,datatype> (index, index, 0.0);
+        return std::tuple<vertex,vertex,datatype> (index, index+1, 1.0);
+    });
+
+    final_insert_edges[final_insert_edges.size()-1] = std::tuple<vertex,vertex,datatype>(clusters.size()-1, clusters.size()-2, 1.0);
+    final_insert_edges[final_insert_edges.size()-2] = std::tuple<vertex,vertex,datatype>(clusters.size()-1, 0, 1.0);
+    final_insert_edges[final_insert_edges.size()-3] = std::tuple<vertex,vertex,datatype>(0, 1, 1.0);
+    
+
+    final_insert_edges = parlay::filter(final_insert_edges, [] (auto edge) {
+        return std::get<0>(edge) != std::get<1>(edge);
+    });
+
+    if(clusters.size() <= 100)
+    {
+        for(auto& add_edge : final_insert_edges)
+        {
+            auto child_index = std::get<0>(add_edge);
+            auto parent_index = std::get<1>(add_edge);
+            std::cout << "Adding " << child_index << " -> " << parent_index << std::endl;
+        }
+    }
+
+    std::cout << reset;
+
+    batchInsertEdge(final_delete_edges, final_insert_edges, clusters, (datatype) 0.0, [] (datatype a, datatype b) {
+        return a + b;
+    });
 
     return;
 }

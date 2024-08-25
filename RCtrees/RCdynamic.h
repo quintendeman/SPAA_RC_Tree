@@ -143,9 +143,30 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                     auto old_other_side = get_other_side(aff_node,aff_node->adjacents[e]);
                     if(old_other_side != nullptr && old_other_side->next != aff_node->next->adjacents[e])
                     {
-                        if(affected_nodes.size() <= 100)
-                            std::cout << "Deleted " << aff_node->index() << " " << aff_node->adjacents[e]->index() << " " << old_other_side->index() << std::endl;
+                        if (affected_nodes.size() <= 100) {
+                            std::cout << "Deleted " 
+                                    << aff_node->index() << " " 
+                                    << aff_node->adjacents[e]->index() << " " 
+                                    << old_other_side->index() << " " 
+                                    // << (aff_node->adjacents[e]->next ? aff_node->adjacents[e]->next->index() : -10) << " " 
+                                    // << (aff_node->next ? aff_node->next->adjacents[e]->index() : -10) 
+                                    << std::endl;
+                        }
                         aff_node->next->adjacents[e] = nullptr;
+                        // try to delete it from the other side as well
+                        for(short j = 0; j < max_neighbours; j++)
+                        {
+                            auto old_other_side_edge = old_other_side->adjacents[i];
+                            if(old_other_side_edge == aff_node->adjacents[e])
+                            {
+                                if(old_other_side->next != nullptr)
+                                {
+                                    if(affected_nodes.size() <= 100)
+                                        std::cout << "Deleted from other side too" << std::endl;
+                                    old_other_side->next->adjacents[j] = nullptr;
+                                }
+                            }
+                        }
                     }
                     else
                         continue;
@@ -295,6 +316,10 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                 auto v = aff_node->index();
                 auto w = old_neighbour->index();
 
+                if(affected_nodes.size() <= 100)
+                    std::cout << "eligible for binary? " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() << std::endl;
+                
+
                 if(w < v)
                     continue;
                 if(affected_nodes.size() <= 100)
@@ -340,8 +365,8 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                 auto w = old_neighbour->index();
                 if(v < w)
                     continue;
-                // if(affected_nodes.size() <= 100)
-                //     std::cout << "Binary other sided added: " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() <<  std::endl;
+                if(affected_nodes.size() <= 100)
+                    std::cout << "Binary other sided added: " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() <<  std::endl;
                 auto newly_created_edge = old_edge->next;
                 // newly_created_edge->add_ptr(aff_node->next);
                 for(short k = 0; k < old_edge->adjacents.size(); k++)

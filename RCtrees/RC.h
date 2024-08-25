@@ -409,8 +409,8 @@ void contract(node<T,D>* node_ptr, bool affect = false)
         {
             finalize(node_ptr);
             finalize(edge_node);
-            for(auto& ptr : node_ptr->adjacents)
-                ptr = nullptr;
+            // for(auto& ptr : node_ptr->adjacents)
+            //     ptr = nullptr;
             neighbour_node->state |= (affected | adjacency_changed | live);
             node_ptr->state &= (~affected);
             node_ptr->state &= (~adjacency_changed);
