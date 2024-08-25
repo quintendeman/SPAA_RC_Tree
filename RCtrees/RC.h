@@ -36,7 +36,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
         std::uniform_real_distribution<double> dis(0, 1);
         auto random_val = dis(gen);
 
-        static const double anywhere_left_weight = 1;
+        static const double anywhere_left_weight = 0.1;
         static const double immediate_left_weight = 100;
         static const double root_weight = 0.0; /* warning, does not represet probability of a null cluster as degree capping may create more forests */
 
@@ -339,6 +339,7 @@ void finalize(node<T,D>* contracted_node)
     return;
 }
 
+
 /**
  * MUST have at most 2 neighbours
  */
@@ -352,6 +353,7 @@ void contract(node<T,D>* node_ptr, bool affect = false)
         node_ptr->state |= contracts_this_round | nullary_cluster;
         node_ptr->state &= (~live);
         node_ptr->state &= (~affected);
+        node_ptr->cluster_ptr->parent = nullptr;
         if(affect)
         {
             for(auto& ptr : node_ptr->adjacents)
@@ -388,6 +390,7 @@ void contract(node<T,D>* node_ptr, bool affect = false)
         }
 
         edge_node->cluster_ptr->parent = node_ptr->cluster_ptr;
+        
 
         for(short k = 0; k < max_neighbours; k++)
         {
@@ -437,6 +440,8 @@ void contract(node<T,D>* node_ptr, bool affect = false)
         node_ptr->state &= (~(unary_cluster | binary_cluster | nullary_cluster));
         node_ptr->state |= binary_cluster | contracts_this_round;
         node_ptr->state &= (~live);
+        node_ptr->cluster_ptr->parent = nullptr;
+        
 
         left_edge->cluster_ptr->parent = node_ptr->cluster_ptr;
         right_edge->cluster_ptr->parent = node_ptr->cluster_ptr;
@@ -635,6 +640,62 @@ void check_mis(parlay::sequence<node<T, D>*>& tree_nodes)
     return;
 }
 
+template <typename T, typename D>
+void check_parents_children(parlay::sequence<cluster<T,D>>& clusters)
+{
+    parlay::parallel_for(0, clusters.size(), [&] (T i) {
+        auto cluster_ptr = &clusters[i];
+        if(cluster_ptr->parent != nullptr)
+        {
+            bool in_parent = false;
+            for(auto& par_child : cluster_ptr->parent->children)
+            {
+                if(par_child == cluster_ptr)
+                    in_parent = true;
+            }
+            if(in_parent == false)
+            {
+                std::cout << red << "RC tree parents inconsistent!" << reset << std::endl;
+                cluster_ptr->print();
+                cluster_ptr->parent->print();
+                exit(1);
+            }
+        }
+        for(auto& child : cluster_ptr->children)
+        {
+            if(child == nullptr)
+                continue;
+            if(child->parent != cluster_ptr)
+            {
+                std::cout << red << "RC tree children inconsistent!" << reset << std::endl;
+                cluster_ptr->print();
+                child->print();
+                exit(1);
+            }
+        }
+    });
+}
+
+template<typename T, typename D>
+void check_children_values(parlay::sequence<cluster<T,D>>& clusters)
+{
+    parlay::parallel_for(0, clusters.size(), [&] (T i) {
+        auto cluster_ptr = &clusters[i];
+        D value_from_children = 0.0;
+        for(auto& child : cluster_ptr->children)
+        {
+            if(child == nullptr)
+                continue;
+            value_from_children+=child->data;
+        }
+        if(value_from_children != cluster_ptr->data)
+        {
+            std::cout << red << "RC tree values inconsistent!" << reset << std::endl;
+            cluster_ptr->print();
+            exit(1);
+        }
+    });
+}
 
 /**
  * Make an exact copy of the current adjacency list, copying over everything (including the state), the only new thing will be the level.
@@ -1165,7 +1226,7 @@ D subtree_query(cluster<T, D>* root, cluster<T, D>* dir_giver, D defretval, asso
     if(root == nullptr || dir_giver == nullptr || root == dir_giver)
         return defretval;
 
-    // std::cout << bold << bright_yellow << "Root: " << root->index << " dir: " << dir_giver->index << reset << std::endl;
+    std::cout << bold << bright_yellow << "Root: " << root->index << " dir: " << dir_giver->index << reset << std::endl;
 
     D lval = defretval;
     D rval = defretval;
@@ -1179,31 +1240,31 @@ D subtree_query(cluster<T, D>* root, cluster<T, D>* dir_giver, D defretval, asso
 
     root->find_boundary_vertices(root_l, lval, root_r, lval, defretval);
 
-    // std::cout << bold << yellow << "Root's boundary vertices ";
-    // if(root_l == nullptr)
-    //     std::cout << "nl ";
-    // else
-    //     std::cout << root_l->index << " ";
-    // if(root_r == nullptr)
-    //     std::cout << "nl ";
-    // else
-    //     std::cout << root_r->index << " ";
-    // std::cout << reset << std::endl;
+    std::cout << bold << yellow << "Root's boundary vertices ";
+    if(root_l == nullptr)
+        std::cout << "nl ";
+    else
+        std::cout << root_l->index << " ";
+    if(root_r == nullptr)
+        std::cout << "nl ";
+    else
+        std::cout << root_r->index << " ";
+    std::cout << reset << std::endl;
 
-    // std::cout << bold << yellow << "dir_giver's boundary vertices ";
-    // if(dir_l == nullptr)
-    //     std::cout << "nl ";
-    // else
-    //     std::cout << dir_l->index << " ";
-    // if(dir_r == nullptr)
-    //     std::cout << "nl ";
-    // else
-    //     std::cout << dir_r->index << " ";
-    // std::cout << reset << std::endl;
+    std::cout << bold << yellow << "dir_giver's boundary vertices ";
+    if(dir_l == nullptr)
+        std::cout << "nl ";
+    else
+        std::cout << dir_l->index << " ";
+    if(dir_r == nullptr)
+        std::cout << "nl ";
+    else
+        std::cout << dir_r->index << " ";
+    std::cout << reset << std::endl;
 
     if(root == dir_l || root == dir_r)
     {
-        // std::cout << bold << bright_cyan << "root already boundary vertex of dir giver" << reset << std::endl;
+        std::cout << bold << bright_cyan << "root already boundary vertex of dir giver" << reset << std::endl;
 
         auto child_with_dir = dir_giver;
         while(child_with_dir->parent != root)
@@ -1215,7 +1276,7 @@ D subtree_query(cluster<T, D>* root, cluster<T, D>* dir_giver, D defretval, asso
         cluster<T,D>* ign_r = nullptr;
         child_that_contains_u->find_boundary_vertices(ign_l, lval, ign_r, rval, defretval);
 
-        // std::cout << bold << bright_cyan << "Child to ignore is " << child_with_dir->index << reset << std::endl;
+        std::cout << bold << bright_cyan << "Child to ignore is " << child_with_dir->index << reset << std::endl;
 
         bool first = true;
 
@@ -1230,21 +1291,21 @@ D subtree_query(cluster<T, D>* root, cluster<T, D>* dir_giver, D defretval, asso
                 child->find_endpoints(child_l, child_r);
             else
                 child->find_boundary_vertices(child_l, lval, child_r, rval, defretval);
-            // std::cout << bold << bright_cyan << "[" << root->index << "] child " << child->index << " boundary vertices ";
-            // if(child_l == nullptr)
-            //     std::cout << "nl ";
-            // else
-            //     std::cout << child_l->index << " ";
-            // if(child_r == nullptr)
-            //     std::cout << "nl ";
-            // else
-            //     std::cout << child_r->index << " ";
-            // std::cout << reset << std::endl;
+            std::cout << bold << bright_cyan << "[" << root->index << "] child " << child->index << " boundary vertices ";
+            if(child_l == nullptr)
+                std::cout << "nl ";
+            else
+                std::cout << child_l->index << " ";
+            if(child_r == nullptr)
+                std::cout << "nl ";
+            else
+                std::cout << child_r->index << " ";
+            std::cout << reset << std::endl;
 
             if(child == child_with_dir)
                 continue;
             
-            // std::cout << bold << bright_cyan << "Adding value of " << child->index << "/" << child->data << reset << std::endl;
+            std::cout << bold << bright_cyan << "Adding value of " << child->index << "/" << child->data << reset << std::endl;
             
             if(first)
             {
@@ -1259,20 +1320,22 @@ D subtree_query(cluster<T, D>* root, cluster<T, D>* dir_giver, D defretval, asso
 
         if(root_l != nullptr && root_l != ign_l && root_l != ign_r)
         {
-            // std::cout << bold << bright_cyan << "recursive call to  " << root_l->index << " wrt " << root->index << reset << std::endl;
+            std::cout << bold << bright_cyan << "recursive call to  " << root_l->index << " wrt " << root->index << reset << std::endl;
             auto child_ret_val = subtree_query(root_l, root, defretval, func);
+            std::cout << bold << bright_cyan << "returning from recursive call to  " << root_l->index << " wrt " << root->index << ", adding " << child_ret_val << reset << std::endl;
             ret_val = func(ret_val, child_ret_val);
         }
         if(root_r != root_l && root_r != nullptr && root_r != ign_l && root_r != ign_r)
         {
-            // std::cout << bold << bright_cyan << "recursive call to  " << root_r->index << " wrt " << root->index << reset << std::endl;
+            std::cout << bold << bright_cyan << "recursive call to  " << root_r->index << " wrt " << root->index << reset << std::endl;
             auto child_ret_val = subtree_query(root_r, root, defretval, func);
+            std::cout << bold << bright_cyan << "returning from recursive call to  " << root_r->index << " wrt " << root->index << ", adding " << child_ret_val << reset << std::endl;
             ret_val = func(ret_val, child_ret_val);    
         }
     }
     else
     {
-        // std::cout << bold << bright_green << "Should only go here once" << reset << std::endl;
+        std::cout << bold << bright_green << "Should only go here once" << reset << std::endl;
 
         bool first = true;
         for(auto& child : root->children)
@@ -1286,16 +1349,16 @@ D subtree_query(cluster<T, D>* root, cluster<T, D>* dir_giver, D defretval, asso
                 child->find_endpoints(child_l, child_r);
             else
                 child->find_boundary_vertices(child_l, lval, child_r, rval, defretval);
-            // std::cout << bold << bright_green << "[" << root->index << "] child " << child->index << " boundary vertices ";
-            // if(child_l == nullptr)
-            //     std::cout << "nl ";
-            // else
-            //     std::cout << child_l->index << " ";
-            // if(child_r == nullptr)
-            //     std::cout << "nl ";
-            // else
-            //     std::cout << child_r->index << " ";
-            // std::cout << reset << std::endl;
+            std::cout << bold << bright_green << "[" << root->index << "] child " << child->index << " boundary vertices ";
+            if(child_l == nullptr)
+                std::cout << "nl ";
+            else
+                std::cout << child_l->index << " ";
+            if(child_r == nullptr)
+                std::cout << "nl ";
+            else
+                std::cout << child_r->index << " ";
+            std::cout << reset << std::endl;
 
             if((child->adjacency.get_head()->state & base_edge) || (child->first_contracted_node->next->state & binary_cluster))
             {

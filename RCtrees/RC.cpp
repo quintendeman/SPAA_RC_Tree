@@ -32,8 +32,12 @@ static bool isNearlyEqual(double a, double b, double epsilon = espilon) {
 
 void test_rc_valid(const parlay::sequence<vertex>& parents, parlay::sequence<cluster<vertex, datatype>>& clusters)
 {
+
+    check_parents_children(clusters);
+    check_children_values(clusters);
+
     parlay::sequence<std::tuple<vertex, vertex, datatype>> weighted_edges = parlay::tabulate(parents.size(), [&] (vertex i) {
-        return std::tuple<vertex, vertex, datatype>(i, parents[i], (datatype) ( i + parents[i]));
+        return std::tuple<vertex, vertex, datatype>(i, parents[i], (datatype) ( 1.0));
     });
 
     // pick a random pair to have a path between
@@ -49,7 +53,6 @@ void test_rc_valid(const parlay::sequence<vertex>& parents, parlay::sequence<clu
     
 
     // std::cout << blue << "Checking from " << ending_index << " to " << starting_index << reset << std::endl;
-
 
     weighted_edges = parlay::filter(weighted_edges, [&] (auto edge) {
         return std::get<0>(edge) != std::get<1>(edge);
@@ -77,6 +80,118 @@ void test_rc_valid(const parlay::sequence<vertex>& parents, parlay::sequence<clu
     return;
 }
 
+void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster<vertex, datatype>>& clusters)
+{
+
+    auto graph_size = parents.size();
+
+    auto old_parents = parents;
+
+    static const vertex batch_insertion_size = graph_size/2;
+    static const vertex batch_deletion_size = graph_size/10;
+
+    parlay::random_generator gen;
+    std::uniform_int_distribution<vertex> dis(0, graph_size-1);
+
+
+    // create a selection of delete edges
+    auto random_indices = parlay::tabulate(batch_deletion_size < 1 ? 1 : batch_deletion_size, [&] (vertex i) 
+    {
+        auto r = gen[i];
+        auto random_index = dis(r);
+        // auto jump_size = parents.size()/(batch_insertion_size < 1 ? 1 : batch_insertion_size);
+        // vertex random_index = i * jump_size/2 + 1;
+        return random_index;
+    });
+
+    random_indices = parlay::remove_duplicates(random_indices);
+
+    // create deletion edges
+    auto delete_edges = parlay::tabulate(random_indices.size(), [&] (vertex i) {
+        auto ret_pair = std::make_pair(random_indices[i], parents[random_indices[i]]); 
+        parents[random_indices[i]] = random_indices[i];
+        return ret_pair;
+    });
+
+    delete_edges = parlay::filter(delete_edges, [] (auto edge) {
+        return edge.first != edge.second;
+    });
+
+    // create insertion edges
+    auto insert_edges = parlay::tabulate(batch_insertion_size < 1 ? 1 : batch_insertion_size, [&] (vertex i) {
+        auto r = gen[i];
+        // auto random_number = dis(r);
+        auto jump_size = parents.size()/(batch_insertion_size < 1 ? 1 : batch_insertion_size);
+        
+        // auto& child_index = r;
+        auto child_index = i * jump_size/2 + 1;
+
+        if(!(parents[child_index] == child_index))
+        {
+            return std::tuple<vertex, vertex, datatype>(child_index, child_index, 0);
+        }
+
+        auto random_parent = (child_index == 0) ? 0 : dis(r) % child_index;
+
+        datatype new_val = (datatype) 1.0; // some large value
+
+        if(old_parents[child_index] == random_parent)
+        {
+            child_index = random_parent;
+        }
+
+        return std::tuple<vertex, vertex, datatype>(child_index, random_parent, new_val);
+
+    });
+
+    degree_cap_add_edge(parents, max_degree, insert_edges);
+
+    // remove edges that were leading to an overflow
+    insert_edges = parlay::filter(insert_edges, [&] (auto edge) {
+        const auto& child_index = std::get<0>(edge);
+        return child_index != parents[child_index];
+    });
+
+    std::cout << "There are " << red << delete_edges.size() << reset << " delete edges and " << green << insert_edges.size() << reset << " add edges" << std::endl;
+
+    batchInsertEdge(delete_edges, insert_edges, clusters, (datatype) 0.0, [] (datatype a, datatype b) {
+        return a + b;
+    });
+
+    check_parents_children(clusters);
+    check_children_values(clusters);
+
+    auto random_index = rand() % parents.size();
+
+    while(random_index == parents[random_index])
+        random_index = rand() % parents.size();
+
+    std::cout << "Root: " << random_index << " Parent: " << parents[random_index] << std::endl;
+
+    auto actual_ret_val = manual_subtree_sum(&clusters[random_index], &clusters[parents[random_index]], clusters);
+
+    std::cout << "Manual subtree sum: " << red << actual_ret_val << reset << std::endl;
+
+    
+    auto sub_ret_val = subtree_query(&clusters[random_index], &clusters[parents[random_index]], (datatype) 0.0, [] (datatype a, datatype b) {
+        return a+b;
+    });
+
+    std::cout << "Subtree query returns: " << bold << red << sub_ret_val << reset << std::endl;
+
+    if(actual_ret_val != sub_ret_val)
+    {
+        std::cout << red << "NOT MATCHING!!" << reset << std::endl;
+        clusters[random_index].print();
+        clusters[parents[random_index]].print();
+        printTree(clusters);
+    }
+
+    std::cout << std::endl;
+
+
+    return;
+}
 
 
 
@@ -147,6 +262,8 @@ int main(int argc, char* argv[]) {
 
     // if(graph_size <= 100)
     //     printTree(clusters);
+
+    test_dynamic_rc(parents, clusters);
 
     deleteRCtree(clusters);
 

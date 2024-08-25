@@ -285,6 +285,12 @@ public:
         std::cout << this->index << " " << reset;
         std::cout << bright_white <<  this->get_height() << " " << reset;
         std::cout << bright_green << this->data << " " << reset;
+        std::cout << bright_yellow;
+        if(this->parent)
+            std::cout << this->parent->index << " ";
+        else
+            std::cout << "nl ";
+        std::cout << reset;
 
         std::cout << bold << blue << "[ ";
         for(auto& child : this->children)

@@ -370,14 +370,15 @@ void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func)
         if(child == nullptr)
             continue;
         bool valid_child = false;
-        if(child->adjacency.get_head()->state & base_edge)
-            valid_child = true;
-        else if (child->first_contracted_node->state & (binary_cluster | base_edge))
-            valid_child = true;
-        else if (child->first_contracted_node->next == nullptr)
-            valid_child = false;
-        else if (child->first_contracted_node->next->state & (binary_cluster | base_edge))
-        
+        // if(child->adjacency.get_head()->state & base_edge)
+        //     valid_child = true;
+        // else if (child->first_contracted_node->state & (binary_cluster | base_edge))
+        //     valid_child = true;
+        // else if (child->first_contracted_node->next == nullptr)
+        //     valid_child = false;
+        // else if (child->first_contracted_node->next->state & (binary_cluster | base_edge))
+        valid_child = true;
+
         if(valid_child)
         {
             if(!found)
@@ -415,6 +416,18 @@ void unParent(cluster<T,D>* cluster_ptr)
             parents_child = nullptr;
             // std::cout << "Resetting child " << cluster_ptr->parent->index << " ˇ " << cluster_ptr->index <<  std::endl;
         }
+}
+
+template<typename T, typename D>
+void recursive_unParent(cluster<T,D>* cluster_ptr)
+{
+    auto old_cluster_ptr = cluster_ptr;
+    while(cluster_ptr != nullptr)
+    {
+        old_cluster_ptr = cluster_ptr;
+        cluster_ptr = cluster_ptr->parent;
+        unParent(old_cluster_ptr);
+    }
 }
 
 template<typename T, typename D, typename lambdafunc>
@@ -721,6 +734,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             std::cout << std::endl;
         }
 
+
         parlay::parallel_for(0, mis_set.size(), [&] (T i){
             mis_set[i]->cluster_ptr->first_contracted_node = mis_set[i];
             if(mis_set[i]->next == nullptr)
@@ -731,6 +745,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             contract(mis_set[i]->next, true);
             accumulate(mis_set[i], defretval, func);
         });
+
 
         std::cout << "checking level " << count+1 << " after contracting" << std::endl;
         checker_nodes = parlay::tabulate(clusters.size(), [&] (T i){
@@ -753,6 +768,8 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         frontier = parlay::filter(frontier, [] (auto node_ptr) {
             return node_ptr->state & affected;
         });
+
+        
         
         frontier = parlay::filter(frontier, [] (auto node_ptr){
             if(first_condition(node_ptr) || second_condition(node_ptr) || third_condition(node_ptr))
@@ -763,6 +780,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             }
             return false;
         });
+
         // TODO merge with above
         // parlay::parallel_for(0, frontier.size(), [&] (T i) {
         //     frontier[i]->state |= affected;
