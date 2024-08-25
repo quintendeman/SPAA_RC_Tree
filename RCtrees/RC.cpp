@@ -231,9 +231,9 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
 
     std::cout << "There would be " << bold << red << delete_edges.size() << reset << " delete edges in the extreme case" << std::endl;
 
-    parlay::sequence<std::tuple<vertex, vertex, datatype>> insert_edges;
+    parlay::sequence<std::tuple<vertex, vertex, datatype>> empty_inserts;
 
-    batchInsertEdge(delete_edges, insert_edges, clusters, (datatype) 0.0, [] (datatype a, datatype b) {
+    batchInsertEdge(delete_edges, empty_inserts, clusters, (datatype) 0.0, [] (datatype a, datatype b) {
         return a + b;
     });
 
@@ -241,40 +241,129 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
     if(clusters.size() <= 100)
         printTree(clusters);
 
-    insert_edges = parlay::tabulate(clusters.size(), [&] (vertex i){
+    auto simple_left_edges = parlay::tabulate(clusters.size(), [&] (vertex i){
         auto child_index = i;
         auto parent_index = child_index - 1;
+            
+        if(child_index == 0)
+            parent_index = 0;
+
         // check if child has space
         auto& child_cluster = clusters[child_index];
         auto& parent_cluster = clusters[parent_index];
         datatype new_val = (datatype) 1.0;
-
-        if((child_index % 2) == 0)
-        {
-            parent_index = child_index / 2;
-        }
         
         return std::tuple<vertex, vertex, datatype>(child_index, parent_index, new_val);
     });
 
-    insert_edges = parlay::filter(insert_edges, [] (auto edge) {
+    simple_left_edges = parlay::filter(simple_left_edges, [] (auto edge) {
+        return std::get<0>(edge) != std::get<1>(edge);
+    });
+    if(clusters.size() <= 100)
+    {
+        for(auto& add_edge : simple_left_edges)
+        {
+            auto child_index = std::get<0>(add_edge);
+            auto parent_index = std::get<1>(add_edge);
+            std::cout << "Adding " << child_index << " -> " << parent_index << std::endl;
+        }
+    }
+
+    parlay::sequence<std::pair<vertex,vertex>> empty_dels;
+
+    batchInsertEdge(empty_dels, simple_left_edges, clusters, (datatype) 0.0, [] (datatype a, datatype b) {
+        return a + b;
+    });
+
+    std::cout << red << "[extreme] Done adding everything" << reset << std::endl;
+    if(clusters.size() <= 100)
+        printTree(clusters);
+    
+    auto random_child = rand() % clusters.size();
+    if(random_child == 0)
+        random_child = 1;
+    auto random_parent = random_child - 1;
+
+    auto subtree_manual_value = clusters.size() - random_child - 1; // because its a simple chain
+
+    auto query_ret_val = subtree_query(&clusters[random_child], &clusters[random_parent], (datatype) 0.0, [] (datatype a, datatype b) {
+        return a + b;
+    });
+
+
+    std::cout << "[extreme] root: " << random_child << " dir_giver: " << random_parent << " value should be :" << bright_red << subtree_manual_value << reset << std::endl;
+ 
+    
+    std::cout << "Subtree query: " << bright_red << query_ret_val << reset << std::endl;
+
+    std::cout << bold << bright_yellow <<  "Testing mix of add and delete" << std::endl;
+
+    auto delete_edges_alternating = parlay::tabulate(clusters.size()/2, [] (vertex i) {
+        auto index = i * 2;
+        return std::make_pair(index, index + 1);
+    });
+
+    if(clusters.size() <= 100)
+    {
+        for(auto& deledge : delete_edges_alternating)
+        {
+            std::cout << deledge.first << "-X->" << deledge.second << std::endl;
+        }
+    }
+    std::cout << reset;
+
+    auto add_edge_alternating = parlay::tabulate(clusters.size()/2, [&] (vertex i) {
+        auto index = i * 2;
+        return std::tuple<vertex,vertex,datatype> (index, index/2, (datatype) 1.0);
+    });
+
+    add_edge_alternating = parlay::filter(add_edge_alternating, [] (auto edge) {
         return std::get<0>(edge) != std::get<1>(edge);
     });
 
-    // if(clusters.size() <= 100)
-    // {
-    //     for(auto& add_edge : insert_edges)
-    //     {
-    //         auto child_index = std::get<0>(add_edge);
-    //         auto parent_index = std::get<1>(add_edge);
-    //         std::cout << "Adding " << child_index << " -> " << parent_index << std::endl;
-    //     }
-    // }
+    if(clusters.size() <= 100)
+    {
+        for(auto& add_edge : add_edge_alternating)
+        {
+            auto child_index = std::get<0>(add_edge);
+            auto parent_index = std::get<1>(add_edge);
+            std::cout << "Adding " << child_index << " -> " << parent_index << std::endl;
+        }
+    }
 
     
 
+    batchInsertEdge(delete_edges_alternating, add_edge_alternating, clusters, (datatype) 0.0, [] (datatype a, datatype b) {
+        return a + b;
+    });
 
-    std::cout << "There would be " << bold << yellow << insert_edges.size() << reset << " edges in the extreme case" << std::endl;
+    std::cout << "[extreme] There are " << red << delete_edges_alternating.size() << reset << " delete edges and " << green << add_edge_alternating.size() << reset << " add edges " << std::endl;
+
+    if(clusters.size() <= 100)
+        printTree(clusters);
+
+    
+    
+
+
+
+    if(random_child < 2)
+        random_child = 2;
+    if((random_child % 2) == 1)
+        random_child += 1;
+    if(random_child >= (clusters.size()-1))
+        random_child-=2;
+    random_parent = random_child - 1;
+
+    subtree_manual_value = manual_subtree_sum(&clusters[random_child], &clusters[random_parent], clusters);
+
+    query_ret_val = subtree_query(&clusters[random_child], &clusters[random_parent], (datatype) 0.0, [] (datatype a, datatype b) {
+        return a + b;
+    });
+
+    std::cout << "[extreme] root: " << random_child << " dir_giver: " << random_parent << " value should be: " << bright_red << subtree_manual_value << reset << std::endl;
+    
+    std::cout << "Subtree query: " << bright_red << query_ret_val << reset << std::endl;
 
     return;
 }
