@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string>
 #include <random>
+#include <time.h>
 #include <cmath>
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
@@ -198,7 +199,10 @@ void test_dynamic_rc(parlay::sequence<vertex>& parents, parlay::sequence<cluster
 int main(int argc, char* argv[]) {
     auto usage = "Usage: RC [--graph-size <graph-size>] [-n <graph-size>] [--num-queries <num-queries>] [--print-creation] [--do-height <true|false>] [--randomized <true|false>]";
 
-    vertex graph_size = 100; // Default value
+    srand(time(NULL));
+
+    vertex graph_size = rand() % 20000000l;
+
     vertex num_queries = 100; // Default value
     bool print_creation = false;
     bool randomized = false; // Default value

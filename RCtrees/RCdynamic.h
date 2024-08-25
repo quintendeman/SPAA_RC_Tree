@@ -800,7 +800,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
 
         
 
-        std::cout << "Frontier size " << frontier.size() << std::endl;        
+        std::cout << "Frontier ["  << count << "]  size " << frontier.size() << std::endl;        
 
         count++;
     }while(count < max_count && frontier.size());
