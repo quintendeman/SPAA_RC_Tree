@@ -237,7 +237,7 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
         return a + b;
     });
 
-    std::cout << red << "[extreme] Done deleting everything" << reset << std::endl;
+    std::cout << green << "[extreme] Done deleting everything" << reset << std::endl;
     if(clusters.size() <= 100)
         printTree(clusters);
 
@@ -275,7 +275,7 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
         return a + b;
     });
 
-    std::cout << red << "[extreme] Done adding everything" << reset << std::endl;
+    std::cout << green << "[extreme] Done adding everything" << reset << std::endl;
     if(clusters.size() <= 100)
         printTree(clusters);
     
