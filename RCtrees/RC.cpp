@@ -324,7 +324,7 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
         auto index = i * 2;
         if(index == 2)
             return std::tuple<vertex,vertex,datatype> (index, index, (datatype) 1.0);
-        return std::tuple<vertex,vertex,datatype> (index, index/2, (datatype) 1.0);
+        return std::tuple<vertex,vertex,datatype> (index, index/2, (datatype) 2.0);
     });
 
     add_edge_alternating = parlay::filter(add_edge_alternating, [] (auto edge) {
@@ -445,6 +445,14 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
     batchInsertEdge(final_delete_edges, final_insert_edges, clusters, (datatype) 0.0, [] (datatype a, datatype b) {
         return a + b;
     });
+
+    auto random_add_edge = final_insert_edges[rand() % final_insert_edges.size()];
+
+    random_child = std::get<0>(random_add_edge);
+    random_parent = std::get<1>(random_add_edge);
+
+    if(rand() % 2)
+        std::swap(random_child, random_parent);
 
     subtree_manual_value = manual_subtree_sum(&clusters[random_child], &clusters[random_parent], clusters);
 
