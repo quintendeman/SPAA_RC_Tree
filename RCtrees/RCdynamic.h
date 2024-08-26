@@ -10,6 +10,8 @@
 #include "RC.h"
 #include <parlay/alloc.h>
 
+static const char PRINT_DYNAMIC = 0;
+
 template <typename edgetype>
 struct edge_with_flag
 {
@@ -143,7 +145,7 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                     auto old_other_side = get_other_side(aff_node,aff_node->adjacents[e]);
                     if(old_other_side != nullptr && old_other_side->next != aff_node->next->adjacents[e])
                     {
-                        if (affected_nodes.size() <= 100) {
+                        if (affected_nodes.size() <= 100 && PRINT_DYNAMIC) {
                             std::cout << "Deleted " 
                                     << aff_node->index() << " " 
                                     << aff_node->adjacents[e]->index() << " " 
@@ -154,19 +156,19 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                         }
                         aff_node->next->adjacents[e] = nullptr;
                         // try to delete it from the other side as well
-                        for(short j = 0; j < max_neighbours; j++)
-                        {
-                            auto old_other_side_edge = old_other_side->adjacents[i];
-                            if(old_other_side_edge == aff_node->adjacents[e])
-                            {
-                                if(old_other_side->next != nullptr)
-                                {
-                                    if(affected_nodes.size() <= 100)
-                                        std::cout << "Deleted from other side too" << std::endl;
-                                    old_other_side->next->adjacents[j] = nullptr;
-                                }
-                            }
-                        }
+                        // for(short j = 0; j < max_neighbours; j++)
+                        // {
+                        //     auto old_other_side_edge = old_other_side->adjacents[i];
+                        //     if(old_other_side_edge == aff_node->adjacents[e])
+                        //     {
+                        //         if(old_other_side->next != nullptr)
+                        //         {
+                        //             if(affected_nodes.size() <= 100)
+                        //                 std::cout << "Deleted from other side too" << std::endl;
+                        //             old_other_side->next->adjacents[j] = nullptr;
+                        //         }
+                        //     }
+                        // }
                     }
                     else
                         continue;
@@ -182,7 +184,7 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
             return;
         if((aff_node->next->state & unary_cluster) == 0)
             return;
-        if(affected_nodes.size() <= 100)
+        if(affected_nodes.size() <= 100 && PRINT_DYNAMIC)
             std::cout << "rake should be reversed: " << aff_node->index() << std::endl;
 
         for(short i = 0; i < aff_node->adjacents.size(); i++)
@@ -202,7 +204,7 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                 {
                     if(old_neighbour->adjacents[o] == old_edge && new_neighbour->adjacents[o] == aff_node->next)
                     {
-                        if(affected_nodes.size() <= 100)
+                        if(affected_nodes.size() <= 100 && PRINT_DYNAMIC)
                             std::cout << "rake got reversed: " << aff_node->index() << std::endl;
                         
                         new_neighbour->adjacents[o] = new_edge;
@@ -266,7 +268,7 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                     }
                     old_neighbour->next->adjacents[k] = old_edge->next;
                     aff_node->next->adjacents[i] = old_edge->next;
-                    if(affected_nodes.size() <= 100)
+                    if(affected_nodes.size() <= 100 && PRINT_DYNAMIC)
                         std::cout << "compress reversed: " << aff_node->index() << " " << old_edge->index() << "->" << old_neighbour->index() << std::endl;
                     old_neighbour->next->state |= adjacency_changed | affected;
                 }
@@ -302,6 +304,27 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
     // });
 
     // is an edge missing?
+
+    parlay::parallel_for(0, affected_nodes.size(), [&] (T I){
+        auto& aff_node = affected_nodes[I];
+            for(short i = 0; i < aff_node->adjacents.size(); i++)
+            {
+                const auto old_edge = aff_node->adjacents[i];
+                const auto new_edge = aff_node->next->adjacents[i];           
+                 
+                if(old_edge == nullptr)
+                    continue;
+                if((old_edge->state & (binary_cluster | base_edge)) && (new_edge == nullptr ))
+                {
+                    auto old_neighbour = get_other_side(aff_node, old_edge);
+
+                    if(affected_nodes.size() <= 100 && PRINT_DYNAMIC)
+                        std::cout << "eligible for binary? " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() << std::endl;
+                    old_edge->state |= one_sided;
+                }
+            }
+        });
+
     parlay::parallel_for(0, affected_nodes.size(), [&] (T I){
         auto& aff_node = affected_nodes[I];
         for(short i = 0; i < aff_node->adjacents.size(); i++)
@@ -310,23 +333,23 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
             const auto new_edge = aff_node->next->adjacents[i];            
             if(old_edge == nullptr)
                 continue;
-            if((old_edge->state & (binary_cluster | base_edge)) && (new_edge == nullptr))
+            if(old_edge->state & one_sided)
             {
                 auto old_neighbour = get_other_side(aff_node, old_edge);
                 auto v = aff_node->index();
                 auto w = old_neighbour->index();
 
-                if(affected_nodes.size() <= 100)
-                    std::cout << "eligible for binary? " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() << std::endl;
+                if(affected_nodes.size() <= 100 && PRINT_DYNAMIC)
+                    std::cout << "eligiblerrr for binary? " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() << std::endl;
                 
 
                 if(w < v)
                     continue;
-                if(affected_nodes.size() <= 100)
+                if(affected_nodes.size() <= 100 && PRINT_DYNAMIC)
                     std::cout << "Binary added one sided added: " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() << std::endl;
                 if(old_edge->next == nullptr)
                 {
-                    if(affected_nodes.size() <= 100)
+                    if(affected_nodes.size() <= 100 && PRINT_DYNAMIC)
                         std::cout << "Binary new constructed " << std::endl;
                     if(old_edge->state & binary_cluster)
                         old_edge->cluster_ptr->add_empty_level(binary_cluster, old_edge->contraction_level + 1);
@@ -365,7 +388,7 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
                 auto w = old_neighbour->index();
                 if(v < w)
                     continue;
-                if(affected_nodes.size() <= 100)
+                if(affected_nodes.size() <= 100 && PRINT_DYNAMIC)
                     std::cout << "Binary other sided added: " << aff_node->index() << " " << old_edge->index() << " " << old_neighbour->index() <<  std::endl;
                 auto newly_created_edge = old_edge->next;
                 // newly_created_edge->add_ptr(aff_node->next);
@@ -499,7 +522,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         return ret_seq;
     }));
 
-    if(clusters.size() <= 100) // TODO remove
+    if(clusters.size() <= 100 && PRINT_DYNAMIC) // TODO remove
     {
         for(uint i = 0; i < delete_edges.size() + add_edges.size(); i++)
         {
@@ -711,13 +734,16 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     static const short max_count = 200;
     do
     {
-        std::cout << "checking level at the start of round " << count << std::endl;
-        auto checker_nodes = parlay::tabulate(clusters.size(), [&] (T i){
-            return clusters[i].adjacency[count];
-        });
-        check_consistency(checker_nodes);
+        if(PRINT_DYNAMIC)
+        {       
+            std::cout << "checking level at the start of round " << count << std::endl;
+           auto checker_nodes = parlay::tabulate(clusters.size(), [&] (T i){
+                return clusters[i].adjacency[count];
+            });
+            check_consistency(checker_nodes);
+        }
 
-        if(clusters.size() <= 100)
+        if(clusters.size() <= 100 && PRINT_DYNAMIC)
         {
             std::cout << "frontier: ";
             for(auto& ptr : frontier)
@@ -730,7 +756,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
 
         create_decompressed_affected(frontier);
 
-        if(clusters.size() <= 100)
+        if(clusters.size() <= 100 && PRINT_DYNAMIC)
         {
             std::cout << "\"finalize\" " << mis_set.size() << "nodes: ";
             for(auto& ptr : mis_set)
@@ -739,12 +765,14 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         }
         
 
-        
-        std::cout << "checking level " << count+1 << " after decompression " << std::endl;
-        checker_nodes = parlay::tabulate(clusters.size(), [&] (T i){
-            return clusters[i].adjacency[count+1];
-        });
-        check_consistency(checker_nodes);
+        if(PRINT_DYNAMIC)
+        {
+            std::cout << "checking level " << count+1 << " after decompression " << std::endl;
+            auto checker_nodes = parlay::tabulate(clusters.size(), [&] (T i){
+                return clusters[i].adjacency[count+1];
+            });
+            check_consistency(checker_nodes);
+        }
 
         auto update_eligible_set = parlay::filter(frontier, [] (auto node_ptr) {
             if(is_update_eligible(node_ptr))
@@ -768,7 +796,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         {
             printTree(clusters, count+2);
         }
-        if(clusters.size() <= 100)
+        if(clusters.size() <= 100 && PRINT_DYNAMIC)
         {
             std::cout << "contracted " << mis_set.size() << "nodes: ";
             for(auto& ptr : mis_set)
@@ -789,12 +817,14 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             accumulate(mis_set[i], defretval, func);
         });
 
-
-        std::cout << "checking level " << count+1 << " after contracting" << std::endl;
-        checker_nodes = parlay::tabulate(clusters.size(), [&] (T i){
-            return clusters[i].adjacency[count+1];
-        });
-        check_consistency(checker_nodes);
+        if(PRINT_DYNAMIC)
+        {
+            std::cout << "checking level " << count+1 << " after contracting" << std::endl;
+            auto checker_nodes = parlay::tabulate(clusters.size(), [&] (T i){
+                return clusters[i].adjacency[count+1];
+            });
+            check_consistency(checker_nodes);
+        }
 
         frontier = new_frontier;
 

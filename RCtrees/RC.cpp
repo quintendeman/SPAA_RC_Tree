@@ -21,7 +21,7 @@ using vertex = long;
 using utils = graph_utils<vertex>;
 using graph = parlay::sequence<parlay::sequence<vertex> >;
 
-using datatype = float;
+using datatype = double;
 
 const vertex max_degree = 3;
 
@@ -344,6 +344,11 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
     if(clusters.size() <= 100)
         printTree(clusters);
 
+    
+    
+
+
+
     if(random_child < 2)
         random_child = 2;
     if((random_child % 2) == 1)
@@ -351,6 +356,79 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
     if(random_child >= (clusters.size()-1))
         random_child-=2;
     random_parent = random_child - 1;
+
+    subtree_manual_value = manual_subtree_sum(&clusters[random_child], &clusters[random_parent], clusters);
+
+    query_ret_val = subtree_query(&clusters[random_child], &clusters[random_parent], (datatype) 0.0, [] (datatype a, datatype b) {
+        return a + b;
+    });
+
+    std::cout << "[extreme] root: " << random_child << " dir_giver: " << random_parent << " value should be: " << bright_red << subtree_manual_value << reset << std::endl;
+    
+    std::cout << "Subtree query: " << bright_red << query_ret_val << reset << std::endl;
+
+    std::cout << bold << yellow << "Testing with unaffected vertices " << std::endl;
+
+    auto final_delete_edges = parlay::tabulate(clusters.size()/6, [&] (vertex i) {
+        auto offset = (clusters.size() * 5) / 6;
+        vertex index = i * 2 + offset + (offset%2);
+        // if(i == 0)
+        //     return std::make_pair(index, index/2); // ensure this exists
+        
+        if(index >= clusters.size())
+            return std::make_pair(index, index);
+        return std::make_pair(index, index/2);
+    });
+
+    final_delete_edges = parlay::filter(final_delete_edges, [] (auto edge){
+        return edge.first != edge.second;
+    });
+
+    if(final_delete_edges.size() <= 100)
+    {
+        for(auto& deledge : final_delete_edges)
+        {
+            std::cout << deledge.first << "-X->" << deledge.second << std::endl;
+        }
+    }
+
+    auto final_insert_edges = parlay::tabulate(clusters.size()/6 + 10, [&] (vertex i) {
+        auto offset = (clusters.size() * 5) / 6;
+        auto index = i * 2 + offset + (offset % 2);
+        if(index >= clusters.size())
+            return std::tuple<vertex,vertex,datatype> (index, index, 0.0);
+        if(index >= clusters.size() || (index+1) >= clusters.size())
+        {
+            // std::cout << red << "Warning, weird edge detected" << reset << std::endl;
+            return std::tuple<vertex,vertex,datatype> (index, index, 0.0);
+        }
+        return std::tuple<vertex,vertex,datatype> (index, index+1, 1.0);
+    });
+
+    final_insert_edges[final_insert_edges.size()-1] = std::tuple<vertex,vertex,datatype>(clusters.size()-1, clusters.size()-2, 1.0);
+    final_insert_edges[final_insert_edges.size()-2] = std::tuple<vertex,vertex,datatype>(clusters.size()-1, 0, 1.0);
+    final_insert_edges[final_insert_edges.size()-3] = std::tuple<vertex,vertex,datatype>(0, 1, 1.0);
+    
+
+    final_insert_edges = parlay::filter(final_insert_edges, [] (auto edge) {
+        return std::get<0>(edge) != std::get<1>(edge);
+    });
+
+    if(final_insert_edges.size() <= 100)
+    {
+        for(auto& add_edge : final_insert_edges)
+        {
+            auto child_index = std::get<0>(add_edge);
+            auto parent_index = std::get<1>(add_edge);
+            std::cout << "Adding " << child_index << " -> " << parent_index << std::endl;
+        }
+    }
+
+    std::cout << reset;
+
+    batchInsertEdge(final_delete_edges, final_insert_edges, clusters, (datatype) 0.0, [] (datatype a, datatype b) {
+        return a + b;
+    });
 
     subtree_manual_value = manual_subtree_sum(&clusters[random_child], &clusters[random_parent], clusters);
 
@@ -371,7 +449,8 @@ int main(int argc, char* argv[]) {
     srand(time(NULL));
 
     vertex graph_size = rand() % 20000000l;
-
+    if((graph_size % 2) == 1)
+        graph_size++;
     vertex num_queries = 100; // Default value
     bool print_creation = false;
     bool randomized = false; // Default value
