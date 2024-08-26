@@ -296,6 +296,14 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
     
     std::cout << "Subtree query: " << bright_red << query_ret_val << reset << std::endl;
 
+    if(subtree_manual_value != query_ret_val)
+    {
+        
+        std::cout << std::fixed << std::setprecision(17);
+        std::cout << red << "[dynamic] NOT MATCHING!!" << reset << subtree_manual_value << " != " << query_ret_val << reset << std::endl;
+        printTree(clusters);
+    }
+
     std::cout << bold << bright_yellow <<  "Testing mix of add and delete" << std::endl;
 
     auto delete_edges_alternating = parlay::tabulate(clusters.size()/2, [] (vertex i) {
@@ -366,6 +374,14 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
     std::cout << "[extreme] root: " << random_child << " dir_giver: " << random_parent << " value should be: " << bright_red << subtree_manual_value << reset << std::endl;
     
     std::cout << "Subtree query: " << bright_red << query_ret_val << reset << std::endl;
+
+    if(subtree_manual_value != query_ret_val)
+    {
+        
+        std::cout << std::fixed << std::setprecision(17);
+        std::cout << red << "[dynamic] NOT MATCHING!!" << reset << subtree_manual_value << " != " << query_ret_val << reset << std::endl;
+        printTree(clusters);
+    }
 
     std::cout << bold << yellow << "Testing with unaffected vertices " << std::endl;
 
@@ -439,6 +455,14 @@ void test_dynamic_rc_extreme(parlay::sequence<cluster<vertex, datatype>>& cluste
     std::cout << "[extreme] root: " << random_child << " dir_giver: " << random_parent << " value should be: " << bright_red << subtree_manual_value << reset << std::endl;
     
     std::cout << "Subtree query: " << bright_red << query_ret_val << reset << std::endl;
+
+    if(subtree_manual_value != query_ret_val)
+    {
+        
+        std::cout << std::fixed << std::setprecision(17);
+        std::cout << red << "[dynamic] NOT MATCHING!!" << reset << subtree_manual_value << " != " << query_ret_val << reset << std::endl;
+        printTree(clusters);
+    }
 
     return;
 }

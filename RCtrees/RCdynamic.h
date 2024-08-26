@@ -859,8 +859,8 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         // parlay::parallel_for(0, frontier.size(), [&] (T i) {
         //     frontier[i]->state |= affected;
         // });
-
-        std::cout << "Finalizing contracted nodes " << std::endl;
+        if(PRINT_DYNAMIC)
+            std::cout << "Finalizing contracted nodes " << std::endl;
         parlay::parallel_for(0, mis_set.size(), [&] (T i){
             finalize(mis_set[i]->next);
         });
