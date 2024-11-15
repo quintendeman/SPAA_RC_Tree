@@ -15,6 +15,7 @@
 #include <parlay/alloc.h>
 #include "cluster.h"
 #include "../examples/counting_sort.h"
+#include <parlay/random.h>
 
 static const char PRINT_QUERY = 0;
 
@@ -31,15 +32,15 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
 
     parlay::sequence<T> dummy_initial_parents = parlay::tabulate(num_elements, [&] (T v) {return (T) 0;});
 
-    std::mt19937 gen(std::random_device{}());
-    
+    parlay::random_generator gen(time(0)); //use time(0) as random seed
+    std::uniform_real_distribution<double> dis(0, 1);
 
     parlay::parallel_for(0, num_elements, [&] (T v) {
-        std::uniform_real_distribution<double> dis(0, 1);
-        auto random_val = dis(gen);
+        auto r = gen[v];
+        double random_val = dis(r);
 
         static const double anywhere_left_weight = 0.1;
-        static const double immediate_left_weight = 30;
+        static const double immediate_left_weight = 30; 
         static const double root_weight = 0.0; /* warning, does not represet probability of a null cluster as degree capping may create more forests */
 
         static const double anywhere_prob = (anywhere_left_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
@@ -47,9 +48,9 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
 
         if (random_val <= anywhere_prob && v > 0)
         {
-            std::uniform_int_distribution<> disint(0, v-1);
+            std::uniform_int_distribution<T> disint(0,v-1);
 
-            dummy_initial_parents[v] = disint(gen);
+            dummy_initial_parents[v] = disint(r);
         }
         else if (random_val < root_prob)
         {
