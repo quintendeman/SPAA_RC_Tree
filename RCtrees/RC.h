@@ -864,7 +864,7 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
 */
 
 template <typename T, typename D>
-void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool randomized = false, D defretval = 0.00f)
+void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool randomized = false, D defretval = 0.00f, bool print=true)
 {
 
 
@@ -911,7 +911,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
         // if(base_clusters.size() <= 100)
         //     printTree(base_clusters);
     
-        
+        if (print)
         std::cout << "[" << count  << "]: " << bold << tree_nodes.size() << reset << std::endl;
         count++;
     }while(tree_nodes.size() > 0 && count < 100);
