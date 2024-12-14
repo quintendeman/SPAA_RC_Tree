@@ -59,4 +59,19 @@ void get_root_RC(parlay::sequence<cluster<T,D>>& clusters, cluster<T,D>*& ans) {
     }
  }
 
+//returns true if, *in the RC tree*, u's cluster is a descendant of v's cluster (v is ancestor)
+template<typename T, typename D>
+bool is_descendant(parlay::sequence<cluster<T,D>>& clusters, T u, T v) {
+    T uold = u;
+    T unew = clusters[u].parent.index;
+    if (u == v) return true;
+    while (uold != unew) {
+        if (unew == v) return true;
+        uold = unew;
+        unew = clusters[unew].parent.index;
+    }
+    return false;
+
+}
+
 #endif //LCA

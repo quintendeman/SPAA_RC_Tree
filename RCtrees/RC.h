@@ -20,15 +20,26 @@
 static const char PRINT_QUERY = 0;
 
 
+std::mt19937 get_rand_gen(int seed) {
+    if (seed == -1) {
+        std::mt19937 gen(std::random_device{}());
+        return gen;
+    }
+    else {
+        std::mt19937 gen(seed);
+        return gen;
+    }
+}
 //another take on generate_tree_graph
 //at each child, generate one or two children (naturally ternerized)
 //root is 0
 template<typename T>
-parlay::sequence<T> generate_random_tree(T num_elements) {
+parlay::sequence<T> generate_random_tree(T num_elements, int seed=-1) {
     assert(num_elements > 0);
     parlay::sequence<T> parents = parlay::tabulate(num_elements,[&] (T v) {return (T) 0;});
 
-    std::mt19937 gen(std::random_device{}()); //what seed is being used here? TOD2 //check into (if num_elts = 1mil twice, will it give same graph?)
+    std::mt19937 gen = get_rand_gen(seed);//what seed is being used here? TOD2 //check into (if num_elts = 1mil twice, will it give same graph?)
+
     std::uniform_real_distribution<double> dis(0, 1);
 
     T c = 1; //count # of elements already added to tree
