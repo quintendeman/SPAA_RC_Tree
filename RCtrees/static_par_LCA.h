@@ -143,6 +143,133 @@ void set_size_par(parlay::sequence<parlay::sequence<T>>& child_tree, parlay::seq
 }
 
 
+//set the subtree size of each vertex
+//example of bottom up computation
+//tag stack with child to avoid overwrites (from leaves being at different tree levels)
+//requires level tagging to be complete (set_level_par must have already been called)
+template<typename T>
+void set_size_alt_par(parlay::sequence<parlay::sequence<T>>& child_tree, parlay::sequence<T>& parent_tree, T root, parlay::sequence<LCAnode<T>>& augmented_vertices) {
+
+    //get the max level in the tree
+    //TOD2* compute this once, outside (for constant factor efficiency)
+    int max_level = *parlay::max_element(parlay::map(augmented_vertices,[&] (LCANode<T> node) {
+        return node.level;
+    }));
+
+    //rangn
+    parlay::sequence<T> rangn = parlay::tabulate(child_tree.size(),[&] (T i) {return i;});
+
+
+    //set default size value
+    parlay::parallel_for(0,augmented_vertices.size(),[&] (size_t i) {
+        augmented_vertices[i].size=1; 
+    });
+    //mark parts of stack that are still relevant
+    parlay::sequence<bool> filled_indices(stack.size(),false);
+
+
+    parlay::sequence<T> bottom_level = parlay::filter(rangn,[&] (size_t i) {
+        return augmented_vertices[i].level==max_level;
+    });
+    parlay::sequence<std::pair<T,T>> stack = parlay::tabulate(bottom_level.size(),[&] (size_t i) {return std::make_pair(bottom_level[i],-1); });
+
+    parlay::sequence<std::pair<T,T>> new_stack(stack.size(),std::make_pair(-1,-1));
+
+    while (stack.size() > 0) {
+        parlay::parallel_for(0,stack.size(),[&] (size_t i) {
+            auto s = stack[i].first;
+            auto chi = stack[i].second;
+            if (chi != -1) {
+                //note that because we traverse from deepest to shallow, the child will be complete when it is added to the size of the parent
+                augmented_vertices[s].size += augmented_vertices[chi].size;
+
+            }
+    
+            //if we have not reached the root yet, add this edge to the stack
+            if (parent_tree[s] != s) {
+                new_stack[i]=std::make_pair(parent_tree[s],s);
+                filled_indices[i]=true;
+
+            }
+            
+        });
+        
+        stack = parlay::pack(new_stack,filled_indices); //the stack is smaller than before, because shallower levels hit the root first
+        
+        //reset the filler variables
+        new_stack=parlay::tabulate(stack.size(),[&] (size_t i){return std::make_pair(-1,-1);});
+        filled_indices=parlay::tabulate(stack.size(),[&] (size_t i) {return false;});
+        
+    }
+
+}
+
+
+//set the subtree size of each vertex
+//example of bottom up computation
+//requires level tagging to be complete (set_level_par must have already been called)
+template<typename T>
+void set_size_improved_par(parlay::sequence<parlay::sequence<T>>& child_tree, parlay::sequence<T>& parent_tree, T root, parlay::sequence<LCAnode<T>>& augmented_vertices, int max_level) {
+
+  
+    //rangn
+    parlay::sequence<T> rangn = parlay::tabulate(child_tree.size(),[&] (T i) {return i;});
+
+
+    //set default size value
+    parlay::parallel_for(0,augmented_vertices.size(),[&] (size_t i) {
+        augmented_vertices[i].size=1; 
+    });
+    //mark parts of stack that are still relevant
+    parlay::sequence<bool> filled_indices(stack.size(),false);
+
+
+    parlay::sequence<T> bottom_level = parlay::filter(rangn,[&] (size_t i) {
+        return augmented_vertices[i].level==max_level;
+    });
+    parlay::sequence<T> stack = parlay::tabulate(bottom_level.size(),[&] (size_t i) {return bottom_level[i]; });
+
+    parlay::sequence<T> new_stack(stack.size(),-1);
+
+    for (int iter = max_level; iter > 0; iter--) {
+        //invariant: in the iteration iter, all of the vertices in the stack have level iter
+        parlay::parallel_for(0,stack.size(),[&] (size_t i) {
+            auto s = stack[i];
+            for (T j = 0; j < child_tree[s].size(); j++) {
+                augmented_vertices[s].size += augmented_vertices[child_tree[s][j]].size;
+            }
+
+            //if this node is the 0th child of its parent, let this node add its parent to the stack, otherwise not
+            //TOD2* critically depends on order that children are added to child tree - if the backedge to the parent is added first, then this check does not work
+            if (child_tree[parent_tree[s]][0]==s) {
+                new_stack[i]=parent_tree[s];
+                filled_indices[i]=true;
+
+            }
+
+            //if we have not reached the root yet, add this edge to the stack
+            if (parent_tree[s] == s) {
+                std::cout << "error, reached root early" << std::endl;
+                exit(803);
+            }
+    
+            new_stack[i]=parent_tree[s];
+            filled_indices[i]=true;
+
+            
+        });
+        
+        stack = parlay::pack(new_stack,filled_indices); //the stack is smaller than before, because shallower levels hit the root first
+        
+        //reset the filler variables
+        new_stack=parlay::tabulate(stack.size(),[&] (size_t i){return -1;});
+        filled_indices=parlay::tabulate(stack.size(),[&] (size_t i) {return false;});
+        
+    }
+
+}
+
+
 //note that inlabel does not need a tree recursive computation, because of interval property of preorder
 template<typename T>
 void set_inlabel_par(parlay::sequence<parlay::sequence<T>>& child_tree, T root, parlay::sequence<LCAnode<T>>& av) {
@@ -232,7 +359,14 @@ void preprocess_par(parlay::sequence<T>& parent_tree, parlay::sequence<parlay::s
 
 
     set_level_par(child_tree,root,augmented_vertices);
-    set_size_par(child_tree,parent_tree,root,augmented_vertices);
+
+    //get the max level in the tree
+    //TOD2* compute this once, outside (for constant factor efficiency)
+    int max_level = *parlay::max_element(parlay::map(augmented_vertices,[&] (LCANode<T> node) {
+        return node.level;
+    }));
+
+    set_size_improved_par(child_tree,parent_tree,root,augmented_vertices,max_level);
     set_preorder_par(child_tree,root,augmented_vertices);
 
     set_inlabel_par(child_tree,root,augmented_vertices);
