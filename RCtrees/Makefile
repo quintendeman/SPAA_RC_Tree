@@ -16,9 +16,15 @@ all: $(TARGET)
 
 lca: $(TARGET2)
 
+splca : splca.out
+
 sslca : sslca.out
 
-sslca.out : static_seqn_LCA.cpp static_seqn_LCA.h RC.h
+splca.out : static_par_LCA.cpp static_par_LCA.h static_seqn_LCA.h VanillaLCA.h RC.h
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o splca.out static_par_LCA.cpp
+
+
+sslca.out : static_seqn_LCA.cpp static_seqn_LCA.h RC.h VanillaLCA.h
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o sslca.out static_seqn_LCA.cpp
 
 $(TARGET2): $(SRC2)  $(RC_DEPS) $(LCA_DEPS)

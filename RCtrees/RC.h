@@ -68,6 +68,37 @@ parlay::sequence<T> generate_random_tree(T num_elements, int seed=-1) {
 
 }
 
+
+//another take on generate_tree_graph
+//at each child, generate one or two children (naturally ternerized)
+//root is 0
+template<typename T>
+parlay::sequence<T> generate_random_tree(T num_elements, std::mt19937& gen) {
+    assert(num_elements > 0);
+    parlay::sequence<T> parents = parlay::tabulate(num_elements,[&] (T v) {return (T) 0;});
+
+    std::uniform_real_distribution<double> dis(0, 1);
+
+    T c = 1; //count # of elements already added to tree
+    T par = 0; //the current parent, to which we add its children
+    double p2 = .3; //probability of 2 children
+    while (c < num_elements) {
+        parents[c]=par;
+        auto random_val = dis(gen);
+        if (random_val < p2 && c+1 < num_elements) {
+            parents[c+1]=par; 
+            c += 2;
+        }
+        else {
+            c += 1;
+        }
+        par += 1;
+
+    }
+    return parents;
+
+}
+
 /*
     Generate a simple, single rooted graph with each node having two children
     Then, randomly, change the parent of each node with a certain probability such that it picks something on the left of it

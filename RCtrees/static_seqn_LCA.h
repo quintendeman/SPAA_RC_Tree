@@ -1,5 +1,7 @@
 //encode the LCA finding method from Schieber & Vishkin (1988)
 //this version does naively (not trying to be efficient or ||)
+#ifndef SSLCA
+#define SSLCA
 
 #include<math.h>
 
@@ -39,6 +41,17 @@ int l1(T x) {
     return floor(log2(x));
 }
 
+
+template<typename T>
+void print_augmented_vertices(parlay::sequence<LCAnode<T>>& av) {
+    std::cout << "printing augment" << std::endl;
+    std::cout << "id,\t inl,\t preo,\t#ri0,\tlvl,\tascd,\t size" << std::endl;
+    for (int i =0 ; i < av.size(); i++) {
+        av[i].print(); 
+    }
+
+
+}
 
 template<typename T>
 void preprocess(parlay::sequence<T>& parent_tree, parlay::sequence<parlay::sequence<T>>& child_tree, T root, parlay::sequence<LCAnode<T>>& augmented_vertices, parlay::sequence<T>& head) {
@@ -181,7 +194,7 @@ void set_inlabel(parlay::sequence<parlay::sequence<T>>& child_tree, T root, parl
         if (!first_time[s]) {            
             //set this vertex's inlabel to be the "max" of the children
             augmented_vertices[s].inlabel = get_inlabel(child_tree,augmented_vertices,s);
-            // not correct//augmented_vertices[find_max_zeroes_index(child_tree,augmented_vertices,s)].preorder;
+         
             std::cout << "set inlabel of " << s << std::endl;
             
         }
@@ -213,27 +226,6 @@ T get_inlabel(parlay::sequence<parlay::sequence<T>>& child_tree, parlay::sequenc
     return inlabel;
 
 }
-//given a tree & the augmented vertices, and a specific node of interest, find which of s and its immediate children has the greatest # of rightmost zeroes, and return this node's index
-//note that we are implicitly searching exactly the "interval of s" (Schieber Vishkin p.1256) here, because of our postorder traversal
-template<typename T>
-T find_max_zeroes_index(parlay::sequence<parlay::sequence<T>>& child_tree, parlay::sequence<LCAnode<T>>& augmented_vertices, T s) {
-    std::cout << "finding inlabel for  " << s << std::endl;
-    int max_zeroes_seen = r1(augmented_vertices[s].preorder);
-    int max_index = s;
-    for (T i = 0; i < child_tree[s].size(); i++) {
-
-        std::cout << "Look at child " << child_tree[s][i] << std::endl;
-        std::cout << "# zeroes in child's inlabel is " << r1(augmented_vertices[child_tree[s][i]].inlabel) << std::endl;
-        //TOD2 re-does some get # rightmost zeroes calculation, can avoid? 
-        //compare with the inlabel, not the # of rightmost zeroes of this vertex**
-        if (r1(augmented_vertices[child_tree[s][i]].inlabel) > max_zeroes_seen) {
-            max_zeroes_seen = r1(augmented_vertices[child_tree[s][i]].inlabel);
-            max_index = child_tree[s][i];
-        }
-    }
-    return max_index;
-
-}
 
 
 //set the ascendant value for each vertex
@@ -259,9 +251,7 @@ void set_ascendant(parlay::sequence<T>& parent_tree, parlay::sequence<parlay::se
             }
             //different inlabel, add increment to ascendant value of s
             else {
-                //TOD2 confirm that this always gives the right int
-                //This is faster way of getting out the index of the rightmost 0
-                //T i = static_cast<int>(log2(augmented_vertices[s].inlabel - (augmented_vertices[s].inlabel & (augmented_vertices[s].inlabel - 1)) ) );
+              
                 T i = r1(augmented_vertices[s].inlabel);
 
                 augmented_vertices[s].ascendant = augmented_vertices[parent_tree[s]].ascendant | (1 << i); //or instead of +
@@ -313,29 +303,13 @@ std::pair<int,T> get_imax(parlay::sequence<LCAnode<T>>& av, T u, T v) {
 
 //Step 2 of implementation (Section 4 Schieber & Vishkin)
 //separating out for readability
-// template<typename T>
-// int get_inlabelz(parlay::sequence<LCAnode<T>>& av, T u, T v, int imax) {
-//     int u_left = r1(av[u].ascendant);
-//     int v_left = r1(av[v].ascendant);
-//     T vertex_choice = u;
-//     int ci = u_left;
-//     if (v_left > u_left) {
-//         vertex_choice=v;
-//         ci=v_left;
-//     }
-//     std::cout << "vertex chosen is " << vertex_choice << std::endl;
-//     std::cout << "ci is " << ci << std::endl;
-   
-//     int mask = (-1 ^ ((1 << ci)-1));
-//     return (av[vertex_choice].inlabel & mask) | (1 << ci);
-// }
 template<typename T>
 std::pair<int,int> get_inlabelz(parlay::sequence<LCAnode<T>>& av, T u, T v, int imax) {
     int common = av[u].ascendant & av[v].ascendant;
-    std::cout << "common is " << common << std::endl;
+    //std::cout << "common is " << common << std::endl;
     int ci = (1 << imax) * (common >> imax);
     int jz = r1(ci);
-    std::cout << "j index is  " << jz << std::endl;
+    //std::cout << "j index is  " << jz << std::endl;
     int mask = -1 ^ ((1 << jz)-1);
     return std::make_pair((av[u].inlabel & mask) | (1 << jz),jz);
 }
@@ -345,24 +319,24 @@ template<typename T>
 int get_hat(parlay::sequence<T>& head, parlay::sequence<T>& parent_tree,parlay::sequence<LCAnode<T>>& av, T u, int inlabel_z, int jz) {
     int xhat=-1;
     if (av[u].inlabel == inlabel_z) {
-        std::cout << "inlabels same easy hat" << std::endl;
+        //std::cout << "inlabels same easy hat" << std::endl;
         xhat=u;
     }
    // additional case not mentioned in paper!? is this needed? TOD2*
     else if (av[parent_tree[u]].inlabel == inlabel_z) {
-        std::cout << "parent is xhat" << std::endl;
+        //std::cout << "parent is xhat" << std::endl;
         xhat=parent_tree[u];
     }
     else {
         int w = -1;
         int trimmed_ancestor = (1 << jz) - 1;
-        std::cout << "trimmed ancestor : " << trimmed_ancestor << std::endl;
+        //std::cout << "trimmed ancestor : " << trimmed_ancestor << std::endl;
         int k = l1(av[u].ascendant & trimmed_ancestor); //TOD2* is the xor with inlabelz needed?  //((1 << l1(inlabel_z))-1)
         //int k = l1(av[u].ascendant);
-        std::cout << "get hat k is " << k << std::endl;
+        //std::cout << "get hat k is " << k << std::endl;
         int mask =-1 ^ ((1 << k)-1);
         int inlabel_w = (av[u].inlabel & mask) | (1 << k);
-        std::cout << "in label w is " << inlabel_w << std::endl;
+       // std::cout << "in label w is " << inlabel_w << std::endl;
         w = head[inlabel_w];
         xhat = parent_tree[w];
 
@@ -387,14 +361,14 @@ T query(parlay::sequence<T>& head, parlay::sequence<T>& parent_tree,parlay::sequ
     auto i_pair = get_imax(av,u,v);
     int imax = i_pair.first;
 
-    std::cout << "imax is " << imax << std::endl;
+    //std::cout << "imax is " << imax << std::endl;
 
     int mask = -1 ^ ((1 << imax) - 1); //zeroes in positions smaller than imax, 1s everywhere else
     //i_pair.second is the index of the vertex from which we take the base inlabel (the l-i leftmost bits)
-    std::cout << "mask: " << mask << std::endl;
-    std::cout << "chosen inlabel: " << av[i_pair.second].inlabel << std::endl;
+    //std::cout << "mask: " << mask << std::endl;
+    //std::cout << "chosen inlabel: " << av[i_pair.second].inlabel << std::endl;
     int b = ((av[i_pair.second].inlabel & mask) & (-1 - (1 << imax) + 1)) | (1 << imax);
-    std::cout << "b is " << b << std::endl;
+   // std::cout << "b is " << b << std::endl;
     //TODO* test b is correct; test z is correct; etc.
 
     auto output = get_inlabelz(av,u,v,imax);
@@ -402,13 +376,13 @@ T query(parlay::sequence<T>& head, parlay::sequence<T>& parent_tree,parlay::sequ
     int jz = output.second;
 
 
-    std::cout << "z's in label is " << inlabel_z << std::endl;
+   // std::cout << "z's in label is " << inlabel_z << std::endl;
 
   
     int xhat=get_hat(head,parent_tree,av,u,inlabel_z,jz);
     int yhat=get_hat(head,parent_tree,av,v,inlabel_z,jz);
 
-    std::cout << "uhat is " << xhat << ", " << "vhat is " << yhat << std::endl;
+    //std::cout << "uhat is " << xhat << ", " << "vhat is " << yhat << std::endl;
 
     if (av[xhat].level <= av[yhat].level) {
         return xhat;
@@ -430,3 +404,5 @@ T query(parlay::sequence<T>& head, parlay::sequence<T>& parent_tree,parlay::sequ
 
 //     }
 // }
+
+#endif
