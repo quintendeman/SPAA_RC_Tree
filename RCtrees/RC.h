@@ -1250,7 +1250,7 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
 }
 
 
-
+//get the base edge associated with 2 vertices
 template<typename T, typename D>
 node<T,D>* get_edge(T v, T w, parlay::sequence<cluster<T,D>>& clusters, unsigned char level = 0)
 {
@@ -1527,6 +1527,7 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, 
 {   
 
     // TODO merge  with up pass
+    //bottom up, mark how many children entering each parent 
     auto edge_ptrs = parlay::tabulate(edges.size(), [&] (T i){
         T v = std::get<0>(edges[i]);
         T w = std::get<1>(edges[i]);
@@ -1547,6 +1548,7 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, 
 
         while(cluster_ptr != nullptr)
         {
+            //the first fetch add will see a value of 0, and return 0 (false) allowing the while loop to continue; the other fetch adds will see a value >0 and return >0 (true), triggering the break
             if(cluster_ptr->counter.fetch_add(1))
                 break;
             cluster_ptr = cluster_ptr->get_parent();
@@ -1557,7 +1559,7 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, 
     });
 
 
-
+    //bottom up pass, update the weights
     parlay::parallel_for(0, edge_ptrs.size(), [&] (T i) {
         if(edge_ptrs[i] == nullptr)
             return;
@@ -1569,8 +1571,10 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, 
         // decrement counter
         while(cluster_ptr != nullptr)
         {
+            //only let the final ptr go through
             if(cluster_ptr->counter.fetch_add(-1) > 1)
                 break;
+            //no need to update base edge; only update internal nodes
             if(cluster_ptr != start)
             {
                 D final_val = defretval; 

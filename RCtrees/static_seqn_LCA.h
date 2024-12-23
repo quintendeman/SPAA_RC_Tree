@@ -32,6 +32,7 @@ int r1(T x) {
 }
 
 //get index of leftmost 1
+//note: cannot plug bitset in here, must plug in number type
 template<typename T>
 int l1(T x) {
     if ( x < 0) {

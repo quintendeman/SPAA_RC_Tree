@@ -1,15 +1,16 @@
 # Variables
 CXX = g++
 CXXFLAGS = -O0 -std=c++17 -pthread -g -Werror -Wparentheses
-INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/
+#must include -I (includes) before each new item!
+INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/ -I include/ 
 LDFLAGS = -ljemalloc
 TARGET = RC.out
 SRC = RC.cpp
 
 TARGET2 = LCA.out
 SRC2 = LCA.cpp
-RC_DEPS = RC.h cluster.h RCdynamic.h adjacency_linked_list.h 
-LCA_DEPS = LCA.h VanillaLCA.h 
+RC_DEPS = RC.h cluster.h RCdynamic.h adjacency_linked_list.h RC_test.h 
+LCA_DEPS = LCA.h VanillaLCA.h static_seqn_LCA.h static_par_LCA.h 
 
 # Default target
 all: $(TARGET)

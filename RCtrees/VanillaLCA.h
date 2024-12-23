@@ -69,6 +69,30 @@ void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int&
     }
 }
 
+
+void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int& NUM_TREES, int& BATCH_SIZE) {
+    for (int i = 1; i < argc; i++) {
+        std::string arg=argv[i];
+        if (arg=="-n" && i+1 < argc) {
+            n=std::stoi(argv[i+1]);
+
+        }
+        if (arg=="-trials" && i+1 < argc) {
+            NUM_TRIALS=std::stoi(argv[i+1]);
+        }
+        if (arg=="-seed" && i+1 < argc) {
+            seed=std::stoi(argv[i+1]);
+        }
+        if (arg=="-trees" && i+1 < argc) {
+            NUM_TREES=std::stoi(argv[i+1]);
+        }
+        if (arg=="-k" && i+1 < argc) {
+            BATCH_SIZE=std::stoi(argv[i+1]);
+        }
+
+    }
+}
+
 template<typename T>
 void print_parent_tree(parlay::sequence<T>& tree, std::string message) {
     std::cout << message << std::endl;
@@ -172,15 +196,10 @@ T vanilla_lca(parlay::sequence<T>& tree, T u, T v, T r) {
 
 }
 
-//get arbitrary root from base root
-//r is the true root of the tree
-//rprime is the root around which we wish to orient our answer
+
+//given 3 LCAs, LCA(u,v) LCA(u,r) LCA(v,r), find LCA(u,v,r)
 template<typename T>
-T unrooted_lca(parlay::sequence<T>& parent_tree, T u, T v, T r, T rprime) {
-    auto lca_uv = vanilla_lca(parent_tree,u,v,r);
-    auto lca_urp = vanilla_lca(parent_tree,u,rprime,r);
-    auto lca_vrp = vanilla_lca(parent_tree,v,rprime,r);
-    //return the lca that is different (which also happens to be deeper in the original tree)
+T logic_lca(T lca_uv, T lca_urp, T lca_vrp) {
     if (lca_uv == lca_urp) {
         return lca_vrp;
     }
@@ -190,7 +209,21 @@ T unrooted_lca(parlay::sequence<T>& parent_tree, T u, T v, T r, T rprime) {
     else {
         return lca_urp;
     }
+
 }
+
+//get arbitrary root from base root
+//r is the true root of the tree
+//rprime is the root around which we wish to orient our answer
+template<typename T>
+T unrooted_lca(parlay::sequence<T>& parent_tree, T u, T v, T r, T rprime) {
+    auto lca_uv = vanilla_lca(parent_tree,u,v,r);
+    auto lca_urp = vanilla_lca(parent_tree,u,rprime,r);
+    auto lca_vrp = vanilla_lca(parent_tree,v,rprime,r);
+    //return the lca that is different (which also happens to be deeper in the original tree)
+    return logic_lca(lca_uv,lca_urp,lca_vrp);
+}
+
 
 //note that we are NOT passing child_tree by reference, to get a new copy as the undirected graph
 template<typename T>
@@ -254,12 +287,17 @@ T true_unrooted_lca(parlay::sequence<parlay::sequence<T>>& unrooted_tree,T u, T 
 //O(d) depth, where d is height of tree
 //O(nd) work
 //la = level ancestors
+//max_level = depth of tree (to know how many ancestors to hold)
+//TOD2* space inefficient, because shallower children need less space than deep children
+template<typename T>
 parlay::sequence<parlay::sequence<T>> preprocess_la(parlay::sequence<T>& parent_tree,parlay::sequence<LCAnode<T>>& av, T root) {
-    parlay::sequence<parlay::sequence<T>> table(parent_tree.size(),parlay::sequence<T>(av.level+1,-1));
+    parlay::sequence<parlay::sequence<T>> table = parlay::tabulate(parent_tree.size(),[&] (size_t i) {return parlay::sequence<T>(av[i].level+1,-1);});
     
     parlay::parallel_for(0,parent_tree.size(),[&] (size_t i) {
         int count = 0;
         T val = i;
+        table[i][count]=val; //need duplicate here, in case val is root
+
         while (val != root) {
             table[i][count]=val;
             count += 1;
@@ -271,6 +309,7 @@ parlay::sequence<parlay::sequence<T>> preprocess_la(parlay::sequence<T>& parent_
 }
 
 //use the lookup table to get the i^{th} ancestor of node
+template<typename T>
 T query_la(parlay::sequence<parlay::sequence<T>>& table, T node, int ith) {
     return table[node][ith];
 }
