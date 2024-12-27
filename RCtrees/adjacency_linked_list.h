@@ -22,6 +22,8 @@ const int contracts_this_round = 2048;
 const int dont_finalize = 4096;
 const int update_eligible = 8192;
 const int one_sided = 8192 * 2;
+const int is_marked = 8192 * 4;
+const int is_marked_endpoint = 8192 * 8;
 
 const int max_neighbours = 3;
 
@@ -218,7 +220,7 @@ class adjacency_list
             while(this->delete_tail() != nullptr);
         }    
 
-        node<T,D>* get_head()
+        node<T,D>* get_head() const
         {
             return this->head;
         }

@@ -9,7 +9,7 @@
 #include "../include/parlay/sequence.h"
 #include <atomic>
 
-
+  
 const char neighbour_type = 1;
 const char parent_type = 2;
 const char child_type = 4;
@@ -73,8 +73,16 @@ public:
     std::array<cluster<T,D>*, max_neighbours> children;
     node<T,D>* first_contracted_node = nullptr;
     D data;
-    short finalize_time = 0; // TODO remove
-    short asked_to_increment = 0; // TODO remove
+
+    cluster<T,D>* max_weight_edge = nullptr;
+    std::array<std::pair<T,D>, max_neighbours> CGGraphEntry;
+    std::array<cluster<T,D>*, max_neighbours> CGGraphEdgePtr;
+    std::array<std::atomic<bool>, max_neighbours> CGEntryValid;
+    T vertex_count = 0;
+
+
+    // short finalize_time = 0; // TODO remove
+    // short asked_to_increment = 0; // TODO remove
     int state;
 
     cluster(void) : counter(0)
@@ -103,6 +111,52 @@ public:
     cluster<T,D>* get_parent()
     {
         return this->parent;
+    }
+
+    void insertCGentry(T other_index, D value, cluster<T,D>* corresponding_edge)
+    {
+        // std::cout << "Inserting " << this->index << " -- " << other_index << " " << value << "/" << corresponding_edge->data << "@" << corresponding_edge->index << std::endl;
+        for(unsigned int i = 0; i < max_neighbours; i++)
+        {
+            bool expected = false;
+            bool desired = true;
+            bool success = this->CGEntryValid[i].compare_exchange_strong(expected, desired);
+            if(success)
+            {
+                CGGraphEntry[i].first = other_index;
+                CGGraphEntry[i].second = value;
+                CGGraphEdgePtr[i] = corresponding_edge;
+                return;
+            }
+        }
+    }
+
+    void clearCGgraphEntry(T other_index)
+    {
+        for(unsigned int i = 0; i < max_neighbours; i++)
+        {
+            if(CGGraphEntry[i].first == other_index)
+                CGEntryValid[i] = false;
+        }
+    }
+
+    void clearCGALL()
+    {
+        for(unsigned int i = 0; i < max_neighbours; i++)
+        {
+            CGEntryValid[i] = false;
+        }
+    }
+
+    short getCGNumEdges()
+    {
+        short retnum = 0;
+        for(unsigned int i = 0; i < max_neighbours; i++)
+        {
+            if((CGEntryValid[i] == true) && (CGGraphEntry[i].first > this->index))
+                retnum++;
+        }
+        return retnum;
     }
 
     
@@ -215,7 +269,7 @@ public:
         }
     }
 
-    void find_boundary_vertices(cluster<T,D>*& left, D& lval, cluster<T,D>*& right, D& rval, D defretval, short level = -1)
+    void find_boundary_vertices(cluster<T,D>*& left, D& lval, cluster<T,D>*& right, D& rval, D defretval, short level = -1) //TODO convert to return a struct, this is irritating
     {
         left = right = nullptr;
         lval = rval = defretval;
@@ -276,21 +330,31 @@ public:
             std::cout << "IT SHOULD NEVER REACH HERE" << std::endl;
             exit(1);
         }
-
     }
-
+    
     void print(unsigned char level = -1)
     {
-        
-        std::cout << this->index << " " << reset;
+        if(this->state & is_marked_endpoint)
+            std::cout << italic << red << this->index << " " << reset;
+        else if(this->state & is_marked)
+            std::cout << bright_red << this->index << " " << reset;
+        else
+            std::cout << this->index << " " << reset;
         std::cout << bright_white <<  this->get_height() << " " << reset;
         std::cout << bright_green << this->data << " " << reset;
+        std::cout << bright_magenta << this->counter << " " << reset;
         std::cout << bright_yellow;
         if(this->parent)
             std::cout << this->parent->index << " ";
         else
             std::cout << "nl ";
         std::cout << reset;
+
+        if(this->max_weight_edge)
+            std::cout << max_weight_edge->index << "/" << max_weight_edge->data;
+        else
+            std::cout << "nl/-";
+        std::cout << " ";
 
         std::cout << bold << blue << "[ ";
         for(auto& child : this->children)
@@ -368,6 +432,20 @@ node<T,D>* get_other_side(node<T,D>* myself, node<T,D>* edge_ptr)
     }
     else
         return nullptr;
+}
+
+template<typename T, typename D>
+short get_parent_child_index(cluster<T,D>* cluster_ptr)
+{
+    if(cluster_ptr == nullptr || cluster_ptr->parent == nullptr)
+        return -1;
+    for(short k = 0; k < max_neighbours; k++)
+    {
+        auto& child = cluster_ptr->parent->children[k];
+        if(child == cluster_ptr)
+            return k;
+    }
+    return -1;
 }
 
 

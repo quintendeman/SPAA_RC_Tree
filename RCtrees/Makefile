@@ -1,21 +1,28 @@
 # Variables
 CXX = g++
-CXXFLAGS = -O0 -std=c++17 -pthread -g -Werror -Wparentheses
+CXXFLAGS = -O3 -flto -std=c++17 -pthread -g -Werror -Wparentheses
 INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/
 LDFLAGS = -ljemalloc
 TARGET = RC.out
 SRC = RC.cpp
 
 # Default target
-all: $(TARGET)
+all: RC.out testMST.out testTreeGen.out
 
 # Rule to build the target
-$(TARGET): $(SRC) RC.h cluster.h RCdynamic.h adjacency_linked_list.h
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $(TARGET) $(SRC)
+RC.out: RC.cpp RC.h cluster.h RCdynamic.h adjacency_linked_list.h incMST.h
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o RC.out RC.cpp
+
+testMST.out: testMST.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o testMST.out testMST.cpp
+
+testTreeGen.out: testTreeGen.cpp treeGen.h RC.cpp RC.h cluster.h RCdynamic.h adjacency_linked_list.h 
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o testTreeGen.out testTreeGen.cpp
+
 
 # Clean up build files
 clean:
-	rm -f $(TARGET)
+	rm -f RC.out testMST.out
 
 # Phony targets
 .PHONY: all clean
