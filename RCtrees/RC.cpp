@@ -79,7 +79,7 @@ parlay::sequence<std::tuple<vertex,vertex,double>> generate_random_edges(const p
     });
 
 
-    int num_samples = 3;
+    int num_samples = 3 + (rand() % 100);
     new_edges = parlay::tabulate(parents.size() / num_samples, [&] (vertex i) {
         auto my_index = i * num_samples;
         auto parent_index = my_index - num_samples/2;
@@ -105,9 +105,10 @@ int main(int argc, char* argv[]) {
 
     srand(time(NULL));
 
-    const vertex max_rand_size = 12000000l;
-    vertex graph_size = rand() % max_rand_size; 
-    for(unsigned short i = 0; i < 5; i++) // random but leaning more towards higher values
+    const vertex max_rand_size = 100000000l;
+    // vertex graph_size = rand() % max_rand_size; 
+    vertex graph_size = 1; 
+    for(unsigned short i = 0; i < 3; i++) // random but leaning more towards higher values
     {
         vertex tg = rand() % max_rand_size;
         if (tg > graph_size)
@@ -170,7 +171,11 @@ int main(int argc, char* argv[]) {
     // Measure creation time
     auto start_creation = std::chrono::high_resolution_clock::now();
     create_base_clusters(G, clusters, max_degree);
-    create_RC_tree(clusters, graph_size, randomized);
+    // create_RC_tree(clusters, graph_size, randomized);
+
+    double defretval = 0.0;
+    create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;}, randomized);
+
     auto end_creation = std::chrono::high_resolution_clock::now();
 
     insert_random_weights(parents, clusters);

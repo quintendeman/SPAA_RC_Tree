@@ -555,8 +555,8 @@ std::pair<parlay::sequence<std::tuple<T,T,D>>, parlay::sequence<std::pair<T,T>>>
         write_vertices(relevant_null_clusters[i], per_forest_vertices[i], vertices, clusters);
     });
 
-    verifyCompressPathTree(clusters, newEdges, vertices); // TODO REMOVE!!
-    checkCGEdgesValid(vertices, clusters); // TODO also remove!!
+    // verifyCompressPathTree(clusters, newEdges, vertices); // TODO REMOVE!!
+    // checkCGEdgesValid(vertices, clusters); // TODO also remove!!
 
     parlay::sequence<T> edge_counts = parlay::tabulate(vertices.size(), [&] (T i) {
         auto cluster_ptr = &clusters[vertices[i]];

@@ -382,7 +382,7 @@ class TreeGen
             }
             else if(dist == exponential)
             {
-                // std::cout << "Going exponential" << std::endl;
+                std::cout << "Going exponential" << std::endl;
                 parlay::random_generator gen(15213); // CMU's postal code
                 std::exponential_distribution<double> dis(1/mean);
                 // std::geometric_distribution<T> dis(0.01);

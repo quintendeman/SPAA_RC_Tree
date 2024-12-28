@@ -18,6 +18,13 @@
 
 static const char PRINT_QUERY = 0;
 
+template <typename edgetype>
+struct edge_with_flag
+{
+    edgetype E;
+    bool valid = true;
+};
+
 /*
     Generate a simple, single rooted graph with each node having two children
     Then, randomly, change the parent of each node with a certain probability such that it picks something on the left of it
@@ -367,7 +374,7 @@ void contract(node<T,D>* node_ptr, bool affect = false)
             finalize(node_ptr);
         }
     }
-    else if(node_ptr->get_num_neighbours_live() == 1)
+    else if(node_ptr->get_num_neighbours_live() == 1) // unary
     {
         node<T,D>* neighbour_node;
         node<T,D>* edge_node;
@@ -512,6 +519,7 @@ void contract(node<T,D>* node_ptr, bool affect = false)
  * The first n are base_vertex clusters
  * it returns an array of n clusters corresponding to the original n vertices.
  * The edge clusters are present as edges.
+ * No weights
 */
 template <typename T, typename D>
 void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequence<cluster<T, D> > &base_clusters, const T max_size, D defretval = 0.00f)
@@ -589,6 +597,144 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
     return;
 }
 
+template<typename T, typename D>
+void create_base_clusters(parlay::sequence<cluster<T,D>>& base_clusters, parlay::sequence<std::tuple<T,T,D>> initial_edges, const T max_degree, const T num_vertices)
+{
+    using cluster_allocator = parlay::type_allocator<cluster<T,D>>;
+    // parlay::sequence<cluster<T,D>> base_clusters 
+    // auto& base_clusters = empty_clusters;
+    base_clusters = parlay::tabulate(num_vertices, [] (T i) {
+        cluster<T,D> base_cluster;
+        // base_cluster.add_empty_level(live, 0);
+        // return base_cluster;
+        return base_cluster;
+    });
+    // TODO merge with above?
+    parlay::parallel_for(0, base_clusters.size(), [&] (T i) {
+        base_clusters[i].add_empty_level(live, 0);
+        base_clusters[i].state = base_vertex | live;
+        base_clusters[i].index = i;
+        
+    });
+
+    auto edges_wflag = parlay::tabulate(initial_edges.size(), [&] (T i) {
+        edge_with_flag<std::tuple<T, T, D>> ret_edge;
+        ret_edge.valid = true;
+        ret_edge.E = initial_edges[i];
+        return std::move(ret_edge);
+    });
+
+    while(edges_wflag.size())
+    {
+        // std::cout << "left side add edge sizes " << edges_wflag.size() << std::endl;
+        parlay::parallel_for(0, edges_wflag.size(), [&] (T i) {
+            auto& edge = edges_wflag[i].E;
+            T v = std::get<0>(edge);
+            T w = std::get<1>(edge);
+            D weight = std::get<2>(edge);
+            assert(v >= 0 && v < num_vertices);
+            assert(w >= 0 && w < num_vertices);
+
+            if(v < w)
+                std::swap(v, w); // have a consistent view
+            base_clusters[v].tiebreak = i + 1; // 
+        });
+
+        parlay::parallel_for(0, edges_wflag.size(), [&] (T i) {
+            auto& edge = edges_wflag[i].E;
+            T v = std::get<0>(edge);
+            T w = std::get<1>(edge);
+            D weight = std::get<2>(edge);
+            if(v < w)
+                std::swap(v, w); // have a consistent view
+            if(base_clusters[v].tiebreak != i + 1)
+                return;
+            edges_wflag[i].valid = false;
+
+            // std::string print_string = std::to_string(v) + " -- " + std::to_string(w) + " tiebreak succeeded\n";
+            // std::cout << print_string;
+
+            auto edge_cluster = cluster_allocator::alloc();
+            edge_cluster->index = -1;
+            edge_cluster->state = base_edge | live;
+            edge_cluster->data = weight;
+            edge_cluster->max_weight_edge = edge_cluster;
+            edge_cluster->add_empty_level(live | base_edge, 0);
+            assert(base_clusters[v].adjacency.get_tail());
+            assert(base_clusters[w].adjacency.get_tail());
+            
+            edge_cluster->add_ptr_to_highest_level(base_clusters[v].adjacency.get_tail());
+            edge_cluster->add_ptr_to_highest_level(base_clusters[w].adjacency.get_tail());
+            base_clusters[v].add_ptr_to_highest_level(edge_cluster->adjacency.get_tail());
+
+        });
+
+        edges_wflag = parlay::filter(edges_wflag, [] (auto ewf) {return ewf.valid;});
+
+    }
+
+    edges_wflag = parlay::tabulate(initial_edges.size(), [&] (T i) {
+        edge_with_flag<std::tuple<T, T, D>> ret_edge;
+        ret_edge.valid = true;
+        ret_edge.E = initial_edges[i];
+        return std::move(ret_edge);
+    });
+
+    while(edges_wflag.size())
+    {
+        // std::cout << "right side add edge sizes " << edges_wflag.size() << std::endl;
+        parlay::parallel_for(0, edges_wflag.size(), [&] (T i) {
+            auto& edge = edges_wflag[i].E;
+            T v = std::get<0>(edge);
+            T w = std::get<1>(edge);
+            D weight = std::get<2>(edge);
+            assert(v >= 0 && v < num_vertices);
+            assert(w >= 0 && w < num_vertices);
+
+            if(v < w)
+                std::swap(v, w); // have a consistent view
+            base_clusters[w].tiebreak = i + 1; // 
+        });
+
+        parlay::parallel_for(0, edges_wflag.size(), [&] (T i) {
+            auto& edge = edges_wflag[i].E;
+            T v = std::get<0>(edge);
+            T w = std::get<1>(edge);
+            D weight = std::get<2>(edge);
+            if(v < w)
+                std::swap(v, w); // have a consistent view
+            if(base_clusters[w].tiebreak != i + 1)
+                return;
+            edges_wflag[i].valid = false;
+
+            // std::string print_string = std::to_string(v) + " -- " + std::to_string(w) + " tiebreak succeeded\n";
+            // std::cout << print_string;
+            // std::cout << v << " -- " << w << " tiebreak succeeded" << std::endl;
+
+            auto v_node_ptr = base_clusters[v].adjacency.get_tail();
+            auto w_node_ptr = base_clusters[w].adjacency.get_tail();
+
+            // base_clusters[v] should have myself
+            for(auto& ptr : v_node_ptr->adjacents)
+            {
+                assert(ptr); // it should have already added me 
+                if(get_other_side(v_node_ptr, ptr) == w_node_ptr)
+                {
+                    base_clusters[w].add_ptr_to_highest_level(ptr);
+                    return;
+                }
+            }
+            assert(false && "Shouldn't reach here, no joining edge founf");
+        });
+
+        edges_wflag = parlay::filter(edges_wflag, [] (auto ewf) {return ewf.valid;});
+    }
+
+    // printTree(base_clusters);
+
+    return;
+
+}
 
 /**
  * Make sure the base clusters are consistent i.e. that every neighbour of mine has me as their neighbour too
@@ -814,8 +960,8 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
  * defretval is the default data stored in a cluster
 */
 
-template <typename T, typename D>
-void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool randomized = false, D defretval = 0.00f)
+template <typename T, typename D, typename lambdafunc>
+void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defretval, lambdafunc assocfunc, bool randomized = false)
 {
 
 
@@ -849,6 +995,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
         parlay::parallel_for(0, candidates.size(), [&] (T i){
             candidates[i]->cluster_ptr->first_contracted_node = candidates[i]->prev;
             contract(candidates[i]);
+            accumulate(candidates[i], defretval, assocfunc);
         });
 
         
@@ -863,7 +1010,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, bool ra
         //     printTree(base_clusters);
     
         
-        std::cout << "[" << count  << "]: " << bold << tree_nodes.size() << reset << std::endl;
+        // std::cout << "[" << count  << "]: " << bold << tree_nodes.size() << reset << std::endl;
         count++;
     }while(tree_nodes.size() > 0 && count < 100);
 

@@ -404,7 +404,12 @@ public:
                         for(const auto& nbr_node : nbr_nodes_list)
                             if(nbr_node != nullptr && nbr_node->cluster_ptr->index != this->index)
                                 std::cout << nbr_node->cluster_ptr->index << " ";
+                            // else if(nbr_node != nullptr)
+                            //     std::cout << "x" << nbr_node->cluster_ptr->index << "";
+                            
                     }
+                    // else
+                    //     std::cout << "nl ";
                     std::cout << " ";
                 }
                 

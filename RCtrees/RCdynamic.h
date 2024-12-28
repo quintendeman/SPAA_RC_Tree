@@ -12,12 +12,7 @@
 
 static const char PRINT_DYNAMIC = 0;
 
-template <typename edgetype>
-struct edge_with_flag
-{
-    edgetype E;
-    bool valid = true;
-};
+
 
 
 template<typename T, typename D>
@@ -644,8 +639,8 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     
     // auto frontier = get_3dp1(tree_nodes); // NOT to be confused with the frontier in the paper
 
-    std::cout << "endpoints size is " << tree_nodes.size() << std::endl;
-    std::cout << "frontier size is " << frontier.size() << std::endl;
+    // std::cout << "endpoints size is " << tree_nodes.size() << std::endl;
+    // std::cout << "frontier size is " << frontier.size() << std::endl;
     
     frontier = parlay::filter(frontier, [] (auto node_ptr){
         if(first_condition(node_ptr) || second_condition(node_ptr) || third_condition(node_ptr))
@@ -662,7 +657,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     //         frontier[i]->state |= affected;
     // });
 
-    std::cout << "Which gets reduced to " << frontier.size() << std::endl;
+    // std::cout << "Which gets reduced to " << frontier.size() << std::endl;
     
     // create_decompressed_affected(frontier);
     parlay::sequence<node<T,D>*> mis_set;
@@ -804,12 +799,12 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
 
         
 
-        std::cout << "Dynamic Frontier ["  << count << "]  size " << frontier.size() << std::endl;        
+        // std::cout << "Dynamic Frontier ["  << count << "]  size " << frontier.size() << std::endl;        
 
         count++;
     }while(count < max_count && frontier.size());
 
-    std::cout << "[dynamic] exited" << std::endl;
+    // std::cout << "[dynamic] exited" << std::endl;
 
     check_parents_children(clusters); // todo remove
 
