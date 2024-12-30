@@ -123,8 +123,8 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int BATCH_SIZE, std::mt19937
 int main(int argc, char* argv[]) {
     std::cout << "hello world!3" << std::endl;
 
-    int n=10; //defaults
-    int NUM_TRIALS=1;
+    int n = 10; //defaults
+    int NUM_TRIALS = 1;
     int NUM_TREES = 1;
     int BATCH_SIZE = 1;
     int seed = 42; //fixed seed for easier testing

@@ -289,9 +289,11 @@ public:
         }
         std::cout << "] " << reset;
 
+
         // for(auto i = 0; i < (this->adjacency.get_head()->state & affected ? 2 :  this->adjacency.size()); i++)
         for(volatile auto i = 0; i < this->adjacency.size(); i++)
         {
+
             if(level != -1 && i == level)
                 break;
             const auto& node_ptr_arr = this->adjacency[i]->adjacents;

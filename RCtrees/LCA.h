@@ -109,9 +109,9 @@ T instack_choose_boundary(T s, parlay::sequence<cluster<T,D>>& clusters, LCAhelp
 
   
 
-    std::cout << "instack choose boundary " << cur->index << std::endl;
+    std::cout << "instack choose boundary for vertex " << cur->index << std::endl;
     // std::cout << "parent pointer " << parent << std::endl;
-    std::cout << "parent index " << parent->index << std::endl;
+    std::cout << "parent index of " << cur->index << " is " << parent->index << std::endl;
 
     //if parent is root, then the root is the desired boudary
     if (parent->index == h.root->index) {
@@ -176,7 +176,7 @@ T instack_choose_boundary(T s, parlay::sequence<cluster<T,D>>& clusters, LCAhelp
     else { //PARENT is unary cluster
         std::cout << "parent is unary "<< std::endl;
 
-        if (left->index != right->index) { //then kid is binary cluster, in which case we want to return the parent cluster
+        if (child_left->index != child_right->index) { //then kid is binary cluster, in which case we want to return the parent's boundary 
             return *index_map.Find(left->index);
         }
         else { //kid is unary cluster, return the kid's only boundary vertex (the parent)
@@ -197,7 +197,7 @@ T instack_choose_boundary(T s, parlay::sequence<cluster<T,D>>& clusters, LCAhelp
 template<typename T, typename D>
 void find_closest_boundary(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>& h,parlay::parlay_unordered_map<T,T>& index_map) {
 
-    std::cout << "h3.11" << std::endl;
+    //std::cout << "h3.11" << std::endl;
 
     h.closest_boundary = parlay::sequence<T>(h.sn,-1);
     parlay::sequence<T> stack;
@@ -205,7 +205,7 @@ void find_closest_boundary(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T
     // std::cout << "alt index is " << *index_map.Find(h.root->index) << std::endl;
     stack.push_back(*index_map.Find(h.root->index));
 
-    std::cout << "h3.12" << std::endl;
+    //std::cout << "h3.12" << std::endl;
 
     parlay::sequence<parlay::sequence<T>> new_stack;
     int count = 0;
@@ -299,7 +299,7 @@ void get_ancestor_bitset(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D
     int r = *index_map.Find(h.root->index);
     stack.push_back(r);
     //nullary is 0
-    for (int iter = 0; iter < h.max_level; iter++) {
+    for (int iter = 0; iter < h.max_level+1; iter++) {
         parlay::sequence<parlay::sequence<T>> new_stack=parlay::sequence(stack.size(),parlay::sequence<T>());
 
         parlay::parallel_for(0,stack.size(),[&] (size_t i) {
@@ -327,26 +327,38 @@ void get_ancestor_bitset(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D
 //bitset is for u, helps us find the highest unary cluster
 //TOD2* can I special set the bitset to not a fixed constant? Need to mess with at some point
 //uses level ancestors as a subroutine
+//takes in index u on CLUSTERS
 //returns as index on CLUSTERS not on alt_tree
 template<typename T, typename D>
 T closest_on_cluster_path(parlay::sequence<cluster<T,D>>& clusters, cluster<T,D>* B, T u, LCAhelper<T,D>& h,parlay::parlay_unordered_map<T,T>& index_map) {
-    std::bitset<50> ubits=h.bitsets[u];
+    std::cout << "running closest on cluster path for " << u  << " in " << B->index << std::endl;
+
+    std::bitset<50> ubits=h.bitsets[*index_map.Find(u)]; //TOD2* correct fixed size for larger tree depths
+
+    std::cout << "ubits is " << ubits.to_ulong() << std::endl;
+
     int u_level = h.augmented_vertices[*index_map.Find(u)].level; //U's level in RC tree
     int b_level = h.augmented_vertices[*index_map.Find(B->index)].level;
     if (u_level < b_level) {
         std::cout << "error, B is ancestor of U in cluster path check" << std::endl;
         exit(1001);
     }
+
+    std::cout << u << " level: " << u_level << ", " << B->index << " level: " << b_level << std::endl;
+
     //zero out all but the first u_level+1 bits
     //TOD2* is casting to *unsigned* long an issue? vs signed long? (bitset only offers unsigned cast, I'd need to do an additional cast on top of it)
     std::bitset<50> rel_bits = ubits.to_ulong() & ((1 << (u_level+1))-1);
+
     //zero out any bits before bit b_level
-    rel_bits = (rel_bits.to_ulong() / (1 << b_level)) * (1 << b_level);
+    rel_bits = (rel_bits.to_ulong() / (1 << (b_level) )) * (1 << (b_level) );
     
-    if (rel_bits.to_ulong() == 0) { //if there are no unary clusters in this range, u itself must be on the cluster path
+    if (rel_bits.to_ulong() == 0) { //if there are no unary clusters in this range, u itself must be on the cluster path TOD2* b itself must be the best node on cluster path?
+        std::cout << "no unary clusters on path, return b itself" << std::endl;
         return u;
     }
     else { //there are at least 1 unary cluster, in which case use level ancestors on the highest one
+        std::cout << "at least one unary cluster on path " << std::endl;
         int bit_level = l1(rel_bits.to_ulong()); //leftmost (highest) unary cluster
         int ancestor_comp_level = u_level - (bit_level + b_level); //the i^th ancestor of u
         T highest_unary = query_la(h.la_table,*index_map.Find(u),ancestor_comp_level);
@@ -363,7 +375,9 @@ T closest_on_cluster_path(parlay::sequence<cluster<T,D>>& clusters, cluster<T,D>
 //return as a CLUSTER index
 template<typename T, typename D>
 T highest_ancestor_in_cluster(T b, T f, parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>& h,parlay::parlay_unordered_map<T,T>& index_map) {
-    if (b==f) return f; //if common boundary is the cluster, then return itself?
+    if (b==f) {
+        return f; //if common boundary is the cluster, then return itself?
+    }
     //std::cout << "high ancestor " << "b: " << b << ", f: " << f << std::endl;
     for (int i = 0; i < clusters[b].children.size(); i++) {
         cluster<T,D>* child = clusters[b].children[i];
@@ -404,10 +418,10 @@ bool is_cluster_between(T b, T f, parlay::sequence<cluster<T,D>>& clusters, LCAh
     cluster<T,D>* right;
     clusters[b].find_boundary_vertices(left,def_val,right,def_val,def_val);
 
-    std::cout << "Asking the question is cluster " << b << "between " << f << " and root?" << std::endl;
-    std::cout << "highest ancestor of f (or f itself) descended from b is " << x << std::endl;
-    std::cout << "the boundary of x in direction of root is " << x_boundary_rd << std::endl;
-    std::cout << "the boundary of b are " << left->index << " " << right->index << std::endl;
+    std::cout << "Asking the question is cluster " << b << " between " << f << " and root?" << std::endl;
+    std::cout << "highest ancestor of " << f << "descended from  " << b << " is " << x << std::endl;
+    std::cout << "the boundary of " << x << " in direction of root is " << x_boundary_rd << std::endl;
+    std::cout << "the boundary of " << b << " are " << left->index << " and " << right->index << std::endl;
 
     //if x's boundary facing the root is one of B's boundaries, then x is between so false
     if (x_boundary_rd == left->index || x_boundary_rd == right->index) return false;
@@ -433,20 +447,21 @@ T case_c_is_uv(parlay::sequence<cluster<T,D>>& clusters,parlay::sequence<std::tu
         return c;
     }
 
-    T chosen_vertex = u; //which of u or v c is equal to
-    if (c==v) chosen_vertex=v;
-
-    T x = highest_ancestor_in_cluster(c,chosen_vertex,clusters,h,index_map);
+    //here, the chosen vertex is the vertex that is NOT equal to c
+    T other_vertex = u; //which of u or v c is equal to
+    if (c==u) other_vertex=v;
+    //is x well defined, for c==other_vertex? (piont of this call?)
+    T x = highest_ancestor_in_cluster(c,other_vertex,clusters,h,index_map);
 
     if (clusters[x].first_contracted_node->next->state & unary_cluster) { //if X is unary
         return c;
     }
     else { //if X is binary
-        if (is_cluster_between(chosen_vertex,c,clusters,h,index_map)) {
-            return chosen_vertex;
+        if (is_cluster_between(c,other_vertex,clusters,h,index_map)) {
+            return other_vertex;
         }
         else {
-            return closest_on_cluster_path(clusters,&clusters[x],chosen_vertex,h,index_map);
+            return closest_on_cluster_path(clusters,&clusters[x],other_vertex,h,index_map);
 
         }
 
@@ -457,20 +472,20 @@ T case_c_is_uv(parlay::sequence<cluster<T,D>>& clusters,parlay::sequence<std::tu
 //do subcase of LCA query where the common boundary is not u nor v, and none of c,u,v are the root
 template<typename T, typename D>
 T case_c_not_uv(parlay::sequence<cluster<T,D>>& clusters,parlay::sequence<std::tuple<T,T>>& queries, parlay::sequence<T>& answers, int k, LCAhelper<T,D>& h, T c, T u, T v,parlay::parlay_unordered_map<T,T>& index_map) {
-    std::cout << "h4.11" << std::endl;
+  //  std::cout << "h4.11" << std::endl;
     T x = highest_ancestor_in_cluster(c,u,clusters,h,index_map);
-        std::cout << "h4.12" << std::endl;
+   //     std::cout << "h4.12" << std::endl;
 
     T y = highest_ancestor_in_cluster(c,v,clusters,h,index_map);
 
-            std::cout << "h4.125" << std::endl;
+    //       std::cout << "h4.125" << std::endl;
 
     //TOD2* could plug in x/y here, should not change result
     bool u_bet = is_cluster_between(c,u,clusters,h,index_map);
-        std::cout << "h4.13" << std::endl;
+    //    std::cout << "h4.13" << std::endl;
 
     bool v_bet = is_cluster_between(c,v,clusters,h,index_map);
-        std::cout << "h4.14" << std::endl;
+    //    std::cout << "h4.14" << std::endl;
 
     std::cout << "Debugging info for case c not uv " << std::endl;
     std::cout << "u's highest ancestor in c is " << x << std::endl;
@@ -528,9 +543,9 @@ void static_preprocess(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>&
 template<typename T, typename D>
 void RC_preprocess(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<std::tuple<T,T>>& queries, int k, LCAhelper<T,D>& h,parlay::parlay_unordered_map<T,T>& index_map) {
 
-    std::cout << "h3.1" << std::endl;
+    //std::cout << "h3.1" << std::endl;
     find_closest_boundary(clusters,h,index_map);
-    std::cout << "h3.2" << std::endl;
+   //std::cout << "h3.2" << std::endl;
 
    
     //store ancestor information (binary or unary) in a bitset
@@ -542,7 +557,13 @@ void RC_preprocess(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<st
     h.bitsets = parlay::sequence<std::bitset<50>>(h.sn,0); 
     get_ancestor_bitset(clusters,h,index_map);
 
-    std::cout << "h3.3" << std::endl;
+    std::cout << "printing all ancestor bitsets" << std::endl;
+    for (int i = 0 ; i < h.bitsets.size(); i++) {
+        std::cout << i << " " << h.bitsets[i].to_ulong() << std::endl;
+
+    }
+
+   // std::cout << "h3.3" << std::endl;
 
     //get common boundary with static LCA structure. Gives ALT TREE index
     h.common_boundaries = parlay::tabulate(k,[&] (size_t i) {
@@ -552,7 +573,7 @@ void RC_preprocess(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<st
 
     });
 
-    std::cout << "h3.4" << std::endl;
+   // std::cout << "h3.4" << std::endl;
 
 
 }
@@ -564,9 +585,9 @@ void RC_preprocess(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<st
 template<typename T, typename D>
 void batch_fixed_LCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* root, parlay::sequence<std::tuple<T,T>>& queries, parlay::sequence<T>& answers) {
 
-    std::cout << "h1" << std::endl;
+    //std::cout << "h1" << std::endl;
 
-    std::cout << "new call of batch fixed LCA" << std::endl;
+    //std::cout << "new call of batch fixed LCA" << std::endl;
 
     int nc = clusters.size(); //vertices + edges~
     int k = queries.size(); //batch size
@@ -583,7 +604,7 @@ void batch_fixed_LCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* ro
 
     parlay::parlay_unordered_map<T,T> index_map = parlay::parlay_unordered_map<T,T>(2*h.sn); //will get overwritten
 
-    std::cout << "printing involved nodes" <<std::endl;
+    std::cout << "printing involved nodes in form (alt index,original index)" <<std::endl;
     for (int i = 0; i < h.involved_nodes.size(); i++) {
         std::cout << i << " " << h.involved_nodes[i] << std::endl;
     }
@@ -591,11 +612,11 @@ void batch_fixed_LCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* ro
     //create the subset of the tree we are working on (from involved_nodes), the hashmap to get from the RCtree to this alt tree and back
     create_map_trees(clusters,h,index_map);
 
-    std::cout << "h2" << std::endl;
+    //std::cout << "h2" << std::endl;
     //prepare the static data structure (unrelated to RC)
     static_preprocess(clusters,h,index_map);
 
-    std::cout << "h3" << std::endl;
+    //std::cout << "h3" << std::endl;
 
 
     //print_child_tree(h.alt_child_tree,"printing RC subset child tree");
@@ -615,13 +636,13 @@ void batch_fixed_LCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* ro
     }
     std::cout << std::endl;
 
-    std::cout << "h4" << std::endl;
+    //std::cout << "h4" << std::endl;
 
 
 
     batch_fixed_LCA_casework(clusters,queries,answers,k,h,index_map);
 
-    std::cout << "h5" << std::endl << std::endl << std::endl;
+    //std::cout << "h5" << std::endl << std::endl << std::endl;
 
 
 }
@@ -653,10 +674,18 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* root, par
     for (int i = 0; i < answers_uv.size(); i++) {
         std::cout << i << ": " << std::get<0>(queries[i]) << " " << std::get<1>(queries[i]) << " " << std::get<2>(queries[i]) << " " << answers_uv[i] << " " << answers_ur[i] << " " << answers_vr[i] << std::endl;
     }
-
+    std::cout << "Starting 1st query call u v" << std::endl;
     batch_fixed_LCA(clusters,root,queries_uv,answers_uv);
+    std::cout << std::endl << std::endl << std::endl;
+
+    std::cout << "Starting 2nd query call u r" << std::endl;
     batch_fixed_LCA(clusters,root,queries_ur,answers_ur);
+        std::cout << std::endl << std::endl << std::endl;
+
+
+    std::cout << "Starting 3rd query call v r" << std::endl;
     batch_fixed_LCA(clusters,root,queries_vr,answers_vr);
+    std::cout << std::endl << std::endl << std::endl;
 
     std::cout << "answer print" << std::endl;
     for (int i = 0; i < answers_uv.size(); i++) {
