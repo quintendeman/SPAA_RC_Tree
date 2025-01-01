@@ -32,6 +32,56 @@ void set_preorder_par(parlay::sequence<parlay::sequence<T>>& child_tree, T root,
 
     while (stack.size() > 0) {
 
+        // print_augmented_vertices(augmented_vertices); //DEBUGGING
+        // std::cout << "printing stack (set preorder ) " << std::endl;
+        // for (T i : stack) {
+        //     std::cout << i << " ";
+        // }
+        // std::cout << std::endl;
+
+        new_stack = parlay::sequence(stack.size(), parlay::sequence<T>());
+
+        parlay::parallel_for(0,stack.size(),[&] (size_t i) {
+
+            auto s = stack[i];
+            int running_count = augmented_vertices[s].preorder+1;
+            for (T j = 0; j < child_tree[s].size(); j++) {
+                augmented_vertices[child_tree[s][j]].preorder = running_count;
+                running_count += augmented_vertices[child_tree[s][j]].size;
+                //have a stack of stacks to avoid races/concurrent inserts
+                new_stack[i].push_back(child_tree[s][j]);
+
+            }
+
+        });
+
+        //copy over new stack, but flattened for easier access
+        stack = parlay::flatten(new_stack);
+       
+    }
+
+}
+
+
+//traverse the tree in order and mark the preorder field in LCAnode
+//top-down calculation (parallel scan)
+//requires size of subtrees to be already calculated
+//tree in children format
+//child_tree : tree, in child format
+//root : root of tree
+//augmented vertices : list of the additional info stored with vertices (preorder, level, etc.)
+template<typename T>
+void set_preorder_par2(parlay::sequence<parlay::sequence<T>>& child_tree, T root, parlay::sequence<LCAnode<T>>& augmented_vertices) {
+
+    parlay::sequence<T> stack; //stack from which we draw tasks
+    parlay::sequence<parlay::sequence<T>> new_stack; 
+
+    //set initial stack val
+    stack.push_back(root);
+    augmented_vertices[root].preorder=1;
+
+    while (stack.size() > 0) {
+
         //print_augmented_vertices(augmented_vertices); //DEBUGGING
 
         new_stack = parlay::sequence(stack.size(), parlay::sequence<T>());
@@ -56,6 +106,10 @@ void set_preorder_par(parlay::sequence<parlay::sequence<T>>& child_tree, T root,
     }
 
 }
+
+
+
+
 
 //set the level (depth in tree) of each vertex
 //example of top-down computation
@@ -95,67 +149,85 @@ void set_level_par(parlay::sequence<parlay::sequence<T>>& child_tree, T root, pa
 }
 
 
+//given a set of vertices, separate them into a sequence of sequences of levels (ith level in ith index)
+//use a top-down computation; this is like setting the level, except that we are recording the stack and not doing anything to the nodes of each level
+//this is needed for a proper bottom-up computation
+//TOD2* return by reference not copy?
+template<typename T>
+parlay::sequence<parlay::sequence<T>> level_batch(parlay::sequence<parlay::sequence<T>>& child_tree, T root, parlay::sequence<LCAnode<T>>& augmented_vertices, int max_level) {
+
+    parlay::sequence<parlay::sequence<T>> level_record(max_level+1,parlay::sequence<T>());
+
+    parlay::sequence<T> stack; //stack from which we draw tasks
+    stack.push_back(root);
+
+    parlay::sequence<parlay::sequence<T>> new_stack; 
+
+    for (int i = 0; i < max_level+1; i++) {
+
+        level_record[i]=parlay::tabulate(stack.size(),[&] (size_t j) {return stack[j];});
+
+        new_stack = parlay::sequence(stack.size(), parlay::sequence<T>());
+        parlay::parallel_for(0,stack.size(),[&] (size_t i) {
+
+            auto s = stack[i];
+            
+            for (T j = 0; j < child_tree[s].size(); j++) {
+                //have a stack of stacks to avoid races/concurrent inserts
+                new_stack[i].push_back(child_tree[s][j]);
+
+            }
+
+        });
+
+        //copy over new stack, but flattened for easier access
+        stack = parlay::flatten(new_stack);
+       
+    }
+    return level_record;
+
+}
+
+
 //set the subtree size of each vertex
 //example of bottom up computation
 //requires level tagging to be complete (set_level_par must have already been called)
+//TOD2* note to self: having a level record a much cleaner way of doing sweeps! 
 template<typename T>
 void set_size_par(parlay::sequence<parlay::sequence<T>>& child_tree, parlay::sequence<T>& parent_tree, T root, parlay::sequence<LCAnode<T>>& augmented_vertices, int max_level) {
 
   
-    //rangn
-    parlay::sequence<T> rangn = parlay::tabulate(child_tree.size(),[&] (T i) {return i;});
-
-
     //set default size value
     parlay::parallel_for(0,augmented_vertices.size(),[&] (size_t i) {
         augmented_vertices[i].size=1; 
     });
 
+    //do top-down sweep to get record of which nodes on which levels in sequence of sequence form
+    auto level_record = level_batch(child_tree,root,augmented_vertices,max_level);
 
-    parlay::sequence<T> bottom_level = parlay::filter(rangn,[&] (size_t i) {
-        return augmented_vertices[i].level==max_level;
-    });
-    parlay::sequence<T> stack = parlay::tabulate(bottom_level.size(),[&] (size_t i) {return bottom_level[i]; });
+    // std::cout << "printing level record" << std::endl;
+    // for (int i = 0; i < level_record.size(); i++) {
+    //     std::cout << i << ": ";
+    //     for (T j : level_record[i]) {
+    //         std::cout << j << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
 
+    //std::cout << "Debugging in set size" << std::endl;
+    for (int iter = max_level; iter >= 0; iter--) {
 
-    //mark parts of stack that are still relevant
-    parlay::sequence<bool> filled_indices(stack.size(),false);
+        //print_augmented_vertices(augmented_vertices); //DEBUGGING
+       
 
-    parlay::sequence<T> new_stack(stack.size(),-1);
-
-    for (int iter = max_level; iter > 0; iter--) {
         //invariant: in the iteration iter, all of the vertices in the stack have level iter
-        parlay::parallel_for(0,stack.size(),[&] (size_t i) {
-            auto s = stack[i];
+        parlay::parallel_for(0,level_record[iter].size(),[&] (size_t i) {
+            auto s = level_record[iter][i];
             for (T j = 0; j < child_tree[s].size(); j++) {
                 augmented_vertices[s].size += augmented_vertices[child_tree[s][j]].size;
             }
-
-            //if this node is the 0th child of its parent, let this node add its parent to the stack, otherwise not
-            //TOD2* critically depends on order that children are added to child tree - if the backedge to the parent is added first, then this check does not work
-            if (child_tree[parent_tree[s]][0]==s) {
-                new_stack[i]=parent_tree[s];
-                filled_indices[i]=true;
-
-            }
-
-            //if we have not reached the root yet, add this edge to the stack
-            if (parent_tree[s] == s) {
-                std::cout << "error, reached root early" << std::endl;
-                exit(803);
-            }
-    
-            new_stack[i]=parent_tree[s];
-            filled_indices[i]=true;
-
             
         });
-        
-        stack = parlay::pack(new_stack,filled_indices); //the stack is smaller than before, because shallower levels hit the root first
-        
-        //reset the filler variables
-        new_stack=parlay::tabulate(stack.size(),[&] (size_t i){return -1;});
-        filled_indices=parlay::tabulate(stack.size(),[&] (size_t i) {return false;});
         
     }
 
@@ -257,6 +329,8 @@ void preprocess_par(parlay::sequence<T>& parent_tree, parlay::sequence<parlay::s
     int max_level = *parlay::max_element(parlay::map(augmented_vertices,[&] (LCAnode<T> node) {
         return node.level;
     }));
+
+    std::cout << "max level is " << max_level << std::endl;
 
     set_size_par(child_tree,parent_tree,root,augmented_vertices,max_level);
     set_preorder_par(child_tree,root,augmented_vertices);

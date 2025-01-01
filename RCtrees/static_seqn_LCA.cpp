@@ -31,7 +31,9 @@ void test_lca(int n, int NUM_TREES, int NUM_TRIALS, std::mt19937& gen) {
     for (int iter = 0; iter < NUM_TREES; iter++) {
 
         //generate random parent tree
-        parlay::sequence<int> parent_tree = generate_random_tree(n,gen);
+        //parlay::sequence<int> parent_tree = // generate_random_tree(n,gen);
+        parlay::sequence<int> parent_tree = give_example_tree2();
+        int root = 1; //set back to 0*
 
         //from the parent tree, get a child_tree
         parlay::sequence<parlay::sequence<int>> child_tree(n,parlay::sequence<int>());
@@ -47,7 +49,7 @@ void test_lca(int n, int NUM_TREES, int NUM_TRIALS, std::mt19937& gen) {
             augmented_vertices[i].id=i; //id is index
         }
 
-        preprocess(parent_tree,child_tree,0,augmented_vertices,head);
+        preprocess(parent_tree,child_tree,root,augmented_vertices,head);//
 
         std::cout << "printing augment" << std::endl;
         std::cout << "id,\t inl,\t ino,\t preo,\t#ri0,\tlvl,\tascd,\t size" << std::endl;
@@ -61,7 +63,7 @@ void test_lca(int n, int NUM_TREES, int NUM_TRIALS, std::mt19937& gen) {
             int u = dis(gen);
             int v = dis(gen);
             auto ans = query(head,parent_tree,augmented_vertices,u,v);
-            auto real_ans = vanilla_lca(parent_tree,u,v,0);
+            auto real_ans = vanilla_lca(parent_tree,u,v,root);
         
             std::cout << u << " " << v << " " << "LCA: " << ans << std::endl;
 
@@ -132,7 +134,7 @@ int main(int argc, char* argv[]) {
 
     std::mt19937 gen(seed);
 
-    test_unrooted_lca(n,NUM_TREES,NUM_TRIALS,gen);
+    test_lca(n,NUM_TREES,NUM_TRIALS,gen);
 
 
 

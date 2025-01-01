@@ -369,7 +369,7 @@ T query(parlay::sequence<T>& head, parlay::sequence<T>& parent_tree,parlay::sequ
     //std::cout << "mask: " << mask << std::endl;
     //std::cout << "chosen inlabel: " << av[i_pair.second].inlabel << std::endl;
     int b = ((av[i_pair.second].inlabel & mask) & (-1 - (1 << imax) + 1)) | (1 << imax);
-   // std::cout << "b is " << b << std::endl;
+    //std::cout << "b is " << b << std::endl;
     //TODO* test b is correct; test z is correct; etc.
 
     auto output = get_inlabelz(av,u,v,imax);
@@ -377,7 +377,7 @@ T query(parlay::sequence<T>& head, parlay::sequence<T>& parent_tree,parlay::sequ
     int jz = output.second;
 
 
-   // std::cout << "z's in label is " << inlabel_z << std::endl;
+    //std::cout << "z's in label is " << inlabel_z << std::endl;
 
   
     int xhat=get_hat(head,parent_tree,av,u,inlabel_z,jz);

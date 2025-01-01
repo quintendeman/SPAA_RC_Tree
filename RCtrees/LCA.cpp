@@ -48,6 +48,7 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int BATCH_SIZE, std::mt19937
     for (int iter = 0; iter < NUM_TREES; iter++) {
     //generate random parent tree
     parlay::sequence<int> parent_tree = generate_random_tree(n,gen);
+    int init_root = 0; //default for generate_random_tree
 
     //from the parent tree, get a child_tree
     parlay::sequence<parlay::sequence<int>> child_tree(n,parlay::sequence<int>());
@@ -66,6 +67,15 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int BATCH_SIZE, std::mt19937
     //sanity check that the RC tree is valid before main test
     test_rc_valid(parent_tree, clusters,false);
 
+    //see the clusters
+    printTree(clusters);
+
+    cluster<int,int>* root;
+    get_root_RC(clusters,root); //TOD2* I'm not counting this get root time (log n) against the alg time because I assume the RC tree knows its root (somewhere) for O(1) charge, I just don't know where to access it 
+
+
+    std::cout << "root is " << root->index << std::endl;
+
     for (int iter2 = 0; iter2 < NUM_TRIALS; iter2++) {
 
 
@@ -81,12 +91,6 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int BATCH_SIZE, std::mt19937
 
         parlay::sequence<cluster<int,int>*> answers;
 
-        cluster<int,int>* root;
-        get_root_RC(clusters,root); //TOD2* I'm not counting this get root time (log n) against the alg time because I assume the RC tree knows its root (somewhere) for O(1) charge, I just don't know where to access it 
-
-        //see the clusters
-        printTree(clusters);
-
         std::cout << "about to batch" << std::endl;
 
         batchLCA(clusters,root,queries,answers);
@@ -99,16 +103,26 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int BATCH_SIZE, std::mt19937
             int v = std::get<1>(queries[i]);
             int rprime = std::get<2>(queries[i]);
             //this version uses the fixed to arbitrary LCA trick for the real ans (but this was tested so okay)
-            auto real_ans = unrooted_lca(parent_tree,u,v,0,rprime);
+            auto real_ans = unrooted_lca(parent_tree,u,v,init_root,rprime);
         
             std::cout << u << " " << v << " " << "r'" << rprime << " LCA: " << real_ans << std::endl;
 
             if (answers[i]->index != real_ans) {
                 std::cout << "break abort" << std::endl;
                 std::cout << "Said: " << answers[i]->index << "real: " << real_ans << std::endl;
+                std::cout << "Tree# " << iter << ", " << "Trial: " << iter2 << std::endl;
+
+                //see the clusters
+                printTree(clusters);
+
+                print_parent_tree(parent_tree,"parent tree");
+                print_child_tree(child_tree,"child tree");
+
                 std::exit(5);
             }
         }
+        //reset on each print debug
+        std::cout << std::endl << std::endl << std::endl << std::endl << std::endl << std::endl << std::endl;
 
         }
 

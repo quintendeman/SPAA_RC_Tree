@@ -48,6 +48,19 @@ parlay::sequence<int> give_example_tree() {
 
 }
 
+//a tree with bugs
+parlay::sequence<int> give_example_tree2() {
+    parlay::sequence<int> parent_tree(7);
+    parent_tree[1]=1;
+    parent_tree[3]=1;
+    parent_tree[6]=3;
+    parent_tree[2]=3;
+    parent_tree[4]=6;
+    parent_tree[0]=2;
+    parent_tree[5]=0;
+    return parent_tree;
+
+}
 
 void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int& NUM_TREES) {
     for (int i = 1; i < argc; i++) {
