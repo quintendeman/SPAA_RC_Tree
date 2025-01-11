@@ -14,6 +14,7 @@
 #include "../examples/samplesort.h"
 #include "incMST.h"
 
+#include "RC_test.h"
 
 // **************************************************************
 // Driver
@@ -26,12 +27,7 @@ using datatype = double;
 
 const vertex max_degree = 3;
 
-const double espilon = 0.001;
-
-static bool isNearlyEqual(double a, double b, double epsilon = espilon) {
-    return std::abs(a - b) < epsilon;
-}
-
+const double epsilon = 0.001;
 
 // This wipes out all existing weights, replacing them with random ones
 // The lambda function is MAX

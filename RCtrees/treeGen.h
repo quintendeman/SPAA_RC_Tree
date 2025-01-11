@@ -73,7 +73,7 @@ class TreeGen
                 return;
             }
             
-            parlay::random_generator gen(15213);
+            parlay::random_generator gen(15213); //TOD2* change seed to argument 
             std::uniform_real_distribution<double> dis_ur(0, 1);
 
             parlay::parallel_for(sg.first, sg.second, [&] (T index) {

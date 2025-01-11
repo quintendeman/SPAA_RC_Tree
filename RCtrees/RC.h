@@ -15,6 +15,8 @@
 #include <parlay/alloc.h>
 #include "cluster.h"
 #include "../examples/counting_sort.h"
+#include <parlay/random.h>
+#include "VanillaLCA.h" //for tree printing function
 
 static const char PRINT_QUERY = 0;
 
@@ -38,12 +40,12 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
 
     parlay::sequence<T> dummy_initial_parents = parlay::tabulate(num_elements, [&] (T v) {return (T) 0;});
 
-    std::mt19937 gen(std::random_device{}());
-    
+    parlay::random_generator gen(time(0)); //use time(0) as random seed
+    std::uniform_real_distribution<double> dis(0, 1);
 
     parlay::parallel_for(0, num_elements, [&] (T v) {
-        std::uniform_real_distribution<double> dis(0, 1);
-        auto random_val = dis(gen);
+        auto r = gen[v];
+        double random_val = dis(r);
 
         static const double anywhere_left_weight = 0.5;
         static const double immediate_left_weight = 10.0;
@@ -54,9 +56,9 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
 
         if (random_val <= anywhere_prob && v > 0)
         {
-            std::uniform_int_distribution<> disint(0, v-1);
+            std::uniform_int_distribution<T> disint(0,v-1);
 
-            dummy_initial_parents[v] = disint(gen);
+            dummy_initial_parents[v] = disint(r);
         }
         else if (random_val < root_prob)
         {
@@ -541,6 +543,7 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
     parlay::parallel_for(0, base_clusters.size(), [&] (const T i){
         auto& clstr = base_clusters[i];
         clstr.state = base_vertex | live;
+        clstr.data = defretval; //must reset base vertex clusters to default val as well as base edge clusters
         
         const auto& v= i;
 
@@ -1009,8 +1012,8 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defre
         // if(base_clusters.size() <= 100)
         //     printTree(base_clusters);
     
-        
-        // std::cout << "[" << count  << "]: " << bold << tree_nodes.size() << reset << std::endl;
+        if (print)
+        std::cout << "[" << count  << "]: " << bold << tree_nodes.size() << reset << std::endl;
         count++;
     }while(tree_nodes.size() > 0 && count < 100);
 
@@ -1048,6 +1051,7 @@ node<T,D>* get_edge(T v, T w, parlay::sequence<cluster<T,D>>& clusters, unsigned
 
 
 
+//bug?, requires that counters not set by default to zero? (if another function changes, could error?) TOD2* (how do we know that internal node counters all start at zero?) FIXME
 template<typename T, typename D, typename assocfunc>
 void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, assocfunc func, parlay::sequence<cluster<T, D>>& clusters, const D& defretval = 0.00f)
 {   
@@ -1073,6 +1077,7 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, 
 
         while(cluster_ptr != nullptr)
         {
+            //the first fetch add will see a value of 0, and return 0 (false) allowing the while loop to continue; the other fetch adds will see a value >0 and return >0 (true), triggering the break
             if(cluster_ptr->counter.fetch_add(1))
                 break;
             cluster_ptr = cluster_ptr->get_parent();
@@ -1475,6 +1480,8 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
 
 }
 
+
+//get the base edge associated with 2 vertices
 template<typename T, typename D>
 void testPathQueryValid(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<T>& parents, parlay::sequence<D>& weights)
 {
@@ -1516,6 +1523,5 @@ void testPathQueryValid(parlay::sequence<cluster<T,D>>& clusters, parlay::sequen
     });
 
 }
-
 
 #endif

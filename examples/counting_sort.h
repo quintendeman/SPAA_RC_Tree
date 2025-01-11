@@ -1,3 +1,6 @@
+#ifndef COUNTING_SORT
+#define COUNTING_SORT
+
 #include <algorithm>
 #include <functional>
 #include <vector>
@@ -97,3 +100,5 @@ auto counting_sort(const InRange& in, const KeysRange& keys,
                                num_buckets);
   return std::pair(std::move(out), std::move(offsets));
 }
+
+#endif
