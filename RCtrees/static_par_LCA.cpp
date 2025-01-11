@@ -13,7 +13,6 @@
 #include <cmath>
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
-#include "../include/parlay/internal/get_time.h"
 #include "../examples/samplesort.h"
 #include<stdio.h>
 
@@ -24,8 +23,7 @@
 #include "static_par_LCA.h"
 
 #include "VanillaLCA.h"
-#include "euler_tour.h"
-
+#include "random_trees.h"
 
 void test_lca(int n, int NUM_TRIALS, int NUM_TREES, std::mt19937& gen) {
 

@@ -62,7 +62,7 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int BATCH_SIZE, std::mt19937
     G=convert_parents_to_graph(G,parent_tree);
     parlay::sequence<cluster<int,int>> clusters;
     create_base_clusters(G, clusters, 3); //max deg=3; each vertex in the tree has maximum degree 3
-    create_RC_tree(clusters, n, false,0,false); //randomized=false -- use the deterministic contraction method //defretval=0 -- default cluster val (ex -inf, inf, 0) //print=false -- don't print contraction sizes
+    create_RC_tree(clusters, n, 0, [] (int A, int B) {return A+B;}, false,false); //randomized=false -- use the deterministic contraction method //defretval=0 -- default cluster val (ex -inf, inf, 0) //print=false -- don't print contraction sizes
 
     //sanity check that the RC tree is valid before main test
     test_rc_valid(parent_tree, clusters,false);

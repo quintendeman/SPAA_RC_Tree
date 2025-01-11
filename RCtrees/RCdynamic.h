@@ -14,6 +14,123 @@ static const char PRINT_DYNAMIC = 0;
 
 
 
+template<typename T, typename D>
+node<T,D>* get_edge(T v, T w, parlay::sequence<cluster<T,D>>& clusters, unsigned char level = 0)
+{
+    if(v == w)
+        return nullptr;
+    auto& v_cluster = clusters[v];
+    auto v_node_ptr = v_cluster.adjacency.get_head();
+    for(auto& edge_ptr : v_node_ptr->adjacents)
+    {
+        if(edge_ptr == nullptr)
+            continue;
+        auto w_node_ptr = get_other_side(v_node_ptr, edge_ptr);
+        if(w_node_ptr->cluster_ptr->index == w)
+            return edge_ptr;
+    }
+
+    auto& w_cluster = clusters[w];
+    auto w_node_ptr = w_cluster.adjacency.get_head();
+    for(auto& edge_ptr : w_node_ptr->adjacents)
+    {
+        if(edge_ptr == nullptr)
+            continue;
+        v_node_ptr = get_other_side(w_node_ptr, edge_ptr);
+        if(v_node_ptr->cluster_ptr->index == v)
+            return edge_ptr;
+    }
+    return nullptr;
+}
+
+
+//bug?, requires that counters not set by default to zero? (if another function changes, could error?) TOD2* (how do we know that internal node counters all start at zero?) FIXME
+template<typename T, typename D, typename assocfunc>
+void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, assocfunc func, parlay::sequence<cluster<T, D>>& clusters, const D& defretval = 0.00f)
+{   
+
+    // TODO merge  with up pass
+    auto edge_ptrs = parlay::tabulate(edges.size(), [&] (T i){
+        T v = std::get<0>(edges[i]);
+        T w = std::get<1>(edges[i]);
+        D data = std::get<2>(edges[i]);
+
+        auto edge_ptr = get_edge(v, w, clusters);
+        if(edge_ptr == nullptr) // TODO REMOVE
+        {
+            std::cout << red << "Got a nullptr" << reset << std::endl;
+            exit(1);
+        }
+        edge_ptr->cluster_ptr->data = data;
+
+        auto ret_ptr = edge_ptr->cluster_ptr;
+        auto cluster_ptr = ret_ptr;
+
+        cluster_ptr->counter = 0;
+
+        while(cluster_ptr != nullptr)
+        {
+            //the first fetch add will see a value of 0, and return 0 (false) allowing the while loop to continue; the other fetch adds will see a value >0 and return >0 (true), triggering the break
+            if(cluster_ptr->counter.fetch_add(1))
+                break;
+            cluster_ptr = cluster_ptr->get_parent();
+        }
+
+
+        return ret_ptr;
+    });
+
+    parlay::parallel_for(0, edge_ptrs.size(), [&] (T i) {
+        if(edge_ptrs[i] == nullptr)
+            return;
+
+        auto cluster_ptr = edge_ptrs[i]; // base edge, technically not a cluster dw.. depends on which paper you look at haha
+        
+        auto start = edge_ptrs[i];
+
+        while(cluster_ptr != nullptr)
+        {
+            if(cluster_ptr->counter.fetch_add(-1) > 1)
+                break;
+            if(cluster_ptr != start)
+            {
+                D final_val = defretval; 
+                cluster<T,D>* final_heaviest_edge = nullptr;
+                node<T,D>* node_ptr = cluster_ptr->first_contracted_node;
+                bool first_child = true;
+
+                for(auto& child : cluster_ptr->children)
+                {
+                    if(child == nullptr)
+                        continue;
+                    if((child->adjacency.get_head()->state & base_edge) || (child->first_contracted_node->next->state & (binary_cluster | base_edge)))
+                    {
+                        if(first_child)
+                        {
+                            final_val = child->data;
+                            final_heaviest_edge = child->max_weight_edge;
+                            first_child = false;
+                        }
+                        else
+                        {
+                            if(child->data > final_val)
+                                final_heaviest_edge = child->max_weight_edge;
+                            final_val = func(final_val, child->data);
+                            
+                        }
+                    }
+                }              
+                cluster_ptr->data = final_val;
+                cluster_ptr->max_weight_edge = final_heaviest_edge;
+            }
+            cluster_ptr = cluster_ptr->get_parent();
+        }
+    });
+
+    return;
+}
+
+
 
 template<typename T, typename D>
 bool first_condition(node<T,D>*& node_ptr)

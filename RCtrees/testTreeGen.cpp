@@ -3,6 +3,7 @@
 
 #include "RC.h"
 #include "RCdynamic.h"
+#include "path_query.h"
 #include <ctime>    // For time()
 
 

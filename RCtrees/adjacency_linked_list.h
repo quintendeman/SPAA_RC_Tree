@@ -97,6 +97,17 @@ struct node
         // this->state = 3;
     }
 
+    //change the pointer to edge in adjacents to point to new_node instead
+    void set_ptr_from_list(node<T,D>* edge, node<T,D>* new_node) {
+        for (short k = 0; k < this->adjacents.size(); k++) {
+            auto& ptr = this->adjacents[k]; //because grabbing by reference, will change adjacents itself if we change ptr
+            if (ptr==edge) {
+                ptr=new_node;
+            }
+        }
+    }
+
+
 };
 
 

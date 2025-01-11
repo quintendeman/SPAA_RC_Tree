@@ -1,3 +1,6 @@
+#ifndef TREEGEN_H
+#define TREEGEN_H
+
 #include "../include/parlay/sequence.h"
 #include "../include/parlay/primitives.h"
 #include <cmath>
@@ -498,3 +501,5 @@ class TreeGen
         }
 
 };
+
+#endif

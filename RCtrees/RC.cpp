@@ -15,6 +15,7 @@
 #include "incMST.h"
 
 #include "RC_test.h"
+#include "random_trees.h"
 
 // **************************************************************
 // Driver

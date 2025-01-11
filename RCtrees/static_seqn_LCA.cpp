@@ -14,13 +14,13 @@
 #include <cmath>
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
-#include "../include/parlay/internal/get_time.h"
 #include "../examples/samplesort.h"
 #include<stdio.h>
 
 //the functions here
 #include "static_seqn_LCA.h"
 #include "RC.h" //for generate random tree
+#include "random_trees.h"
 
 #include "VanillaLCA.h"
 

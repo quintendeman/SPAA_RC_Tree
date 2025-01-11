@@ -14,6 +14,50 @@
 #include "../examples/counting_sort.h"
 #include <parlay/random.h>
 
+//note that we are NOT passing child_tree by reference, to get a new copy as the undirected graph
+template<typename T>
+parlay::sequence<parlay::sequence<T>> make_undirected_tree(parlay::sequence<parlay::sequence<T>> child_tree, parlay::sequence<T>& parent_tree) {
+    for (int i = 0; i < child_tree.size(); i++) {
+        child_tree[i].push_back(parent_tree[i]); //just push back the parent
+    }
+    return child_tree;
+
+}
+
+//given an unrooted tree, make it into a parent tree rooted at rprime
+//pass by reference breaking for some reason?! //continue here TODO*
+template<typename T>
+void make_directed_tree(parlay::sequence<parlay::sequence<T>>& unrooted_tree, parlay::sequence<T>& parent_tree, T rprime) {
+
+    std::deque<T> stack;
+    parent_tree[rprime]=rprime;
+    stack.push_back(rprime); 
+
+    //int count = 0;
+    while (stack.size() > 0) {
+        // count += 1;
+        // if (count > 50) exit(700); //for printing
+        
+        auto s = stack.back();
+        stack.pop_back();
+
+        // print_parent_tree(parent_tree,"intermediate directed tree");
+        // std::cout << "s: " << s << std::endl;
+        
+        //the parent of each other edge in s is s
+        for (int i = 0; i < unrooted_tree[s].size(); i++) {
+            T child = unrooted_tree[s][i];
+            //issue: The old root has itself as an edge
+            if (child != parent_tree[s] &&  s != child) {//don't count the back edge //&&  TODO* print out child
+                parent_tree[child]=s;
+                stack.push_back(child);
+            }
+        
+        }
+    }
+
+}
+
 //given a tree written in terms of parents (index i has the edge i, tree[i]; tree[i] is the parent of i), reformat in terms of children (index i has a list (j_1,...j_m), where (i,j_x) are edges, and (j_x) are the children of i)
 //in the original parents tree, tree, note that i=tree[i] iff i is the root.
 //parlay::sequence<parlay::sequence<T>> child_tree(tree.size(),parlay::sequence<T>());
@@ -357,5 +401,156 @@ bool possibly_equal(parlay::sequence<parlay::sequence<T>>& childtree1, parlay::s
     return same_degrees(childtree1,childtree2);
 
 }
+
+
+
+/*
+    Generate a simple, single rooted graph with each node having two children
+    Then, randomly, change the parent of each node with a certain probability such that it picks something on the left of it
+
+    Returns an array of parents such that the parents of index V would be parents[V]
+*/
+template <typename T>
+parlay::sequence<T> generate_tree_graph(T num_elements)
+{
+    assert(num_elements > 0);
+
+    parlay::sequence<T> dummy_initial_parents = parlay::tabulate(num_elements, [&] (T v) {return (T) 0;});
+
+    parlay::random_generator gen(time(0)); //use time(0) as random seed
+    std::uniform_real_distribution<double> dis(0, 1);
+
+    parlay::parallel_for(0, num_elements, [&] (T v) {
+        auto r = gen[v];
+        double random_val = dis(r);
+
+        static const double anywhere_left_weight = 0.5;
+        static const double immediate_left_weight = 10.0;
+        static const double root_weight = 0.01; /* warning, does not represet probability of a null cluster as degree capping may create more forests */
+
+        static const double anywhere_prob = (anywhere_left_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
+        static const double root_prob = anywhere_prob + (root_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
+
+        if (random_val <= anywhere_prob && v > 0)
+        {
+            std::uniform_int_distribution<T> disint(0,v-1);
+
+            dummy_initial_parents[v] = disint(r);
+        }
+        else if (random_val < root_prob)
+        {
+            dummy_initial_parents[v] = v;
+        }
+        else
+            dummy_initial_parents[v] = v == 0 ? 0 : v - 1;
+    });  
+    
+    return dummy_initial_parents;
+}
+
+/*
+    Converts the parents array into a symmetric graph
+*/
+template <typename graph, typename T>
+graph convert_parents_to_graph(graph G, parlay::sequence<T> parents)
+{
+    parlay::sequence<T> vertices = parlay::tabulate(parents.size(), [&] (T v) {return v;});
+
+    G = parlay::map(vertices, [&] (T v) {
+        if(parents[v] == v) // root
+        {
+            parlay::sequence<T> empty;
+            return empty;
+        }
+        parlay::sequence<T> temp = parlay::tabulate(1, [&] (T i) {return i;});
+        temp[0] = parents[v];
+        return temp;
+    });
+
+    G = graph_utils<T>::symmetrize(G);
+
+    return G;
+}
+
+/**
+ * Ensures that the degree is capped for the parents vector
+ * i.e. not too many nodes have the same parent
+ * Uses locking! Fortunately, we don't care about the performance for the graph generation too much
+*/
+template <typename T>
+parlay::sequence<T> degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
+{
+    parlay::sequence<std::atomic<T>> counts = parlay::tabulate(parents.size(), [] (size_t) {
+       return std::atomic<T>(0); // Initialize each element with the value 0
+    });
+
+
+    parlay::parallel_for(0, parents.size(), [&] (T v) {
+        if(v == parents[v])
+            return;
+        T parent_count = counts[parents[v]].fetch_add(1);
+        if(parent_count < (max_degree - 1))
+        {
+            return;
+        }
+        else
+            parents[v] = v;
+    });
+
+    return parlay::tabulate(parents.size(), [&] (T i) {
+        return counts[i].load();
+    });
+
+}
+
+template<typename T, typename D>
+void degree_cap_add_edge(parlay::sequence<T> &parents, const T max_degree, parlay::sequence<std::tuple<T, T, D> >& tuples)
+{
+    parlay::sequence<std::atomic<T>> counts = parlay::tabulate(parents.size(), [] (size_t) {
+       return std::atomic<T>(0); // Initialize each element with the value 0
+    });
+
+    std::vector<std::mutex> mutexes(counts.size());
+
+    parlay::parallel_for(0, counts.size(), [&] (T chld) {
+        if(parents[chld] != chld)
+        {
+            counts[parents[chld]].fetch_add(1);
+        }
+    });
+
+    tuples = parlay::filter(tuples, [&] (auto tple) {
+        auto& child = std::get<0>(tple);
+        auto& parent = std::get<1>(tple);
+        if(child == parent)
+            return false;
+        bool ret_val = false;
+
+        mutexes[parent].lock();
+        mutexes[child].lock();
+        if(counts[child] < max_neighbours)
+        {
+            if(counts[parent] < max_neighbours - 2)
+            {
+                counts[parent]++;
+                parents[child] = parent;
+                ret_val = true;
+            }
+            else if(counts[parent] == max_neighbours - 1 && parents[parent] == parent)
+            {
+                counts[parent]++;
+                parents[child] = parent;
+                ret_val = true;        
+            }
+        }
+        mutexes[parent].unlock();
+        mutexes[child].unlock();
+        return ret_val;
+    });
+    
+
+    return;
+}
+
 
 #endif

@@ -64,6 +64,7 @@ public:
     D data;
 
     cluster<T,D>* max_weight_edge = nullptr;
+    
     std::array<std::pair<T,D>, max_neighbours> CGGraphEntry;
     std::array<cluster<T,D>*, max_neighbours> CGGraphEdgePtr;
     std::array<std::atomic<bool>, max_neighbours> CGEntryValid;
