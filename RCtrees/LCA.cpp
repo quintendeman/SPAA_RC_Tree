@@ -16,13 +16,13 @@
 #include "../examples/samplesort.h"
 #include<stdio.h>
 
-
 #include "RCdynamic.h"
 #include "RC_test.h"
 
 //need our LCA funs
 #include "LCA.h"
 #include "VanillaLCA.h"
+#include "random_trees.h"
 
 
 //TOD2* is there a better way to do this?
@@ -39,16 +39,16 @@ void get_root_RC(parlay::sequence<cluster<T,D>>& clusters, cluster<T,D>*& ans) {
       
     }
  }
-
+//TOD2* adjust LCA code to work with forest (multiple roots!) (all tests so far on 1 tree only)
 void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int BATCH_SIZE, std::mt19937& gen) {
 
     std::uniform_int_distribution<int> dis(0,n-1);
 
 
     for (int iter = 0; iter < NUM_TREES; iter++) {
-    //generate random parent tree
-    parlay::sequence<int> parent_tree = generate_random_tree(n,gen);
-    int init_root = 0; //default for generate_random_tree
+    //generate random parent tree (permuted)
+    parlay::sequence<int> parent_tree = generate_random_tree_perm(n,gen); //TOD2* switch to random perm tree generate_random_tree(n,gen); //
+    int init_root = get_root(parent_tree); //default for generate_random_tree is 0; since permuting, must find explicitly
 
     //from the parent tree, get a child_tree
     parlay::sequence<parlay::sequence<int>> child_tree(n,parlay::sequence<int>());
@@ -91,11 +91,11 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int BATCH_SIZE, std::mt19937
 
         parlay::sequence<cluster<int,int>*> answers;
 
-        std::cout << "about to batch" << std::endl;
+        //std::cout << "about to batch" << std::endl;
 
         batchLCA(clusters,root,queries,answers);
 
-        std::cout << "done batching" << std::endl;
+        //std::cout << "done batching" << std::endl;
 
 
         for (int i  = 0; i < BATCH_SIZE; i++) {
@@ -134,6 +134,40 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int BATCH_SIZE, std::mt19937
 
 }
 
+void extensive_test_perm(int n, int NUM_TREES, std::mt19937& gen) {
+    for (int i = 0; i < NUM_TREES; i++) {
+        auto parents = generate_random_tree(n,gen);
+        //auto perm_tree = generate_random_tree(n,gen); //fail example (example where trees not equal)
+        auto perm_tree = permute_tree(n,parents,gen);
+        auto root1 = get_root(parents);
+        auto root2 = get_root(perm_tree);
+        parlay::sequence<parlay::sequence<int>> child_tree1(n,parlay::sequence<int>());
+        partree_to_childtree(parents,child_tree1);
+        parlay::sequence<parlay::sequence<int>> child_tree2(n,parlay::sequence<int>());
+        partree_to_childtree(perm_tree,child_tree2);
+        if (!possibly_equal(child_tree1,child_tree2,root1,root2)) {
+            std::cout << "Error abort, tree and permuted tree NOT equal" << std::endl;
+            exit(3002);
+        } 
+        std::cout << "." << std::endl;
+
+
+    }
+    std::cout << "passed extensive perm test" << std::endl;
+
+}
+
+void test_perm() {
+    int n = 10;
+    int seed = 40;
+    std::mt19937 gen(seed);
+    auto parents = generate_random_tree_perm(n,gen);
+    print_parent_tree(parents,"par tree");
+    parlay::sequence<parlay::sequence<int>> child_tree(n,parlay::sequence<int>());
+    partree_to_childtree(parents,child_tree);
+    print_child_tree(child_tree,"child tree");
+}
+
 int main(int argc, char* argv[]) {
     std::cout << "hello world!3" << std::endl;
 
@@ -148,8 +182,6 @@ int main(int argc, char* argv[]) {
     std::mt19937 gen(seed);
 
     test_lca(n,NUM_TRIALS,NUM_TREES,BATCH_SIZE,gen);
-
-
-
+    //extensive_test_perm(n,NUM_TREES,gen);
 
 }

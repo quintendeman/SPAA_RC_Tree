@@ -10,7 +10,7 @@ SRC = RC.cpp
 TARGET2 = LCA.out
 SRC2 = LCA.cpp
 RC_DEPS = RC.h cluster.h RCdynamic.h adjacency_linked_list.h RC_test.h 
-LCA_DEPS = LCA.h VanillaLCA.h static_seqn_LCA.h static_par_LCA.h 
+LCA_DEPS = LCA.h VanillaLCA.h static_seqn_LCA.h static_par_LCA.h random_trees.h
 
 # Default target
 all: $(TARGET)

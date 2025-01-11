@@ -9,6 +9,7 @@
 //TOD2* using OLD parlay hash, new one not working
 #include "include/old_parlay_hash/unordered_map.h" //for parlayhash concurrent hash map
 #include "static_par_LCA.h"
+#include "random_trees.h"
 
 #include<bitset>
 
@@ -41,12 +42,15 @@ struct LCAhelper {
 //in a batch of size k, will mark O(k log(1+n/k))
 //bottom-up
 //FIXME TOD2* go back and reimplement this with atomics, instead of a possibly too expensive remove_duplicates call 
-
+//TOD2* what if queries are on the log n different levels of the RC tree? So they traverse up at different speeds, preventing a proper union?
+//also: in star, could be O(N) duplicates
 //!!!!!!!
 //FIXME
 //!!!!!!!
+//TOD2* find the roots here, instead of passing a single root in to begin with (because is forest, there may be many roots
+//TOD2* root should not be stored in h, rather pass in the root separately? Or maybe have an augmented pointer from a vertex to its root? 
 template<typename T, typename D>
-void find_nodes_involved(parlay::sequence<cluster<T,D>>& clusters, int k, parlay::sequence<std::tuple<T,T>>& queries, LCAhelper<T,D>& h) {
+void find_nodes_involved_old(parlay::sequence<cluster<T,D>>& clusters, int k, parlay::sequence<std::tuple<T,T>>& queries, LCAhelper<T,D>& h) {
 
     parlay::sequence<T> stack;
     parlay::sequence<T> new_stack(2*k,-1);
@@ -97,6 +101,78 @@ void find_nodes_involved(parlay::sequence<cluster<T,D>>& clusters, int k, parlay
     h.involved_nodes = parlay::remove_duplicates(h.involved_nodes);
 
     h.sn = h.involved_nodes.size(); //sn holds the # of nodes in the subset tree (the # of active internal nodes of the RC tree for this batch)
+}
+
+template<typename T, typename D>
+void find_nodes_involved(parlay::sequence<cluster<T,D>>& clusters, int k, parlay::sequence<std::tuple<T,T>>& queries, LCAhelper<T,D>& h) {
+
+    std::cout << "alive" << std::endl;
+
+    parlay::sequence<T> stack;
+    parlay::sequence<T> new_stack(2*k,-1);
+
+    parlay::parallel_for(0,k,[&] (size_t i) {
+        //pointer math to avoid contention
+        new_stack[2*i] = std::get<0>(queries[i]);
+        new_stack[2*i+1] = std::get<1>(queries[i]);
+    });
+
+    //this call of remove duplicates okay because is linear work in k, log depth (single call okay, repeated calls could be trouble)
+    stack=parlay::remove_duplicates(parlay::filter(new_stack,[&] (T item) {return item != -1;})); 
+    h.involved_nodes.append(stack); //parallel bulk inserts the active nodes of this level 
+
+    //check whether node is being accessed first or not
+    auto fetch_counters = parlay::tabulate(clusters.size(),[&] (size_t i) {return std::atomic<int>(1); });
+    //-4 = unprocessed; -3 = in process; -2 = done, don't touch
+    auto fetch_bool = parlay::tabulate(clusters.size(),[&] (size_t i) {return -4; });
+
+    //mark that the queries have already been added to stack (ex. if an internal node and one of its descendants are both offered as queries, don't want to go up section from internal node to root twice)
+    parlay::parallel_for(0,stack.size(),[&] (size_t i) {
+        fetch_bool[stack[i]]=-2; 
+    });
+
+    //bottom-up, propagate true marks
+    while(stack.size() > 0) {
+            std::cout << "alive" << std::endl;
+
+        new_stack=parlay::sequence<T>(stack.size(),-1);
+        //set up race on adding parents
+        parlay::parallel_for(0,stack.size(),[&] (size_t i) {
+            //a is an index in clusters
+            auto a = stack[i];
+            h.marked_clusters[a]=true;
+            if (a != h.root -> index && fetch_bool[clusters[a].parent->index]==-4) { //if we aren't at the root and this is the first iteration the parent is accessed, then set up a race on the parent. 
+                fetch_bool[clusters[a].parent->index]=-3;
+            }   
+
+        });
+
+        //run the race on who gets to parent first, ensures parent only added once to stack
+        parlay::parallel_for(0,stack.size(),[&] (size_t i) {
+            //a is an index in clusters
+            auto a = stack[i];
+            
+            if (a != h.root -> index) {
+                //must confirm not at root before accessing parent
+                auto p = clusters[a].parent->index;
+                    //only fetch add if fetch bool is true (relies on short circuiting of ands)
+                    if (fetch_bool[p]==-3 && fetch_counters[p].fetch_add(2) == 1) { //if we aren't at the root and this is the first time this parent is accessed, then add the parent to the stack
+                    new_stack[i]=p;
+                    fetch_bool[p]=-2; //signal we are done with this node
+                }
+            }   
+
+        });
+        
+        //don't pass up -1s (this is one way to filter, another way is to keep a filled_nodes bool and pack by it)
+        stack=parlay::remove_duplicates(parlay::filter(new_stack,[&] (T item) {return item != -1;})); 
+        h.involved_nodes.append(stack); //parallel insert the active nodes of this level 
+    }
+
+   
+    h.sn = h.involved_nodes.size(); //sn holds the # of nodes in the subset tree (the # of active internal nodes of the RC tree for this batch)
+        std::cout << "out" << std::endl;
+
 }
 
 //given a cluster whose index in involved_nodes is i_index, find the index (in alt_tree) of its boundary that is closer to the root, return it
@@ -197,7 +273,7 @@ T instack_choose_boundary(T s, parlay::sequence<cluster<T,D>>& clusters, LCAhelp
 //in involved_nodes,
 //for each binary cluster, find which boundary vertex is closer to the root
 //for each unary cluster will just return the only boundary vertex
-//TOD2* does the find_boundary_vertices call within this function look outside the subset of the tree we are considering, breaking the work bound?
+//TOD2* does the find_boundary_vertices call within this function look outside the subset of the tree we are considering, breaking the work bound? Think okay because constant max # of children.
 //top-down computation
 //if root, closest boundary is itself by convention
 template<typename T, typename D>

@@ -5,6 +5,9 @@
 
 #include<math.h>
 
+
+
+
 //T is indexing type
 template<typename T>
 struct LCAnode {
@@ -22,6 +25,40 @@ struct LCAnode {
     
 };
 
+
+
+
+//level ancestors structure
+
+//O(d) depth, where d is height of tree
+//O(nd) work
+//la = level ancestors
+//max_level = depth of tree (to know how many ancestors to hold)
+//TOD2* space inefficient, because shallower children need less space than deep children
+template<typename T>
+parlay::sequence<parlay::sequence<T>> preprocess_la(parlay::sequence<T>& parent_tree,parlay::sequence<LCAnode<T>>& av, T root) {
+    parlay::sequence<parlay::sequence<T>> table = parlay::tabulate(parent_tree.size(),[&] (size_t i) {return parlay::sequence<T>(av[i].level+1,-1);});
+    
+    parlay::parallel_for(0,parent_tree.size(),[&] (size_t i) {
+        int count = 0;
+        T val = i;
+        table[i][count]=val; //need duplicate here, in case val is root
+
+        while (val != root) {
+            table[i][count]=val;
+            count += 1;
+            val=parent_tree[val];
+        }
+
+    });
+    return table;
+}
+
+//use the lookup table to get the i^{th} ancestor of node
+template<typename T>
+T query_la(parlay::sequence<parlay::sequence<T>>& table, T node, int ith) {
+    return table[node][ith];
+}
 
 //get index of rightmost 1
 template<typename T> 
@@ -68,20 +105,6 @@ void preprocess(parlay::sequence<T>& parent_tree, parlay::sequence<parlay::seque
 
 } 
 
-//given a tree written in terms of parents (index i has the edge i, tree[i]; tree[i] is the parent of i), reformat in terms of children (index i has a list (j_1,...j_m), where (i,j_x) are edges, and (j_x) are the children of i)
-//in the original parents tree, tree, note that i=tree[i] iff i is the root.
-//parlay::sequence<parlay::sequence<T>> child_tree(tree.size(),parlay::sequence<T>());
-template<typename T>
-parlay::sequence<parlay::sequence<T>> partree_to_childtree(parlay::sequence<T>& tree, parlay::sequence<parlay::sequence<T>>& child_tree) {
-    
-    for (int i = 0; i < tree.size(); i++) {
-        if (i == tree[i]) continue;
-        //TOD2 keep this sorted maybe? Note that sorts ascending currently.
-        child_tree[tree[i]].push_back(i);
-    }
-    return child_tree;
-
-}
 
 //traverse the tree in order and mark the preorder field in LCAnode
 //tree in children format

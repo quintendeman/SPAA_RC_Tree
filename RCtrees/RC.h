@@ -16,88 +16,10 @@
 #include "cluster.h"
 #include "../examples/counting_sort.h"
 #include <parlay/random.h>
+#include "VanillaLCA.h" //for tree printing function
 
 static const char PRINT_QUERY = 0;
 
-
-std::mt19937 get_rand_gen(int seed) {
-    if (seed == -1) {
-        std::mt19937 gen(std::random_device{}());
-        return gen;
-    }
-    else {
-        std::mt19937 gen(seed);
-        return gen;
-    }
-}
-//another take on generate_tree_graph
-//at each child, generate one or two children (naturally ternerized)
-//root is 0
-template<typename T>
-parlay::sequence<T> generate_random_tree(T num_elements, int seed=-1) {
-    assert(num_elements > 0);
-    parlay::sequence<T> parents = parlay::tabulate(num_elements,[&] (T v) {return (T) 0;});
-
-    std::mt19937 gen = get_rand_gen(seed);//what seed is being used here? TOD2 //check into (if num_elts = 1mil twice, will it give same graph?)
-
-    std::uniform_real_distribution<double> dis(0, 1);
-
-    T c = 1; //count # of elements already added to tree
-    T par = 0; //the current parent, to which we add its children
-    double p2 = .3; //probability of 2 children
-    while (c < num_elements) {
-        parents[c]=par;
-        auto random_val = dis(gen);
-        if (random_val < p2 && c+1 < num_elements) {
-            parents[c+1]=par; 
-            c += 2;
-        }
-        else {
-            c += 1;
-        }
-        par += 1;
-
-    }
-
-    //print sequence
-    // for (int i = 0; i < num_elements; i++) {
-    //     std::cout << parents[i] << " " << std::endl;
-    // }
-    // std::cout << std::endl;
-    return parents;
-
-}
-
-
-//another take on generate_tree_graph
-//at each child, generate one or two children (naturally ternerized)
-//root is 0
-template<typename T>
-parlay::sequence<T> generate_random_tree(T num_elements, std::mt19937& gen) {
-    assert(num_elements > 0);
-    parlay::sequence<T> parents = parlay::tabulate(num_elements,[&] (T v) {return (T) 0;});
-
-    std::uniform_real_distribution<double> dis(0, 1);
-
-    T c = 1; //count # of elements already added to tree
-    T par = 0; //the current parent, to which we add its children
-    double p2 = .3; //probability of 2 children
-    while (c < num_elements) {
-        parents[c]=par;
-        auto random_val = dis(gen);
-        if (random_val < p2 && c+1 < num_elements) {
-            parents[c+1]=par; 
-            c += 2;
-        }
-        else {
-            c += 1;
-        }
-        par += 1;
-
-    }
-    return parents;
-
-}
 
 /*
     Generate a simple, single rooted graph with each node having two children
@@ -1521,7 +1443,7 @@ D subtree_query(cluster<T, D>* root, cluster<T, D>* dir_giver, D defretval, asso
     return ret_val;
 }
 
-
+//bug?, requires that counters not set by default to zero? (if another function changes, could error?) TOD2* (how do we know that internal node counters all start at zero?) FIXME
 template<typename T, typename D, typename assocfunc>
 void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, assocfunc func, parlay::sequence<cluster<T, D>>& clusters, const D& defretval = 0.00f)
 {   

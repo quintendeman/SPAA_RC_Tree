@@ -17,7 +17,6 @@
 #include "../include/parlay/internal/get_time.h"
 
 
-
 //give tree featured in Vishkin & Schieber
 parlay::sequence<int> give_example_tree() {
     parlay::sequence<int> parent_tree(22);
@@ -106,30 +105,6 @@ void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int&
     }
 }
 
-template<typename T>
-void print_parent_tree(parlay::sequence<T>& tree, std::string message) {
-    std::cout << message << std::endl;
-    for (int j = 0 ; j < tree.size(); j++) {
-         printf("(%d,%d) ", j , tree[j]);
-
-    }
-    std::cout << std::endl;
-
-}
-
-template<typename T>
-void print_child_tree(parlay::sequence<parlay::sequence<T>>& child_tree, std::string message) {
-    std::cout << message << std::endl;
-    for (int i = 0 ; i < child_tree.size(); i++) {
-        std::cout << i << ":";
-        for (int j = 0; j < child_tree[i].size(); j++) {
-            std::cout << child_tree[i][j] << " ";
-        }
-        std::cout << std::endl;
-    }
-
-}
-
 
 //test
 //tree is in format of (i,tree[i]) gives (child, parent) edge
@@ -160,18 +135,6 @@ bool common_ancestor(parlay::sequence<T>& tree, T u, T v, T c) {
     return is_ancestor(tree,c,u) && is_ancestor(tree,c,v);
 }
 
-//find the root of a (connected tree)
-//root = where the parent is itself (by our construction)
-template<typename T>
-T get_root(parlay::sequence<T>& tree) {
-    T u = tree[0]; //we pick an arbitrary element of the tree to start climbing up from. 
-    T next = tree[u];
-    while (u != next) {
-        u=next;
-        next=tree[next];
-    }
-    return u;
-}
 
 //given nodes u and v in a tree rooted at r, find the LCA. Note that this does not use RC trees or anything fancy, this is using standard techniques. 
 template<typename T>
@@ -293,38 +256,6 @@ T true_unrooted_lca(parlay::sequence<parlay::sequence<T>>& unrooted_tree,T u, T 
     // print_parent_tree(parent_tree,"directed tree");
     return vanilla_lca(parent_tree,u,v,rprime);
   
-}
-
-//level ancestors structure
-
-//O(d) depth, where d is height of tree
-//O(nd) work
-//la = level ancestors
-//max_level = depth of tree (to know how many ancestors to hold)
-//TOD2* space inefficient, because shallower children need less space than deep children
-template<typename T>
-parlay::sequence<parlay::sequence<T>> preprocess_la(parlay::sequence<T>& parent_tree,parlay::sequence<LCAnode<T>>& av, T root) {
-    parlay::sequence<parlay::sequence<T>> table = parlay::tabulate(parent_tree.size(),[&] (size_t i) {return parlay::sequence<T>(av[i].level+1,-1);});
-    
-    parlay::parallel_for(0,parent_tree.size(),[&] (size_t i) {
-        int count = 0;
-        T val = i;
-        table[i][count]=val; //need duplicate here, in case val is root
-
-        while (val != root) {
-            table[i][count]=val;
-            count += 1;
-            val=parent_tree[val];
-        }
-
-    });
-    return table;
-}
-
-//use the lookup table to get the i^{th} ancestor of node
-template<typename T>
-T query_la(parlay::sequence<parlay::sequence<T>>& table, T node, int ith) {
-    return table[node][ith];
 }
 
 
