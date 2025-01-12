@@ -21,6 +21,58 @@
 #include "MIS.h"
 #include "RC_test.h"
 
+template<typename T, typename D>
+inline bool isNullary(const cluster<T,D>* cluster_ptr)
+{
+    if(!cluster_ptr)
+        return false;
+    if(cluster_ptr->first_contracted_node == nullptr)
+        return false;
+    if(cluster_ptr->first_contracted_node->next == nullptr)
+        return false;
+    return cluster_ptr->first_contracted_node->next->state & nullary_cluster;
+}
+
+template<typename T, typename D>
+inline bool isUnary(const cluster<T,D>* cluster_ptr)
+{
+    if(!cluster_ptr)
+        return false;
+    if(cluster_ptr->first_contracted_node == nullptr)
+        return false;
+    if(cluster_ptr->first_contracted_node->next == nullptr)
+        return false;
+    return cluster_ptr->first_contracted_node->next->state & unary_cluster;
+}
+
+template<typename T, typename D>
+inline bool isBinary(const cluster<T,D>* cluster_ptr)
+{
+    if(!cluster_ptr)
+        return false;
+    if(cluster_ptr->first_contracted_node == nullptr)
+        return false;
+    if(cluster_ptr->first_contracted_node->next == nullptr)
+        return false;
+    return cluster_ptr->first_contracted_node->next->state & binary_cluster;
+}
+
+template<typename T, typename D>
+bool isLeaf(const cluster<T,D>* cluster_ptr)
+{
+    if(!cluster_ptr)
+        return false;
+    if(cluster_ptr->first_contracted_node == nullptr)
+        return false;
+    if(cluster_ptr->first_contracted_node->next == nullptr)
+        return false;
+    for(auto& child : cluster_ptr->children)
+    {
+        if(child != nullptr && !(child->state & base_edge))
+            return false;
+    }
+    return true;
+}
 
 
 template <typename edgetype>
