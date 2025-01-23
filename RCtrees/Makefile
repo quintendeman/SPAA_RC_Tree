@@ -4,7 +4,7 @@ CXX = g++
 CXXFLAGS = -O0 -std=c++17 -pthread -g -Werror -Wparentheses
 
 #must include -I (includes) before each new item!
-INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/ -I include/ -I LCA -I .
+INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/ -I parhash_include/ -I LCA -I .
 LDFLAGS = -ljemalloc
 
 RC_CREATE_DEPS = MIS.h RC.h RCdynamic.h RC_test.h RCdynamic.h
@@ -13,7 +13,7 @@ UTIL_DEPS = random_trees.h utils.h treeGen.h
 BASE_DEPS = $(RC_CREATE_DEPS) $(RC_BASE_DEPS) $(UTIL_DEPS)
 QUERY_DEPS = subtree_query.h path_query.h 
 MST_DEPS = incMST.h
-LCA_DEPS = LCA/VanillaLCA.h LCA/static_seqn_LCA.h LCA/static_par_LCA.h LCA/LCA.h 
+LCA_DEPS = LCA/VanillaLCA.h LCA/static_seqn_LCA.h LCA/static_par_LCA.h LCA/LCA.h LCA/fixedLCA.h
 
 # Default target
 all: RC.out testMST.out testTreeGen.out splca.out sslca.out lca.out

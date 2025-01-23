@@ -98,7 +98,7 @@ void set_preorder(parlay::sequence<parlay::sequence<T>>& child_tree, T root, par
     std::deque<T> stack; //use stack instead of recursion
 
     stack.push_back(root);
-    T count = 1; //TOD2* start at 1 or 0?
+    T count = 1; 
 
     while (stack.size() > 0) {
         T s = stack.back();
@@ -106,7 +106,7 @@ void set_preorder(parlay::sequence<parlay::sequence<T>>& child_tree, T root, par
 
         augmented_vertices[s].preorder = count;
         count += 1;
-        //TOD2 does order of accessing children matter here?
+        //TOD2 does order of accessing children matter here? (does order not matter but need to be kept consistent across functions?)
         for (T i = child_tree[s].size()-1; i >= 0; i--) {
             stack.push_back(child_tree[s][i]);
         }
@@ -175,8 +175,6 @@ void set_size(parlay::sequence<parlay::sequence<T>>& child_tree, T root, parlay:
 
 }
 
-
-//TOD2 can make much more efficient
 //do bottom up computation
 template<typename T>
 void set_inlabel(parlay::sequence<parlay::sequence<T>>& child_tree, T root, parlay::sequence<LCAnode<T>>& augmented_vertices) {
@@ -374,7 +372,6 @@ T query(parlay::sequence<T>& head, parlay::sequence<T>& parent_tree,parlay::sequ
     //std::cout << "chosen inlabel: " << av[i_pair.second].inlabel << std::endl;
     int b = ((av[i_pair.second].inlabel & mask) & (-1 - (1 << imax) + 1)) | (1 << imax);
     //std::cout << "b is " << b << std::endl;
-    //TODO* test b is correct; test z is correct; etc.
 
     auto output = get_inlabelz(av,u,v,imax);
     int inlabel_z = output.first;

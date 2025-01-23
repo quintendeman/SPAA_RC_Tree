@@ -25,7 +25,6 @@ parlay::sequence<parlay::sequence<T>> make_undirected_tree(parlay::sequence<parl
 }
 
 //given an unrooted tree, make it into a parent tree rooted at rprime
-//pass by reference breaking for some reason?! //continue here TODO*
 template<typename T>
 void make_directed_tree(parlay::sequence<parlay::sequence<T>>& unrooted_tree, parlay::sequence<T>& parent_tree, T rprime) {
 
@@ -48,7 +47,7 @@ void make_directed_tree(parlay::sequence<parlay::sequence<T>>& unrooted_tree, pa
         for (int i = 0; i < unrooted_tree[s].size(); i++) {
             T child = unrooted_tree[s][i];
             //issue: The old root has itself as an edge
-            if (child != parent_tree[s] &&  s != child) {//don't count the back edge //&&  TODO* print out child
+            if (child != parent_tree[s] &&  s != child) {//don't count the back edge
                 parent_tree[child]=s;
                 stack.push_back(child);
             }
@@ -127,7 +126,6 @@ std::mt19937 get_rand_gen(int seed) {
 //another take on generate_tree_graph
 //at each child, generate one or two children (naturally ternerized)
 //root is 0
-//TOD2* layer with random permutation (for more rigorous testing, affected by parallel scheduling)
 //TOD2* test on trees with greater than 2 children? 
 template<typename T>
 parlay::sequence<T> generate_random_tree(T num_elements, int seed=-1) {

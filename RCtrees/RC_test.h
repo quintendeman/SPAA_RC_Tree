@@ -111,7 +111,7 @@ void test_rc_valid(const parlay::sequence<vertex>& parents, parlay::sequence<clu
     });
 
     if (!isNearlyEqual(manual_sum_val,sub_ret_val)) {
-        std::cout << "manual and RC tree subtree sums different, aborting" << std::endl;
+        std::cout << "manual and RC tree subtree sums different, aborting " << manual_sum_val << " " << sub_ret_val << std::endl;
         exit(17);
     }
     if (print) {

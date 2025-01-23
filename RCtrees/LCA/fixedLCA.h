@@ -1,4 +1,5 @@
 //Code to handle LCA queries, given a fixed root and a single tree
+//Note: for efficiency, assumes RC tree nodes each have constant # of children
 
 #ifndef FIXED_LCA_H //! cannot define function of this name, good to know
 #define FIXED_LCA_H
@@ -6,21 +7,21 @@
 //header copied from RC.h
 #include "RC.h"
 #include "cluster.h"
-//TOD2* using OLD parlay hash, new one not working
-#include "include/old_parlay_hash/unordered_map.h" //for parlayhash concurrent hash map
+#include "parhash_include/parlay_hash/unordered_map.h" //for parlayhash concurrent hash map
 #include "static_par_LCA.h"
 #include "static_seqn_LCA.h"
 #include "random_trees.h"
 
 #include<bitset>
 
+const size_t const_num_bits = 60; //note that tree depth (due to deterministic contraction) should never exceed 60 (while graph is no more than a few trillion nodes)
+
 //anything to do with an alt tree/LCA helper
 template<typename T, typename D>
 struct LCAhelper {
     parlay::sequence<T> involved_nodes;
-    parlay::sequence<bool> marked_clusters;
 
-    parlay::sequence<std::bitset<50>> bitsets; //TOD2* change from 50? 
+    parlay::sequence<std::bitset<const_num_bits>> bitsets; 
     parlay::sequence<parlay::sequence<T>> la_table;
     parlay::sequence<LCAnode<T>> augmented_vertices;
     parlay::sequence<T> common_boundaries;
@@ -34,18 +35,12 @@ struct LCAhelper {
 
 };
 
-//TOD2* find the roots here, instead of passing a single root in to begin with (because is forest, there may be many roots
-
 //get the active RC nodes in this batch, using a bottom up sweep. 
-//store the nodes in play in involved_nodes, and store a boolean yes/no is_involved in marked_clusters
 //in a batch of size k, will mark O(k log(1+n/k))
 //bottom-up
-//TOD2* also: in star, could be O(N) duplicates -> Guy did say O(log n) span, think still okay
 
 template<typename T, typename D>
 void find_nodes_involved(parlay::sequence<cluster<T,D>>& clusters, int k, parlay::sequence<std::tuple<T,T>>& queries, LCAhelper<T,D>& h) {
-
-    std::cout << "alive" << std::endl;
 
     parlay::sequence<T> stack;
     parlay::sequence<T> new_stack(2*k,-1);
@@ -56,63 +51,56 @@ void find_nodes_involved(parlay::sequence<cluster<T,D>>& clusters, int k, parlay
         new_stack[2*i+1] = std::get<1>(queries[i]);
     });
 
-    //this call of remove duplicates okay because is linear work in k, log depth (single call okay, repeated calls could be trouble)
-    stack=parlay::remove_duplicates(parlay::filter(new_stack,[&] (T item) {return item != -1;})); 
-    h.involved_nodes.append(stack); //parallel bulk inserts the active nodes of this level 
+    parlay::sequence<bool> add_to_initial_stack(new_stack.size(),false);
+    parlay::parallel_for(0,new_stack.size(),[&] (size_t i) {
+        //if we grab this elt first
+        if (clusters[new_stack[i]].counter.fetch_add(1)==0) {
+            add_to_initial_stack[i]=true;
+        }
 
-    //check whether node is being accessed first or not
-    auto fetch_counters = parlay::tabulate(clusters.size(),[&] (size_t i) {return std::atomic<int>(1); });
-    //-4 = unprocessed; -3 = in process; -2 = done, don't touch
-    auto fetch_bool = parlay::tabulate(clusters.size(),[&] (size_t i) {return -4; });
-
-    //mark that the queries have already been added to stack (ex. if an internal node and one of its descendants are both offered as queries, don't want to go up section from internal node to root twice)
-    parlay::parallel_for(0,stack.size(),[&] (size_t i) {
-        fetch_bool[stack[i]]=-2; 
     });
+    stack = parlay::pack(new_stack,add_to_initial_stack); 
+    h.involved_nodes.append(stack);
+
+    // std::cout <<"debugging" <<std::endl;
+    // for (int i = 0; i < queries.size(); i++) {
+    //     std::cout << std::get<0>(queries[i]) << " " << std::get<1>(queries[i]) << std::endl;
+    // }
+    // for (int i = 0; i < new_stack.size(); i++) {
+    //     std::cout << new_stack[i] << " ";
+    // }
+    // std::cout << std::endl;
+
+    // for (int i = 0; i < stack.size(); i++) {
+    //     std::cout << stack[i] << " ";
+    // }
+    // std::cout << std::endl;
 
     //bottom-up, propagate true marks
     while(stack.size() > 0) {
-            std::cout << "alive" << std::endl;
-
         new_stack=parlay::sequence<T>(stack.size(),-1);
-        //set up race on adding parents
         parlay::parallel_for(0,stack.size(),[&] (size_t i) {
             //a is an index in clusters
             auto a = stack[i];
-            h.marked_clusters[a]=true;
-            if (a != h.root->index && fetch_bool[clusters[a].parent->index]==-4) { //if we aren't at the root and this is the first iteration the parent is accessed, then set up a race on the parent. 
-                fetch_bool[clusters[a].parent->index]=-3;
+            if (a != h.root -> index && clusters[a].parent->counter.fetch_add(1)==0) { //if we aren't at the root and we are the first child here
+                new_stack[i]=clusters[a].parent->index; //look @ in the next iteration
             }   
 
         });
-
-        //run the race on who gets to parent first, ensures parent only added once to stack
-        parlay::parallel_for(0,stack.size(),[&] (size_t i) {
-            //a is an index in clusters
-            auto a = stack[i];
-            
-            if (a != h.root->index) { 
-                //must confirm not at root before accessing parent
-                auto p = clusters[a].parent->index;
-                    //only fetch add if fetch bool is true (relies on short circuiting of ands)
-                    if (fetch_bool[p]==-3 && fetch_counters[p].fetch_add(2) == 1) { //if we aren't at the root and this is the first time this parent is accessed, then add the parent to the stack
-                    new_stack[i]=p;
-                    fetch_bool[p]=-2; //signal we are done with this node
-                }
-            }   
-
-        });
-        
         //don't pass up -1s (this is one way to filter, another way is to keep a filled_nodes bool and pack by it)
-        stack=parlay::remove_duplicates(parlay::filter(new_stack,[&] (T item) {return item != -1;})); 
+        stack=parlay::filter(new_stack,[&] (T item) {return item != -1;}); 
         h.involved_nodes.append(stack); //parallel insert the active nodes of this level 
     }
 
-   
     h.sn = h.involved_nodes.size(); //sn holds the # of nodes in the subset tree (the # of active internal nodes of the RC tree for this batch)
-        std::cout << "out" << std::endl;
 
+    //reset all counters touched*
+    parlay::parallel_for(0,h.involved_nodes.size(),[&] (size_t i) {
+        clusters[h.involved_nodes[i]].counter=0;
+    });
 }
+
+
 
 //given a cluster whose index in involved_nodes is i_index, find the index (in alt_tree) of its boundary that is closer to the root, return it
 //requires closest boundary to be computed for the parent of s (hence the top down computation with a stack)
@@ -131,7 +119,7 @@ T instack_choose_boundary(T s, parlay::sequence<cluster<T,D>>& clusters, LCAhelp
     //if parent is root, then the root is the desired boudary
     if (parent->index == h.root->index) {
         std::cout << "\t choosing root" << std::endl;
-        return index_map[h.root->index];
+        return *index_map.Find(h.root->index);
 
     }
 
@@ -162,8 +150,7 @@ T instack_choose_boundary(T s, parlay::sequence<cluster<T,D>>& clusters, LCAhelp
     }
 
     //if the parent of this cluster is a binary cluster
-    //TOD2* doublecheck or test? very possible is typo here
-    if (parent->first_contracted_node->next->state & (binary_cluster | base_edge) ) {
+    if (isBinaryOrEdge(parent) ) {
         T par_closest = h.closest_boundary[*index_map.Find(parent->index)];
         //if the boundary of the parent that is closest to the root is one of the child's boundaries
         if (par_closest == *index_map.Find(child_left->index) || par_closest==*index_map.Find(child_right->index)) {
@@ -188,9 +175,9 @@ T instack_choose_boundary(T s, parlay::sequence<cluster<T,D>>& clusters, LCAhelp
         }
 
     }
-    //TOD2* is nullary cluster one of the involved nodes?
-    else if (parent->first_contracted_node->next->state & (nullary_cluster)) {
-        std::cout << "did not account for this abort" << std::endl;
+    else if (isNullary(parent)) {
+        //should never reach here because we check if parent is root earlier in function
+        std::cout << "Should never reach here, parent is nullary yet was not caught earlier, abort" << std::endl;
         exit(802);
     }
     else { //PARENT is unary cluster
@@ -212,7 +199,6 @@ T instack_choose_boundary(T s, parlay::sequence<cluster<T,D>>& clusters, LCAhelp
 //in involved_nodes,
 //for each binary cluster, find which boundary vertex is closer to the root
 //for each unary cluster will just return the only boundary vertex
-//TOD2* does the find_boundary_vertices call within this function look outside the subset of the tree we are considering, breaking the work bound? Think okay because constant max # of children.
 //top-down computation
 //if root, closest boundary is itself by convention
 template<typename T, typename D>
@@ -252,7 +238,10 @@ void find_closest_boundary(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T
             }     
         });
         stack=parlay::flatten(new_stack);
-        if (count > 10) exit(1202);
+        if (count > 48) {
+            std::cout << "tree too deep, exiting" << std::endl;
+            exit(1202);
+        }
         count += 1;
     }
 }
@@ -266,7 +255,6 @@ void create_map_trees(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>& 
     //we make a child and parent tree completely self contained (so we can call the static LCA method); we use the index_map to go back and forth between
 
     //map the value in involved_nodes to its index; we will then create the tree using the index
-    //TOD2* is there a bulk insert command?
     parlay::parallel_for(0,h.sn,[&] (T i) {
         index_map.Insert(h.involved_nodes[i],i);
     });
@@ -289,8 +277,7 @@ void create_map_trees(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>& 
         T a = h.involved_nodes[s]; //a is the index in the RC tree/clusters list
         parlay::sequence<T> my_children;
         for (int j = 0; j < clusters[a].children.size(); j++) {
-            //TOD2* is checking all children for membership like this too expensive?
-            if (clusters[a].children[j] != nullptr && h.marked_clusters[clusters[a].children[j]->index]) {
+            if (clusters[a].children[j] != nullptr && index_map.Find(clusters[a].children[j]->index) != std::nullopt) {
                 my_children.push_back(*index_map.Find(clusters[a].children[j]->index));
             }
         }
@@ -343,7 +330,6 @@ void static_preprocess(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>&
 
 
     //get the max level in the tree
-    //TOD2* compute this once, outside (for constant factor efficiency)
     h.max_level = *parlay::max_element(parlay::map(h.augmented_vertices,[&] (LCAnode<T> node) { return node.level; }));
 
     h.la_table = preprocess_la(h.alt_parent_tree,h.augmented_vertices,alt_root); //level ancestors structure
@@ -397,10 +383,8 @@ void RC_preprocess(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<st
     //store ancestor information (binary or unary) in a bitset
     //in the i^th index in the bitset, the ancestor (of v) in level i is held
     //so in the 0^th position, the binary/unary value of the root is held
-    //TOD2* can a variable sized (at compile) bitset be allocated like this? Or set to 50 to be safe? But very small probability that tree is too deep? (not with the deterministic contraction scheme?)
-    //TOD2* assume all initialized as false (binary)?
-    //TOD2* what to write for nullary cluster? currently writing 0
-    h.bitsets = parlay::sequence<std::bitset<50>>(h.sn,0); 
+    //we write 1 for unary and 0 for binary (or nullary)
+    h.bitsets = parlay::sequence<std::bitset<const_num_bits>>(h.sn,0); 
     get_ancestor_bitset(clusters,h,index_map);
 
     std::cout << "printing all ancestor bitsets (cl. in.)" << std::endl;
@@ -454,7 +438,6 @@ void RC_preprocess(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<st
 
 //given cluster list (clusters), a cluster (B), and a vertex (corresponds to index in clusters) u, find the vertex in the cluster path of B that is closest to u
 //bitset is for u, helps us find the highest unary cluster
-//TOD2* can I special set the bitset to not a fixed constant? Need to mess with at some point
 //uses level ancestors as a subroutine
 //takes in index u on CLUSTERS
 //returns as index on CLUSTERS not on alt_tree
@@ -462,7 +445,7 @@ template<typename T, typename D>
 T closest_on_cluster_path(parlay::sequence<cluster<T,D>>& clusters, cluster<T,D>* B, T u, LCAhelper<T,D>& h,parlay::parlay_unordered_map<T,T>& index_map) {
     std::cout << "running closest on cluster path for " << u  << " in " << B->index << std::endl;
 
-    std::bitset<50> ubits=h.bitsets[*index_map.Find(u)]; //TOD2* correct fixed size for larger tree depths
+    std::bitset<const_num_bits> ubits=h.bitsets[*index_map.Find(u)]; 
 
     std::cout << "\tubits is " << ubits.to_ulong() << std::endl;
 
@@ -476,15 +459,14 @@ T closest_on_cluster_path(parlay::sequence<cluster<T,D>>& clusters, cluster<T,D>
     std::cout << "\t" << u << " level: " << u_level << ", " << B->index << " level: " << b_level << std::endl;
 
     //zero out all but the first u_level+1 bits
-    //TOD2* is casting to *unsigned* long an issue? vs signed long? (bitset only offers unsigned cast, I'd need to do an additional cast on top of it)
-    std::bitset<50> rel_bits = ubits.to_ulong() & ((1 << (u_level+1))-1);
+    std::bitset<const_num_bits> rel_bits = ubits.to_ulong() & ((1 << (u_level+1))-1);
 
     //zero out any bits before bit b_level
     rel_bits = (rel_bits.to_ulong() / (1 << (b_level) )) * (1 << (b_level) );
 
     std::cout << "\trel bits is " << rel_bits << std::endl;
     
-    if (rel_bits.to_ulong() == 0) { //if there are no unary clusters in this range, u itself must be on the cluster path TOD2* b itself must be the best node on cluster path?
+    if (rel_bits.to_ulong() == 0) { //if there are no unary clusters in this range, u itself must be on the cluster path 
         std::cout << "\tno unary clusters on path, return u itself" << std::endl;
         return u;
     }
@@ -519,8 +501,7 @@ T highest_ancestor_in_cluster(T b, T f, parlay::sequence<cluster<T,D>>& clusters
     for (int i = 0; i < clusters[b].children.size(); i++) {
         cluster<T,D>* child = clusters[b].children[i];
         //don't look at nullptr, nor clusters that are not part of the relevant subset
-        //TOD2* causes work efficient issues? Think okay
-        if (child==nullptr || h.marked_clusters[child->index]==false) continue; 
+        if (child==nullptr || index_map.Find(child->index)==std::nullopt) continue; 
 
         //std::cout << "looking at child: " << child->index << std::endl;
         T chi_alt = *index_map.Find(child->index);
@@ -543,7 +524,7 @@ T highest_ancestor_in_cluster(T b, T f, parlay::sequence<cluster<T,D>>& clusters
 template<typename T, typename D>
 bool is_cluster_between(T b, T f, parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>& h,parlay::parlay_unordered_map<T,T>& index_map) {
 
-    if (h.augmented_vertices[index_map[b]].level > h.augmented_vertices[index_map[f]].level) {
+    if (h.augmented_vertices[*index_map.Find(b)].level > h.augmented_vertices[*index_map.Find(f)].level) {
         std::cout << "error, f higher in RC tree than b " << std::endl;
         exit(1002);
     }
@@ -626,7 +607,7 @@ T case_c_not_uv(parlay::sequence<cluster<T,D>>& clusters,parlay::sequence<std::t
 
     //       std::cout << "h4.125" << std::endl;
 
-    //TOD2* could plug in x/y here, should not change result
+    //Note: could equivalently plug in x/y here, should not change result
     bool u_bet = is_cluster_between(c,u,clusters,h,index_map);
     //    std::cout << "h4.13" << std::endl;
 
@@ -686,10 +667,6 @@ void batch_fixed_LCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* ro
     LCAhelper<T,D> h;//= LCAhelper<T,D>();
     h.root=root;
 
-    //mark which clusters are involved in this calculation
-    //in clusters, are the first |V| positions the first |V| base vertex clusters? (or the inplace replacements of these) TOD2*
-    //marked_clusters follows the indexing in clusters
-    h.marked_clusters = parlay::sequence<bool>(nc,false);
     //find all nodes involved in this calculation. the indexing in involved_nodes is arbitrary (but will become important, beacuse we will map to it with index_map)
     find_nodes_involved(clusters,k,queries,h);
 

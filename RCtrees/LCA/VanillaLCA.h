@@ -91,6 +91,7 @@ bool common_ancestor(parlay::sequence<T>& tree, T u, T v, T c) {
 
 
 //given nodes u and v in a tree rooted at r, find the LCA. Note that this does not use RC trees or anything fancy, this is using standard techniques. 
+//if u and v not in same tree, return -1
 template<typename T>
 T vanilla_lca(parlay::sequence<T>& tree, T u, T v, T r) {
 
@@ -106,12 +107,14 @@ T vanilla_lca(parlay::sequence<T>& tree, T u, T v, T r) {
         u_path_up.push_back(uprime);
         uprime=tree[uprime]; //gets out the parent
     }
+    u_path_up.push_back(r);
     T vprime = v;
     while (vprime != r) {
         v_path_up.push_back(vprime);
         vprime = tree[vprime];
     }
-    T lca = r;
+    v_path_up.push_back(r);
+    T lca = -1;
     
     //while the ancestor is the same, go down the tree, stop when the paths diverge
     T u_counter = u_path_up.size() - 1;

@@ -63,6 +63,7 @@ inline char first_different_bit(const T a, const T b, bool* bit)
 }
 
 
+//LCA parse input calls
 void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int& NUM_TREES) {
     for (int i = 1; i < argc; i++) {
         std::string arg=argv[i];

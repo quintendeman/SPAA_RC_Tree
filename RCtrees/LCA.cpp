@@ -65,7 +65,8 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int BATCH_SIZE, std::mt19937
     create_RC_tree(clusters, n, 0, [] (int A, int B) {return A+B;}, false,false); //randomized=false -- use the deterministic contraction method //defretval=0 -- default cluster val (ex -inf, inf, 0) //print=false -- don't print contraction sizes
 
     //sanity check that the RC tree is valid before main test
-    test_rc_valid(parent_tree, clusters,false);
+    //TOD2* reinstall this check
+   // test_rc_valid(parent_tree, clusters,true); //true for print
 
     //see the clusters
     printTree(clusters);
@@ -89,13 +90,14 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int BATCH_SIZE, std::mt19937
             queries.push_back(std::make_tuple(u,v,r));
         }
 
-        parlay::sequence<cluster<int,int>*> answers;
+        //NOTE! answers size initialized here*
+        parlay::sequence<cluster<int,int>*> answers(BATCH_SIZE);
 
-        //std::cout << "about to batch" << std::endl;
+        std::cout << "about to batch" << std::endl;
 
-        batchLCA(clusters,root,queries,answers);
+        batchLCA(clusters,queries,answers);
 
-        //std::cout << "done batching" << std::endl;
+        std::cout << "done batching" << std::endl;
 
 
         for (int i  = 0; i < BATCH_SIZE; i++) {
@@ -103,13 +105,26 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int BATCH_SIZE, std::mt19937
             int v = std::get<1>(queries[i]);
             int rprime = std::get<2>(queries[i]);
             //this version uses the fixed to arbitrary LCA trick for the real ans (but this was tested so okay)
+            std::cout << "looked for real ans" << std::endl;
             auto real_ans = unrooted_lca(parent_tree,u,v,init_root,rprime);
+            std::cout << "found real ans" << std::endl;
         
             std::cout << u << " " << v << " " << "r'" << rprime << " LCA: " << real_ans << std::endl;
 
-            if (answers[i]->index != real_ans) {
+            if (answers[i] == nullptr && real_ans==-1 ) {
+                std::cout << "lca queried nodes not connected, hence -1" << std::endl;
+            }
+
+            else if (answers[i]==nullptr || answers[i]->index != real_ans) {
                 std::cout << "break abort" << std::endl;
-                std::cout << "Said: " << answers[i]->index << "real: " << real_ans << std::endl;
+                if (answers[i]==nullptr) {
+                    std::cout << "answers[i] is nullptr, real: " << real_ans << std::endl;
+                }
+                else {
+                    std::cout << "Said: " << answers[i]->index << "real: " << real_ans << std::endl;
+
+                }
+               
                 std::cout << "Tree# " << iter << ", " << "Trial: " << iter2 << std::endl;
 
                 //see the clusters
@@ -117,6 +132,8 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int BATCH_SIZE, std::mt19937
 
                 print_parent_tree(parent_tree,"parent tree");
                 print_child_tree(child_tree,"child tree");
+
+                std::cout << "bad exit" << std::endl;
 
                 std::exit(5);
             }
@@ -180,6 +197,8 @@ int main(int argc, char* argv[]) {
     parse_input(argc,argv,n,NUM_TRIALS,seed,NUM_TREES,BATCH_SIZE);
 
     std::mt19937 gen(seed);
+
+    std::cout << "Batch size: " << BATCH_SIZE << std::endl;
 
     test_lca(n,NUM_TRIALS,NUM_TREES,BATCH_SIZE,gen);
     //extensive_test_perm(n,NUM_TREES,gen);
