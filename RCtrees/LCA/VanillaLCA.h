@@ -14,6 +14,7 @@
 #include <cmath>
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
+#include "random_trees.h"
 
 //give tree featured in Vishkin & Schieber
 parlay::sequence<int> give_example_tree() {
@@ -148,6 +149,7 @@ T logic_lca(T lca_uv, T lca_urp, T lca_vrp) {
 //get arbitrary root from base root
 //r is the true root of the tree
 //rprime is the root around which we wish to orient our answer
+//this version only for a single connected tree*
 template<typename T>
 T unrooted_lca(parlay::sequence<T>& parent_tree, T u, T v, T r, T rprime) {
     auto lca_uv = vanilla_lca(parent_tree,u,v,r);
@@ -157,6 +159,19 @@ T unrooted_lca(parlay::sequence<T>& parent_tree, T u, T v, T r, T rprime) {
     return logic_lca(lca_uv,lca_urp,lca_vrp);
 }
 
+template<typename T>
+T unrooted_forest_lca(parlay::sequence<T>& parent_forest, T u, T v, T rprime) {
+    T uroot = get_root(parent_forest,u);
+    T vroot = get_root(parent_forest,v);
+    T rprime_root = get_root(parent_forest,rprime);
+    
+    if (uroot != vroot || uroot != rprime_root) {
+        return -1; //disconnected
+    }
+    //if connected, can run unrooted lca as normal
+    return unrooted_lca(parent_forest,u,v,uroot,rprime);
+
+}
 
 
 //given a truly unrooted tree (undirected graph no cycles), find the LCA directly, not with the above fixed root LCA trick

@@ -64,7 +64,7 @@ template<typename T>
 parlay::sequence<parlay::sequence<T>> partree_to_childtree(parlay::sequence<T>& tree, parlay::sequence<parlay::sequence<T>>& child_tree) {
     
     for (int i = 0; i < tree.size(); i++) {
-        if (i == tree[i]) continue;
+        if (i == tree[i]) continue; //don't add the parent as a child
         //TOD2 keep this sorted maybe? Note that sorts ascending currently.
         child_tree[tree[i]].push_back(i);
     }
@@ -102,6 +102,19 @@ void print_child_tree(parlay::sequence<parlay::sequence<T>>& child_tree, std::st
 template<typename T>
 T get_root(parlay::sequence<T>& tree) {
     T u = tree[0]; //we pick an arbitrary element of the tree to start climbing up from. 
+    T next = tree[u];
+    while (u != next) {
+        u=next;
+        next=tree[next];
+    }
+    return u;
+}
+
+
+//find the root of a tree in a forest containing node u
+//root = where the parent is itself (by our construction)
+template<typename T>
+T get_root(parlay::sequence<T>& tree, T u) {
     T next = tree[u];
     while (u != next) {
         u=next;
@@ -160,8 +173,9 @@ parlay::sequence<T> generate_random_tree(T num_elements, int seed=-1) {
 //another take on generate_tree_graph
 //at each child, generate one or two children (naturally ternerized)
 //root is 0
+//chain ratio is % of nodes with 1 child (as compared to 2 children) (with exception of endcap)
 template<typename T>
-parlay::sequence<T> generate_random_tree(T num_elements, std::mt19937& gen) {
+parlay::sequence<T> generate_random_tree(T num_elements, std::mt19937& gen, double chain_ratio) {
     assert(num_elements > 0);
     parlay::sequence<T> parents = parlay::tabulate(num_elements,[&] (T v) {return (T) 0;});
 
@@ -169,11 +183,10 @@ parlay::sequence<T> generate_random_tree(T num_elements, std::mt19937& gen) {
 
     T c = 1; //count # of elements already added to tree
     T par = 0; //the current parent, to which we add its children
-    double p2 = .3; //probability of 2 children
     while (c < num_elements) {
         parents[c]=par;
         auto random_val = dis(gen);
-        if (random_val < p2 && c+1 < num_elements) {
+        if (random_val > chain_ratio && c+1 < num_elements) {
             parents[c+1]=par; 
             c += 2;
         }
@@ -186,6 +199,36 @@ parlay::sequence<T> generate_random_tree(T num_elements, std::mt19937& gen) {
     return parents;
 
 }
+
+//generate random tree of degree <= 3 in parallel
+//at each child, generate one or two children 
+//root is 0
+//chain ratio is % of nodes with 1 child (as compared to 2 children) (with exception of endcap)
+template<typename T>
+parlay::sequence<T> generate_random_tree_par(T n, parlay::random_generator& pgen, double chain_ratio) {
+    assert(n > 0);
+
+    std::uniform_real_distribution<double> dis(0,1);
+
+    //if the 1st n nodes all had 2 children, we would have 2*n+1 node tree
+    parlay::sequence<T> extended = parlay::tabulate(2*n+1,[&] (T i) {return (i-1) >> 1; });
+    extended[0]=0; //0 is root
+    parlay::sequence<bool> packbools = parlay::tabulate(2*n+1,[&] (T i) {
+        if (i == 0 || i % 2 == 1) return true; //always keep at least one child
+        auto r = pgen[i];
+        double coin = dis(r);
+        if (coin < chain_ratio) return true;
+        return false;
+    });
+    //only take true positions
+    auto filtered = parlay::pack(extended,packbools);
+    //return the n-prefix of filtered
+    return filtered.subseq(0,n);
+
+}
+
+
+
 
 //sequential way to create permutation. Given that parent tree creation is sequential, have permutation sequential too? 
 template<typename T>
@@ -221,65 +264,116 @@ parlay::sequence<T> generate_random_perm_seq(T n, std::mt19937& gen) {
     return perm;
 
 }
-// //randomly permute elements 0 through n-1, in parallel
-// template<typename T>
-// parlay::sequence<T> generate_random_perm(T n, parlay::random_generator& pgen) {
-//     parlay::sequence<T> perm(n,-1);
-//     parlay::sequence<T> cand = parlay::iota(n);
-//     parlay::sequence<T> pick;
-//     std::uniform_real_distribution<double> dis(0, 1);
-//     parlay::sequence<std::atomic<int>> counters;
-//     parlay::sequence<T> io = parlay::iota(n);
-
-//     int base = 1; //base case size (1 means no special base case/low value case)
-//     //expected ~ O(log n) iters to terminate
-//     while (cand.size() >= base) {
-//         io = parlay::iota(cand.size());
-//         counters = parlay::tabulate(cand.size(),[&] (size_t i) {return std::atomic<int>(0);});
-//         //pick random elt within cand
-//         pick = parlay::tabulate(cand.size(),[&] (size_t i) {
-//             return dis(pgen[i]) % cand.size();
-//         });
-//         parlay::parallel_for(0,pick.size(),[&] (size_t i) {
-//             //if we were the first to pick a certain #, add to perm
-//             if (counters[pick[i]].fetch_add(1)==0) {
-//                 perm[cand[i]]=perm[cand[pick[i]]];
-
-//             }
-
-//         });
-//         //we continue processing elements whose perm has not been decided yet
-//         cand = parlay::filter(io,[&] (T index) {
-//             return perm[index]==-1;
-//         });
 
 
+//randomly permute elements 0 through n-1, in parallel
+//TOD2* use more delayed sequences instead of tabulates (here and throughout code)
+//TOD2* neaten, slightly spaghetti
+template<typename T>
+parlay::sequence<T> generate_random_perm_par(T n, parlay::random_generator& pgen) {
+    parlay::sequence<T> perm(n,-1); //i maps to perm[i]
+    parlay::sequence<T> cand = parlay::tabulate(n,[&] (T i) {return i;}); //set of #s that still lack a map (remaining domain)
+    parlay::sequence<T> available_choices = parlay::tabulate(n,[&] (T i) {return i;}); //remaining range
+    std::uniform_real_distribution<double> dis(0, 1);
 
-//     }
+    //set counters to start at 0
+    parlay::sequence<std::atomic<int>> counters = parlay::tabulate(cand.size(),[&] (size_t i) {return std::atomic<int>(0);});
+   
+    int base = 1; //base case size (1 means no special base case/low value case)
+    //expected ~ O(log n) iters to terminate
+    int counter = 0;
+    while (cand.size() >= base) {
+ 
+        //reset counters still in use
+        parlay::parallel_for(0,cand.size(),[&] (size_t i) {
+            counters[i]=0;
+        });
 
-//     //debugging
-//     auto results = histogram_by_key(perm);
-//     if (results.size() < n) {
-//         std::cout << "error, not all #s represented in perm" << std::endl;
-//         for (int i = 0; i < n; i++) {
-//             std::cout << perm[i] << " ";
-//         }
-//         std::cout << std::endl;
-//         exit(3001);
-//     }
+     
+        //pick random elt index within cand
+        //if pick[i]=j, then cand[i] wants to map to choice[j]
+        assert(available_choices.size() == cand.size());
+        parlay::sequence<T> pick = parlay::tabulate(cand.size(),[&] (size_t i) {
+            auto r = pgen[i];
+            return static_cast<T>(floor(dis(r)*available_choices.size())); //random elt in 0 to cand.size()-1
+        });
+
+        //keep track of which picks go through
+        parlay::sequence<bool> pick_remains(pick.size(),true);
+
+        parlay::parallel_for(0,pick.size(),[&] (size_t i) {
+            //if we were the first to pick a certain #, add to perm
+            if (counters[pick[i]].fetch_add(1)==0) {
+                perm[cand[i]]=available_choices[pick[i]];
+                pick_remains[pick[i]]=false;
+
+            }
+
+        });
+
+        //we continue processing elements whose perm has not been decided yet
+        cand = parlay::filter(cand,[&] (T index) {
+            return perm[index]==-1;
+        });
+        available_choices = parlay::pack(available_choices,pick_remains); 
 
 
-// }
 
+    }
+
+    //debugging
+    auto results = histogram_by_key(perm);
+    if (results.size() < n) {
+        std::cout << "error, not all #s represented in perm" << std::endl;
+        for (int i = 0; i < n; i++) {
+            std::cout << perm[i] << " ";
+        }
+        std::cout << std::endl;
+        exit(3001);
+    }
+
+    return perm;
+
+
+}
 
 //generate_random_tree, but with a permutation added to enhance randomness (catch bugs based on children relative ordering)
 template<typename T>
-parlay::sequence<T> generate_random_tree_perm(T num_elements, std::mt19937& gen) {
-    parlay::sequence<T> parents = generate_random_tree(num_elements,gen); //get parent tree, unpermuted
+parlay::sequence<T> generate_random_tree_perm(T num_elements, std::mt19937& gen, double chain_ratio) {
+    parlay::sequence<T> parents = generate_random_tree(num_elements,gen,chain_ratio); //get parent tree, unpermuted
 
     parlay::sequence<T> perm = generate_random_perm_seq(num_elements,gen); //get permutation
 
     //print_parent_tree(parents,"par tree original");
+
+    // std::cout << "printing perm" << std::endl;
+    // for (int i = 0; i < perm.size(); i++) {
+    //     std::cout << i << ": " << perm[i] << std::endl;
+    // }
+    // std::cout << std::endl;
+
+    parlay::sequence<T> new_tree(num_elements,-1); 
+
+    parlay::parallel_for(0,num_elements,[&] (size_t i) { //apply permutation
+        new_tree[perm[i]]=perm[parents[i]];
+
+    });
+
+    //print_parent_tree(new_tree,"new tree");
+
+    return new_tree; //return result of permutation
+
+}
+
+
+//generate_random_tree, but with a permutation added to enhance randomness (catch bugs based on children relative ordering)
+template<typename T>
+parlay::sequence<T> generate_random_tree_perm_par(T num_elements, parlay::random_generator& pgen, double chain_ratio) {
+    parlay::sequence<T> parents = generate_random_tree_par(num_elements,pgen,chain_ratio); //get parent tree, unpermuted
+
+    parlay::sequence<T> perm = generate_random_perm_par(num_elements,pgen); //get permutation
+
+    // print_parent_tree(parents,"par tree original");
 
     // std::cout << "printing perm" << std::endl;
     // for (int i = 0; i < perm.size(); i++) {
@@ -317,6 +411,65 @@ parlay::sequence<T> permute_tree(T num_elements, parlay::sequence<T>& parents, s
 
 }
 
+//given parents graph (single tree), divide into ratio*n trees (for forest testing)
+template<typename T>
+void divide_into_forests(T n, parlay::sequence<T>& parents, double ratio,std::mt19937& gen) {
+
+    std::uniform_real_distribution<double> dis(0,1);
+    for (int i = 0; i < n; i++) {
+        if (dis(gen) < ratio) {
+            parents[i]=i; //cut off parent edge, now is root
+        }
+    }
+
+}
+
+
+//given parents graph (single tree), divide into ratio*n trees (for forest testing) in parallel
+template<typename T>
+void divide_into_forests_par(T n, parlay::sequence<T>& parents, double ratio,parlay::random_generator& pgen) {
+
+    std::uniform_real_distribution<double> dis(0,1);
+
+    parlay::parallel_for(0,n,[&] (size_t i) {
+        auto r = pgen[i];
+        if (dis(r) < ratio) {
+            parents[i]=i; //cut off parent edge, now is root
+        }
+        
+    });
+
+}
+
+//count how many trees are in a forest
+template<typename T>
+T num_roots(parlay::sequence<T>& parents) {
+    T counter = 0;
+    for (int i = 0; i < parents.size(); i++) {
+        if (parents[i]==i) counter += 1;
+    }
+    return counter;
+}
+
+//function in progress TOD2* finish or delete
+// template<typename T>
+// void print_forest_sizes(parlay::sequence<T>& parents) {
+//     parlay::sequence<T> roots;
+//     parlay::sequence<parlay::sequence<T>> child_tree;
+//     partree_to_childtree(parents,child_tree);
+//     for (int i = 0; i < parents.size(); i++) {
+//         if (parents[i]==i) {
+//             roots.push_back(i);
+//         }
+//     }
+//     parlay::sequence<T> counters(roots.size(),1);
+
+//     parlay::parallel_for(0,roots.size(),[&] (T i) {
+//         for (int i = 0; i < )
+        
+
+//     })
+// }
 
 
 //find depth of tree (in child form)

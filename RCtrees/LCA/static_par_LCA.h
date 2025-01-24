@@ -330,7 +330,7 @@ void preprocess_par(parlay::sequence<T>& parent_tree, parlay::sequence<parlay::s
         return node.level;
     }));
 
-    std::cout << "max level is " << max_level << std::endl;
+    //std::cout << "max level is " << max_level << std::endl;
 
     set_size_par(child_tree,parent_tree,root,augmented_vertices,max_level);
     set_preorder_par(child_tree,root,augmented_vertices);

@@ -4,6 +4,7 @@
 #ifndef LCAHH //! cannot define function of this name, good to know
 #define LCAHH
 
+
 //header copied from RC.h
 #include "RC.h"
 #include "cluster.h"
@@ -15,6 +16,8 @@
 
 #include<bitset>
 
+//whether or not to print debug info
+const bool PRINT_L = false;
 
 //given a set of roots and involved nodes, assign each involved node to a root
 template<typename T, typename D>
@@ -115,36 +118,39 @@ void batchLCA_singletree(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>
     parlay::sequence<std::tuple<T,T>> queries_vr=parlay::tabulate(k,[&] (size_t i) {
         return std::make_tuple(std::get<1>(queries[i]),std::get<2>(queries[i]));
     });
-
-    std::cout << "query print" << std::endl;
-    for (int i = 0; i < answers_uv.size(); i++) {
-        std::cout << i << ": " << std::get<0>(queries[i]) << " " << std::get<1>(queries[i]) << " " << std::get<2>(queries[i]) << " " << answers_uv[i] << " " << answers_ur[i] << " " << answers_vr[i] << std::endl;
+    if (PRINT_L) {
+        std::cout << "query print" << std::endl;
+        for (int i = 0; i < answers_uv.size(); i++) {
+            std::cout << i << ": " << std::get<0>(queries[i]) << " " << std::get<1>(queries[i]) << " " << std::get<2>(queries[i]) << " " << answers_uv[i] << " " << answers_ur[i] << " " << answers_vr[i] << std::endl;
+        }
     }
-    std::cout << "Starting 1st query call u v" << std::endl;
-    std::cout << "root of choice " << root->index << std::endl;
+    if (PRINT_L) {
+        std::cout << "Starting 1st query call u v" << std::endl;
+        std::cout << "root of choice " << root->index << std::endl;
+    }
     batch_fixed_LCA(clusters,root,queries_uv,answers_uv);
-    std::cout << std::endl << std::endl << std::endl;
-
-    std::cout << "Starting 2nd query call u r" << std::endl;
-    batch_fixed_LCA(clusters,root,queries_ur,answers_ur);
-    std::cout << std::endl << std::endl << std::endl;
-
-
-    std::cout << "Starting 3rd query call v r" << std::endl;
-    batch_fixed_LCA(clusters,root,queries_vr,answers_vr);
-    std::cout << std::endl << std::endl << std::endl;
-
-    std::cout << "answer print" << std::endl;
-    for (int i = 0; i < answers_uv.size(); i++) {
-        std::cout << i << ": " << std::get<0>(queries[i]) << " " << std::get<1>(queries[i]) << " " << std::get<2>(queries[i]) << " " << answers_uv[i] << " " << answers_ur[i] << " " << answers_vr[i] << std::endl;
+    if (PRINT_L) {
+        std::cout << std::endl << std::endl << std::endl;
+        std::cout << "Starting 2nd query call u r" << std::endl;
     }
-    std::cout << "k is " << k << std::endl;
+    batch_fixed_LCA(clusters,root,queries_ur,answers_ur);
+    if (PRINT_L) {
+        std::cout << std::endl << std::endl << std::endl;
+        std::cout << "Starting 3rd query call v r" << std::endl;
+    }
+    batch_fixed_LCA(clusters,root,queries_vr,answers_vr);
+    if (PRINT_L) {
+        std::cout << std::endl << std::endl << std::endl;
+        std::cout << "answer print" << std::endl;
+        for (int i = 0; i < answers_uv.size(); i++) {
+            std::cout << i << ": " << std::get<0>(queries[i]) << " " << std::get<1>(queries[i]) << " " << std::get<2>(queries[i]) << " " << answers_uv[i] << " " << answers_ur[i] << " " << answers_vr[i] << std::endl;
+        }
+    }
 
     answers=parlay::tabulate(k,[&] (size_t i) {
         return &clusters[logic_lca(answers_uv[i],answers_ur[i],answers_vr[i])]; //this logic in Vanilla LCA
     });
-
-    std::cout << "exit" << std::endl;
+    if (PRINT_L) std::cout << "exit" << std::endl;
 
 }
 
@@ -152,8 +158,6 @@ void batchLCA_singletree(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>
 //return nullptr if the query vertices are in separate trees (meaning that they can't have a common ancestor)
 template<typename T, typename D>
 void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::tuple<T,T,T>>& queries, parlay::sequence<cluster<T,D>*>& answers) {
-
-    std::cout << "c1" << std::endl;
 
     int nc = clusters.size(); //vertices + edges~
     int k = queries.size(); //batch size
@@ -164,31 +168,30 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::t
     forest_find_nodes_involved(clusters,k,queries,involved_nodes,roots);
     int sn = involved_nodes.size();
 
-    std::cout << "printing queries " << std::endl;
-    for (int i = 0; i < queries.size(); i++) {
-        std::cout << std::get<0>(queries[i]) << " " << std::get<1>(queries[i]) << " " << std::get<2>(queries[i]) << std::endl;
+    if (PRINT_L) {
+        std::cout << "printing queries " << std::endl;
+        for (int i = 0; i < queries.size(); i++) {
+            std::cout << std::get<0>(queries[i]) << " " << std::get<1>(queries[i]) << " " << std::get<2>(queries[i]) << std::endl;
+        }
+
+        std::cout << "printing involved nodes" << std::endl;
+        for (int i = 0; i < involved_nodes.size(); i++) {
+            std::cout << involved_nodes[i] << " ";
+        }
+        std::cout << std::endl;
     }
-
-    std::cout << "printing involved nodes" << std::endl;
-    for (int i = 0; i < involved_nodes.size(); i++) {
-        std::cout << involved_nodes[i] << " ";
-    }
-    std::cout << std::endl;
-
-    std::cout << "c2" << std::endl;
-
     //index map maps between involved_nodes index and cluster index
     parlay::parlay_unordered_map<T,T> index_map = parlay::parlay_unordered_map<T,T>(2*sn); 
 
      parlay::parallel_for(0,sn,[&] (T i) {
         index_map.Insert(involved_nodes[i],i);
     });
-    std::cout << "c3" << std::endl;
 
-
-    std::cout << "roots" << std::endl;
-    for (int i = 0 ; i < roots.size(); i++) {
-        std::cout << roots[i] << std::endl;
+    if (PRINT_L) {
+        std::cout << "roots" << std::endl;
+        for (int i = 0 ; i < roots.size(); i++) {
+            std::cout << roots[i] << std::endl;
+        }
     }
 
     //store which root each involved_node belongs to
@@ -197,23 +200,25 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::t
 
     populate_root_ids(clusters,involved_nodes,roots,root_ids,index_map);
 
-    std::cout << "root ids: " << std::endl;
-    for (int i = 0; i < root_ids.size(); i++) {
-        std::cout << root_ids[i] << " " ;
+    if (PRINT_L) {
+        std::cout << "root ids: " << std::endl;
+        for (int i = 0; i < root_ids.size(); i++) {
+            std::cout << root_ids[i] << " " ;
+        }
+        std::cout << std::endl;
     }
-    std::cout << std::endl;
 
     parlay::sequence<T> rangk = parlay::tabulate(k,[&] (T i) {return i;});
 
-    std::cout << "c4" << std::endl;
+    if (PRINT_L) {
+        std::cout << "printing index map for queries" << std::endl;
+        for (int i = 0; i < queries.size(); i++) {
+            std::cout << std::get<0>(queries[i]) << ": " << std::endl;
+            std::cout << *index_map.Find(std::get<0>(queries[i])) << std::endl;
+            std::cout << std::get<1>(queries[i]) << ": " << *index_map.Find(std::get<1>(queries[i])) << std::endl;
+            std::cout << std::get<2>(queries[i]) << ": " << *index_map.Find(std::get<2>(queries[i])) << std::endl;
 
-    std::cout << "printing index map for queries" << std::endl;
-    for (int i = 0; i < queries.size(); i++) {
-        std::cout << std::get<0>(queries[i]) << ": " << std::endl;
-        std::cout << *index_map.Find(std::get<0>(queries[i])) << std::endl;
-        std::cout << std::get<1>(queries[i]) << ": " << *index_map.Find(std::get<1>(queries[i])) << std::endl;
-        std::cout << std::get<2>(queries[i]) << ": " << *index_map.Find(std::get<2>(queries[i])) << std::endl;
-
+        }
     }
 
     //TOD2* within a lambda function like this, better to write arugment type as reference? std::tuple<T,T,T>& query? Or does [&] already handle that?
@@ -223,18 +228,17 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::t
         return root_ids[*index_map.Find(std::get<0>(queries[i]))] == root_ids[*index_map.Find(std::get<1>(queries[i]))] && root_ids[*index_map.Find(std::get<0>(queries[i]))] == root_ids[*index_map.Find(std::get<2>(queries[i]))];
     });
 
-    std::cout << "c4.5" << std::endl;
     //find which queries do not contain all members in same tree
     auto unanswerable_query_indices = parlay::filter(rangk,[&] (T i) {
          return root_ids[*index_map.Find(std::get<0>(queries[i]))] != root_ids[*index_map.Find(std::get<1>(queries[i]))] || root_ids[*index_map.Find(std::get<0>(queries[i]))] != root_ids[*index_map.Find(std::get<2>(queries[i]))];
     });
-        std::cout << "c5" << std::endl;
-
-    for (int i = 0; i < answerable_query_indices.size(); i++) {
-        std::cout << "answerable " << i << " " << answerable_query_indices[i] << std::endl;
-    }
-     for (int i = 0; i < unanswerable_query_indices.size(); i++) {
-        std::cout << "unanswerable " << i << " " << unanswerable_query_indices[i] << std::endl;
+    if (PRINT_L) {
+        for (int i = 0; i < answerable_query_indices.size(); i++) {
+            std::cout << "answerable " << i << " " << answerable_query_indices[i] << std::endl;
+        }
+        for (int i = 0; i < unanswerable_query_indices.size(); i++) {
+            std::cout << "unanswerable " << i << " " << unanswerable_query_indices[i] << std::endl;
+        }
     }
   
     //if query not connected, then answer is nullptr
@@ -247,16 +251,17 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::t
     auto queries_by_tree = parlay::group_by_key(parlay::map(answerable_query_indices,[&] (T i) {
         return std::make_pair(root_ids[*index_map.Find(std::get<0>(queries[i]))],i);
     }));
-
-    for (int i = 0; i < queries_by_tree.size(); i++) {
-        std::cout << i << " " << queries_by_tree[i].first << ": ";
-        for (int j = 0; j < queries_by_tree[i].second.size();j++) {
-            std::cout << queries_by_tree[i].second[j] << " ";
+    if (PRINT_L) {
+        for (int i = 0; i < queries_by_tree.size(); i++) {
+            std::cout << i << " " << queries_by_tree[i].first << ": ";
+            for (int j = 0; j < queries_by_tree[i].second.size();j++) {
+                std::cout << queries_by_tree[i].second[j] << " ";
+            }
+            std::cout << std::endl;
         }
-        std::cout << std::endl;
-    }
 
-    std::cout << "about to single tree LCA" << std::endl;
+        std::cout << "about to single tree LCA" << std::endl;
+    }
     //in parallel, look at the queries for each root
     parlay::parallel_for(0,queries_by_tree.size(),[&] (size_t i) {
         //list of queries associated with root queries_by_tree[i].first

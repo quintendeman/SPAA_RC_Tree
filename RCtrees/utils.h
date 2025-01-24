@@ -108,7 +108,22 @@ void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int&
     }
 }
 
+template<typename T>
+void pseq(parlay::sequence<T>& seq) {
+    for (int i = 0; i < seq.size(); i++) {
+        std::cout << seq[i] << " ";
+    }
+    std::cout << std::endl;
+}
 
 
+template<typename T>
+void pseq(parlay::sequence<T>& seq, std::string message) {
+    std::cout << message << ": ";
+    for (int i = 0; i < seq.size(); i++) {
+        std::cout << seq[i] << " ";
+    }
+    std::cout << std::endl;
+}
 
 #endif
