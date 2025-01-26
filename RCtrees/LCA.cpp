@@ -52,14 +52,12 @@ void get_RC_tree(parlay::sequence<cluster<int,int>>& clusters,  parlay::sequence
 //TOD2* test on T types other than ints? 
 void handle_answers(parlay::sequence<std::tuple<int,int,int>>& queries, parlay::sequence<cluster<int,int>*>& answers, int k, parlay::sequence<int>& parent_tree, parlay::sequence<cluster<int,int>>& clusters, int iter, int iter2, double forest_ratio, double chain_ratio) {
 
-    std::cout << "y" << std::endl;
     parlay::sequence<int> real_answers = parlay::tabulate(k,[&] (size_t i) {
         int u = std::get<0>(queries[i]);
         int v = std::get<1>(queries[i]);
         int rprime = std::get<2>(queries[i]);
         return unrooted_forest_lca(parent_tree,u,v,rprime);
     });
-    std::cout << "check" << std::endl;
     //std::cout << "<";
     for (int i  = 0; i < k; i++) {
         int u = std::get<0>(queries[i]);
@@ -164,7 +162,7 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
    
         //printTree(clusters);
        
-        std::cout << "num roots: " << num_roots(parent_tree) << std::endl;
+        //std::cout << "num roots: " << num_roots(parent_tree) << std::endl;
 
 
         run_tree(NUM_TRIALS,clusters,k,parent_tree,gen,dis,iter,forest_ratio,chain_ratio);
@@ -173,166 +171,196 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
 
 
     }
+
+    printf("success on test n: %d trials: %d trees: %d k: %d forr: %f chainr: %f\n", n, NUM_TRIALS,NUM_TREES,k,forest_ratio,chain_ratio);
 }
 
     
-// // //more extensive LCA test (lots of randomness)
-// void grand_test_lca(std::mt19937& gen,parlay::random_generator& pgen, int iters) {
-//     std::uniform_int_distribution<int> disn(1,100000000);
-//     std::exponential_distribution<int> dis_tri(1000);
-//     std::exponential_distribution<int> dis_tree(100);
-//     std::normal_distribution<int> dis_k(10000,50000); //make sure to take abs value then add 1
-//     std::uniform_real_distribution<double> dis_forest(0,1);
-//     std::uniform_real_distribution<double> dis_chain(0,1);
+// //more extensive LCA test (lots of randomness)
+void grand_test_lca(std::mt19937& gen,parlay::random_generator& pgen, int iters) {
+    std::uniform_int_distribution<int> disn(1,100000000);
+    std::exponential_distribution<> dis_tri(1000);
+    std::exponential_distribution<> dis_tree(100);
+    std::normal_distribution<> dis_k(10000,50000); //make sure to take abs value then add 1
+    std::uniform_real_distribution<double> dis_forest(0,1);
+    std::uniform_real_distribution<double> dis_chain(0,1);
 
-//     for (int i = 0; i < iters; i++) {
-//         int n = dis(gen);
-//         int trials = dis_tri(gen);
-//         int num_trees = dis_tree(gen);
-//         int k = abs(dis_k(gen))+1;
-//         double forest_ratio = dis_forest(gen);
-//         double chain_ratio = dis_chain(gen);
-
-
-//         test_lca(n,trials,num_trees,k,gen,pgen,forest_ratio,chain_ratio);
-//     }
-
-// }
-
-// // //choose a VERY large forest to test on
-// void large_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
-//     test_lca(500'000'000, 100, 2, 10000, gen, pgen, 0, 0.3);
-
-// }
+    for (int i = 0; i < iters; i++) {
+        int n = disn(gen);
+        int trials = dis_tri(gen);
+        int num_trees = dis_tree(gen);
+        int k = abs(dis_k(gen))+1;
+        double forest_ratio = dis_forest(gen);
+        double chain_ratio = dis_chain(gen);
 
 
-// //very small trees
-// void small_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
-//     //test_lca(n, # trials, # trees, k, rand gen, rand ||gen, forest ratio, chain ratio);
-//     test_lca(1,2,100,1,gen,pgen,0,.3);
-//     test_lca(2,10,20,2,gen,pgen,0.3,.3); 
-//     test_lca(3,10,20,3,gen,pgen,0.15,.3); 
-//     test_lca(4,10,100,3,gen,pgen,0.5,.3); 
-//     test_lca(5,10,100,5,gen,pgen,0.25,.3); 
-//     test_lca(6,10,10,1000,gen,pgen,0.2,.3); //note that k >> n is okay
-//     test_lca(7,10,100,7,gen,pgen,0.1,.3); 
-//     test_lca(8,10,100,100,gen,pgen,0.6,.3);  
-//     test_lca(9,10,100,20,gen,pgen,0.05,.3); 
-//     test_lca(10,10,100,17,gen,pgen,0.01,.3); 
+        test_lca(n,trials,num_trees,k,gen,pgen,forest_ratio,chain_ratio);
+    }
 
-// }
+}
+
+// //choose a VERY large forest to test on
+void large_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
+    test_lca(500'000'000, 100, 2, 10000, gen, pgen, 0, 0.3);
+
+}
+
+
+//very small trees
+//~6s of testing time
+void small_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
+    //test_lca(n, # trials, # trees, k, rand gen, rand ||gen, forest ratio, chain ratio);
+   // std::cout << "1" << std::endl;
+    test_lca(1,2,100,1,gen,pgen,0,.3);
+    //    std::cout << "1" << std::endl;
+    test_lca(2,10,20,2,gen,pgen,0.3,.3); 
+      //  std::cout << "1" << std::endl;
+    test_lca(3,10,20,3,gen,pgen,0.15,.3); 
+      //  std::cout << "1" << std::endl;
+
+    test_lca(4,10,100,3,gen,pgen,0.5,.3); 
+     //  std::cout << "1" << std::endl;
+
+    test_lca(5,10,100,5,gen,pgen,0.25,.3); 
+      //  std::cout << "1" << std::endl;
+
+    test_lca(6,10,10,10000,gen,pgen,0.2,.3); //note that k >> n is okay
+      //  std::cout << "1" << std::endl;
+
+    test_lca(7,10,100,7,gen,pgen,0.1,.3); 
+       // std::cout << "1" << std::endl;
+
+    test_lca(8,10,100,100,gen,pgen,0.6,.3);  
+      //  std::cout << "1" << std::endl;
+
+    test_lca(9,10,100,20,gen,pgen,0.05,.3); 
+      //  std::cout << "1" << std::endl;
+
+    test_lca(10,10,100,17,gen,pgen,0.01,.3); 
+      //  std::cout << "1" << std::endl;
+}
 
 // //a chain (large and mid sized)
-// void chain_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
-//     test_lca(5,100,3,10,gen,pgen,0,1);
-//     test_lca(50,100,3,10,gen,pgen,0,1);
-//     test_lca(500,100,3,50,gen,pgen,0,1);
-//     test_lca(5000,100,3,50,gen,pgen,0.001,1);
-//     test_lca(5000,100,3,50,gen,pgen,0,1);
-//     test_lca(100000,100,3,1000,gen,pgen,0,1);
-//     test_lca(1000000,10,3,1000,gen,pgen,0,1);
-//     test_lca(100000000,10,3,1000,gen,pgen,0,1);
+// ~ 300 mil tree budget
+void chain_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
+    test_lca(5,100,3,10,gen,pgen,0,1);
+    test_lca(50,100,3,10,gen,pgen,0,1);
+    test_lca(500,100,3,50,gen,pgen,0,1);
+    test_lca(5000,100,3,50,gen,pgen,0.001,1);
+    test_lca(5000,100,3,50,gen,pgen,0,1);
+    test_lca(100000,100,3,1000,gen,pgen,0,1);
+    test_lca(1000000,10,3,1000,gen,pgen,0,1);
+    test_lca(100000000,10,3,1000,gen,pgen,0,1);
 
-// }
+}
 
 // // //no chains, if a node x has a child y that is not a leaf, then x has 2 children
 // //large and small
-// void balanced_test_lca(std::mt19937& gen) {
-//     test_lca(6,100,3,20,gen,pgen,0,0);
-//     test_lca(51,100,3,15,gen,pgen,0,0);
-//     test_lca(400,100,3,40,gen,pgen,0,0);
-//     test_lca(3000,50,10,9000000,gen,pgen,0.01,0); //high k balanced few trees
-//     test_lca(5000,100,3,1000000,gen,pgen,0,0); //high k balanced single tree
-//     test_lca(5300,100,3,70,gen,pgen,0,0);
-//     test_lca(5500,100,3,100,gen,pgen,0.001,0);
-//     test_lca(90000,100,3,900,gen,pgen,0,0);
-//     test_lca(1200000,10,3,3000,gen,pgen,0,0);
-//     test_lca(1200000,10,3,3000,gen,pgen,0.5,0); //many forests
-//     test_lca(90000000,11,3,3000,gen,pgen,0,0);
+// < 500 mil tree budget
+void balanced_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
+    test_lca(6,100,3,20,gen,pgen,0,0);
+    test_lca(51,100,3,15,gen,pgen,0,0);
+    test_lca(400,100,3,40,gen,pgen,0,0);
+    test_lca(3000,50,10,9000000,gen,pgen,0.01,0); //high k balanced few trees
+    test_lca(5000,100,3,1000000,gen,pgen,0,0); //high k balanced single tree
+    test_lca(5300,100,3,70,gen,pgen,0,0);
+    test_lca(5500,100,3,100,gen,pgen,0.001,0);
+    test_lca(90000,100,3,900,gen,pgen,0,0);
+    test_lca(1200000,10,3,3000,gen,pgen,0,0);
+    test_lca(1200000,10,3,3000,gen,pgen,0.5,0); //many forests
+    test_lca(90000000,11,3,3000,gen,pgen,0,0);
 
-// }
-
-// //large k testing
-// void large_k_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
-//     test_lca(10,10,10,2000,gen,pgen,.1,.3);
-//     test_lca(11,5,5,20000,gen,pgen,.1,.3);
-//     test_lca(1000,5,5,10001,gen,pgen,.01,.2);
-//     test_lca(500,15,2,10001,gen,pgen,0,1); //all chains
-
-// }
+}
 
 // //large k testing
-// void small_k_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
-//     test_lca(10,10,10,1,gen,pgen,.1,.3);
-//     test_lca(200,5,5,2,gen,pgen,.1,.3);
-//     test_lca(10000,5,5,1,gen,pgen,.01,.2);
-//     test_lca(100000000,1000,10,2,gen,pgen,.001,.3);
-//     test_lca(70000000,1000,10,1,gen,pgen,.05,.3);
+void large_k_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
+    test_lca(10,10,10,2000,gen,pgen,.1,.3);
+    test_lca(11,5,5,20000,gen,pgen,.1,.3);
+    test_lca(1000,5,5,10001,gen,pgen,.01,.2);
+    test_lca(500,15,2,10001,gen,pgen,0,1); //all chains
 
-// }
+}
 
-// // //test where all vertices isolated
-// // //large and small
-// void isolated_test_lca(std::mt19937& gen, parlay::random_generator& pgen)) {
-//     test_lca(6,100,3,20,gen,pgen,1,0.3);
-//     test_lca(51,100,3,15,gen,pgen,1,0.3);
-//     test_lca(400,100,3,40,gen,pgen,1,0.3);
-//     test_lca(5500,100,3,100,gen,pgen,1,0.3);
-// }
-// // //many forests, not much connection
-// void mostly_forests_lca(std::mt19937& gen, parlay::random_generator& pgen) {
-//     test_lca(12,50,3,3,gen,pgen,.8,0.3);
-//     test_lca(101,120,10,1000,gen,pgen,.8,0.2);
-//     test_lca(306,80,20,50,gen,pgen,.8,0.1);
-//     test_lca(8777,110,50,80,gen,pgen,.8,0.4);
-//     test_lca(150000,90,100,9000,gen,pgen,.9,0.5);
-//     test_lca(3200000,1000,1000,100,gen,pgen,.95,0.25);
-//     test_lca(10000000,11,10,30000,gen,pgen,0.999,0.32);
-// }
+// //large k testing
+// ~ 1 bil tree budget
+void small_k_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
+    test_lca(10,10,10,1,gen,pgen,.1,.3);
+    test_lca(200,5,5,2,gen,pgen,.1,.3);
+    test_lca(10000,5,5,1,gen,pgen,.01,.2);
+    test_lca(100000000,1000,10,2,gen,pgen,.001,.3);
+    test_lca(70000000,1000,10,1,gen,pgen,.05,.3);
 
-// void few_forests_lca(std::mt19937& gen, parlay::random_generator& pgen)  {
+}
 
-//     test_lca(6,100,3,20,gen,pgen,.8,0.3);
-//     test_lca(51,100,3,15,gen,pgen,.8,0.2);
-//     test_lca(400,100,3,40,gen,pgen,.8,0.1);
-//     test_lca(5500,100,3,100,gen,pgen,.8,0.4);
-//     test_lca(90000,100,3,900,gen,pgen,.9,0.5);
-//     test_lca(1200000,10,3,3000,gen,pgen,.95,0.25);
-//     test_lca(1200000,10,3,3000,gen,pgen,.95,1); //all chains
-//     test_lca(90000000,11,3,3000,gen,pgen,0.999,0.32);
+// //test where all vertices isolated
+// //large and small
+void isolated_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
+    test_lca(6,100,3,20,gen,pgen,1,0.3);
+    test_lca(51,100,3,15,gen,pgen,1,0.3);
+    test_lca(400,100,3,40,gen,pgen,1,0.3);
+    test_lca(5500,100,3,100,gen,pgen,1,0.3);
+}
+// //many forests, not much connection
+void mostly_forests_lca(std::mt19937& gen, parlay::random_generator& pgen) {
+    test_lca(12,50,3,3,gen,pgen,.8,0.3);
+    test_lca(101,120,10,1000,gen,pgen,.8,0.2);
+    test_lca(306,80,20,50,gen,pgen,.8,0.1);
+    test_lca(8777,110,50,80,gen,pgen,.8,0.4);
+    test_lca(150000,90,100,9000,gen,pgen,.9,0.5);
+    test_lca(3200000,1000,1000,100,gen,pgen,.95,0.25);
+    test_lca(10000000,11,10,30000,gen,pgen,0.999,0.32);
+}
+
+void few_forests_lca(std::mt19937& gen, parlay::random_generator& pgen)  {
+
+    test_lca(6,100,3,20,gen,pgen,.8,0.3);
+    test_lca(51,100,3,15,gen,pgen,.8,0.2);
+    test_lca(400,100,3,40,gen,pgen,.8,0.1);
+    test_lca(5500,100,3,100,gen,pgen,.8,0.4);
+    test_lca(90000,100,3,900,gen,pgen,.9,0.5);
+    test_lca(1200000,10,3,3000,gen,pgen,.95,0.25);
+    test_lca(1200000,10,3,3000,gen,pgen,.95,1); //all chains
+    test_lca(90000000,11,3,3000,gen,pgen,0.999,0.32);
 
 
-// }
+}
 
 // //one huge tree
-// void single_tree_lca(std::mt19937& gen, parlay::random_generator& pgen) {
-//     test_lca(150000000,100,10,50000,gen,pgen,1,.2);
-//     test_lca(120020409,90,20,10001,gen,pgen,1,.4);
+//1.5 bil + 3 bil tree budget (fairly large)
+void single_tree_lca(std::mt19937& gen, parlay::random_generator& pgen) {
+    test_lca(150000000,100,10,50000,gen,pgen,1,.2);
+    test_lca(120020409,90,20,10001,gen,pgen,1,.4);
 
-// }
+}
 
 
-// void extensive_lca(std::mt19937& gen, parlay::random_generator& pgen) {
-//     small_test_lca(gen, pgen); //test small #s (edge case)
+void extensive_lca(std::mt19937& gen, parlay::random_generator& pgen) {
+    small_test_lca(gen, pgen); //test small #s (edge case)
 
-//     chain_test_lca(gen,pgen); //vary balanced vs chain formation
-//     balanced_test_lca(gen,pgen);
+    chain_test_lca(gen,pgen); //vary balanced vs chain formation
+    balanced_test_lca(gen,pgen);
 
-//     large_k_test_lca(gen,pgen);
-//     small_k_test_lca(gen,pgen);
+    large_k_test_lca(gen,pgen);
+    small_k_test_lca(gen,pgen);
 
-//     isolated_test_lca(gen,pgen); //isolated vs connected
-//     mostly_forests_lca(gen,pgen);
-//     few_forests_lca(gen,pgen);
-//     single_tree_lca(gen,pgen);
+    isolated_test_lca(gen,pgen); //isolated vs connected
+    mostly_forests_lca(gen,pgen);
+    few_forests_lca(gen,pgen);
+    single_tree_lca(gen,pgen);
 
-//     grand_test_lca(gen,pgen,100); //just lots of random values
+    grand_test_lca(gen,pgen,100); //just lots of random values
 
-//     large_test_lca(gen,pgen);
+    large_test_lca(gen,pgen);
 
-//     //TOD2* test on T types other than int, Ex. custom T types (user defined structs?)
+    //TOD2* test on T types other than int, Ex. custom T types (user defined structs?)
 
-// }
+}
+
+void more_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
+    small_test_lca(gen,pgen);
+    
+
+}
 
 void extensive_test_perm(int n, int NUM_TREES, std::mt19937& gen) {
     for (int i = 0; i < NUM_TREES; i++) {
@@ -369,6 +397,9 @@ void test_perm() {
 }
 
 int main(int argc, char* argv[]) {
+
+    parlay::internal::timer tim = parlay::internal::timer();
+
     std::cout << "hello world!3" << std::endl;
 
     int n = 10; //defaults
@@ -388,5 +419,11 @@ int main(int argc, char* argv[]) {
 
     test_lca(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,0,.3); //0 is forest ratio
     //extensive_test_perm(n,NUM_TREES,gen);
+
+    std::cout << "Time: " << tim.next_time() << std::endl;
+
+    more_test_lca(gen,pgen);
+
+    std::cout << "Time: " << tim.next_time() << std::endl;
 
 }
