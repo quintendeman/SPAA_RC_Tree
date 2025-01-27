@@ -13,6 +13,8 @@
 #include "cluster.h"
 #include "../examples/counting_sort.h"
 #include <parlay/random.h>
+#include "../examples/helper/graph_utils.h"
+
 
 //note that we are NOT passing child_tree by reference, to get a new copy as the undirected graph
 template<typename T>
@@ -603,9 +605,12 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
     Converts the parents array into a symmetric graph
 */
 template <typename graph, typename T>
-graph convert_parents_to_graph(graph G, parlay::sequence<T> parents)
+graph convert_parents_to_graph(graph G, parlay::sequence<T> parents, bool extra_print=false)
 {
+    if (extra_print) std::cout << "1" << std::endl;
     parlay::sequence<T> vertices = parlay::tabulate(parents.size(), [&] (T v) {return v;});
+
+    if (extra_print) std::cout << "2" << std::endl;
 
     G = parlay::map(vertices, [&] (T v) {
         if(parents[v] == v) // root
@@ -618,7 +623,12 @@ graph convert_parents_to_graph(graph G, parlay::sequence<T> parents)
         return temp;
     });
 
+     if (extra_print) std::cout << "3" << std::endl;
+
+
     G = graph_utils<T>::symmetrize(G);
+
+    if (extra_print) std::cout << "4" << std::endl;
 
     return G;
 }

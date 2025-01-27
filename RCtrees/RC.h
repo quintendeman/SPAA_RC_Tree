@@ -108,6 +108,52 @@ void finalize(node<T,D>* contracted_node)
 }
 
 
+template<typename T, typename D, typename lambdafunc>
+void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func)
+{
+
+    // std::cout << "I, " << contracted_node->cluster_ptr->index << " am accumulating" << std::endl;
+
+    contracted_node->cluster_ptr->data = defretval;
+    contracted_node->cluster_ptr->max_weight_edge = nullptr;
+    bool found = false;
+    for(auto& child : contracted_node->cluster_ptr->children)
+    {
+        if(child == nullptr)
+            continue;
+        bool valid_child = false;
+        if(child->adjacency.get_head()->state & base_edge)
+            valid_child = true;
+        else if (child->first_contracted_node->state & (binary_cluster | base_edge))
+            valid_child = true;
+        else if (child->first_contracted_node->next == nullptr)
+            valid_child = false;
+        else if (child->first_contracted_node->next->state & (binary_cluster | base_edge))
+            valid_child = true;
+        
+        
+        if(valid_child)
+        {
+            if(!found)
+            {
+                contracted_node->cluster_ptr->data = child->data;
+                contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
+                found = true;
+            }
+            else
+            {
+                if(child->data > contracted_node->cluster_ptr->data)
+                    contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
+                contracted_node->cluster_ptr->data = func(contracted_node->cluster_ptr->data, child->data);
+            
+            }
+        }
+    }
+
+    return;
+}
+
+
 
 /**
  * MUST have at most 2 neighbours
@@ -594,32 +640,49 @@ template <typename T, typename D, typename lambdafunc>
 void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defretval, lambdafunc assocfunc, bool randomized = false, bool print=false)
 {
 
-
+    if (print) std::cout << "1" << std::endl;
     auto tree_nodes = parlay::tabulate(base_clusters.size(), [&] (T i){
         return base_clusters[i].adjacency.get_tail();
     });
+
+    if (print) std::cout << "2" << std::endl;
 
     // if(base_clusters.size() <= 100)
     //     printTree(base_clusters);
 
     recreate_last_levels(tree_nodes);
 
+    if (print) std::cout << "3" << std::endl;
+
     auto count = 0;
     do
     {
+        if (print) std::cout << "counter " << count << std::endl;
         check_consistency(tree_nodes); // TODO remove
+
+        if (print) std::cout << "past consistency check"  << std::endl;
         // break;
         auto eligible = parlay::filter(tree_nodes, [] (auto node_ptr){
             return node_ptr->get_num_neighbours_live() <= 2;
         });
 
+        if (print) std::cout << "x1" << std::endl;
+
         
         set_MIS(eligible);
+
+                if (print) std::cout << "x1.1" << std::endl;
+
         auto candidates = parlay::filter(eligible, [] (auto node_ptr){
             return node_ptr->cluster_ptr->state & IS_MIS_SET;
         });
+                if (print) std::cout << "x1.2" << std::endl;
+
 
         check_mis(candidates); // TODO remove
+
+        if (print) std::cout << "x2" << std::endl;
+
 
         
         parlay::parallel_for(0, candidates.size(), [&] (T i){
@@ -628,10 +691,15 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defre
             accumulate(candidates[i], defretval, assocfunc);
         });
 
+        if (print) std::cout << "x3" << std::endl;
+
+
         
         tree_nodes = parlay::filter(tree_nodes, [] (auto node_ptr) {
             return node_ptr->state & live;
         });
+
+        if (print) std::cout << "x4" << std::endl;
 
         
         recreate_last_levels(tree_nodes);

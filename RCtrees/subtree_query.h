@@ -1,6 +1,10 @@
+#ifndef SUBTREE_QUERY
+#define SUBTREE_QUERY
+
 #include "cluster.h"
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
+#include "utils.h"
 
 // Use chatgpt to convert from recursive to iterative
 //CITE*? (TOD2* do we cite chatgpt here?)
@@ -243,4 +247,6 @@ D subtree_query(cluster<T, D>* root, cluster<T, D>* dir_giver, D defretval, asso
     return ret_val;
 }
 
-//TOD2* Add batch subtree query
+//TOD2* Add batch subtree query?
+
+#endif

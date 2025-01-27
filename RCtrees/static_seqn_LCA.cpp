@@ -34,6 +34,7 @@ void test_lca(int n, int NUM_TREES, int NUM_TRIALS, std::mt19937& gen) {
         //parlay::sequence<int> parent_tree = // generate_random_tree(n,gen);
         parlay::sequence<int> parent_tree = give_example_tree2();
         int root = 1; //set back to 0*
+        n = 7; //for this example
 
         //from the parent tree, get a child_tree
         parlay::sequence<parlay::sequence<int>> child_tree(n,parlay::sequence<int>());
@@ -84,7 +85,7 @@ void test_unrooted_lca(int n, int NUM_TREES, int NUM_TRIALS, std::mt19937& gen) 
 
     for (int iter = 0; iter < NUM_TREES; iter++) {
     //generate random parent tree
-    parlay::sequence<int> parent_tree = generate_random_tree(n,gen);
+    parlay::sequence<int> parent_tree = generate_random_tree(n,gen,.3);
 
     //from the parent tree, get a child_tree
     parlay::sequence<parlay::sequence<int>> child_tree(n,parlay::sequence<int>());

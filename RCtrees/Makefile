@@ -24,8 +24,23 @@ splca.out : static_par_LCA.cpp $(LCA_DEPS) $(BASE_DEPS)
 sslca.out : static_seqn_LCA.cpp $(LCA_DEPS) $(BASE_DEPS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o sslca.out static_seqn_LCA.cpp
 
-lca.out : lca.cpp $(LCA_DEPS) $(BASE_DEPS)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o lca.out lca.cpp
+
+lca.o :  $(LCA_DEPS)  $(BASE_DEPS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c LCA/LCA.h -o lca.o 
+
+vanillaLCA.o :  $(LCA_DEPS)  $(BASE_DEPS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c LCA/VanillaLCA.h -o vanillaLCA.o 
+
+randomtrees.o :  $(LCA_DEPS)  $(BASE_DEPS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c random_trees.h -o randomtrees.o 
+
+#Linux case sensitive, LCA.cpp not lca.cpp
+lca.out : LCA.cpp lcastable.o 
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o lca.out LCA.cpp lcastable.o
+
+lcastable.o : LCAstable.cpp $(LCA_DEPS)  $(BASE_DEPS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c LCAstable.cpp -o lcastable.o 
+
 
 RC.out: RC.cpp $(BASE_DEPS) $(MST_DEPS) $(QUERY_DEPS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o RC.out RC.cpp

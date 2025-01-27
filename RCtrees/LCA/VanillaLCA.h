@@ -46,7 +46,7 @@ parlay::sequence<int> give_example_tree() {
 
 }
 
-//a tree with bugs
+//a tree with bugs (at one point)
 parlay::sequence<int> give_example_tree2() {
     parlay::sequence<int> parent_tree(7);
     parent_tree[1]=1;
@@ -56,6 +56,24 @@ parlay::sequence<int> give_example_tree2() {
     parent_tree[4]=6;
     parent_tree[0]=2;
     parent_tree[5]=0;
+    return parent_tree;
+
+}
+
+
+//a tree with bugs
+//chain of length 9, permuted
+parlay::sequence<int> give_example_tree3() {
+    parlay::sequence<int> parent_tree(9);
+    parent_tree[0]=3;
+    parent_tree[1]=5;
+    parent_tree[2]=1;
+    parent_tree[3]=7;
+    parent_tree[4]=4; //root
+    parent_tree[5]=8;
+    parent_tree[6]=2;
+    parent_tree[7]=6;
+    parent_tree[8]=4;
     return parent_tree;
 
 }
@@ -146,7 +164,7 @@ T logic_lca(T lca_uv, T lca_urp, T lca_vrp) {
 
 }
 
-//get arbitrary root from base root
+//get arbitrary root from base root ok
 //r is the true root of the tree
 //rprime is the root around which we wish to orient our answer
 //this version only for a single connected tree*

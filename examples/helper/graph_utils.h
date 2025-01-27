@@ -1,3 +1,6 @@
+#ifndef GRAPH_UTILS_H
+#define GRAPH_UTILS_H
+
 #include <iostream>
 #include <string>
 #include <parlay/primitives.h>
@@ -242,3 +245,4 @@ struct graph_utils {
     write_graph_to_file(GR, filename);
   }
 };
+#endif 

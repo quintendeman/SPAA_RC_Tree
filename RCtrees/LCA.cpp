@@ -1,29 +1,31 @@
 //file to test LCA with
 //TOD2* what happens when running on -03 optimization flag? Would code still pass tests? 
 
-//header copied from RC.cpp
-#include <iostream>
-#include <string>
-#include <chrono>
-#include <iomanip>
-#include <fstream>
-#include <string>
-#include <random>
-#include <time.h>
-#include <cmath>
-#include "../include/parlay/primitives.h"
-#include "../include/parlay/sequence.h"
-#include "../include/parlay/internal/get_time.h"
-#include "../examples/samplesort.h"
-#include<stdio.h>
+// //header copied from RC.cpp
+// #include <iostream>
+// #include <string>
+// #include <chrono>
+// #include <iomanip>
+// #include <fstream>
+// #include <string>
+// #include <random>
+// #include <time.h>
+// #include <cmath>
+// #include "../include/parlay/primitives.h"
+// #include "../include/parlay/sequence.h"
+// #include "../include/parlay/internal/get_time.h"
+// #include "../examples/samplesort.h"
+// #include<stdio.h>
 
-#include "RCdynamic.h"
-#include "RC_test.h"
+// #include "RC_test.h"
+// #include "RC.h"
 
-//need our LCA funs
-#include "LCA.h"
-#include "VanillaLCA.h"
-#include "random_trees.h"
+// //need our LCA funs
+// #include "LCA.h"
+// #include "VanillaLCA.h"
+// #include "random_trees.h"
+
+#include "LCAstable.cpp"
 
 const bool PRINT_B = false;
 
@@ -42,11 +44,14 @@ void get_root_RC(parlay::sequence<cluster<T,D>>& clusters, cluster<T,D>*& ans) {
     }
 }
 
-void get_RC_tree(parlay::sequence<cluster<int,int>>& clusters,  parlay::sequence<int>& parent_tree) {
+void get_RC_tree(parlay::sequence<cluster<int,int>>& clusters,  parlay::sequence<int>& parent_tree, bool extra_print=false) {
     parlay::sequence<parlay::sequence<int>> G;
-    G=convert_parents_to_graph(G,parent_tree);
+    G=convert_parents_to_graph(G,parent_tree,extra_print);
+    if (extra_print) std::cout << "made graph" << std::endl;
     create_base_clusters(G, clusters, 3); //max deg=3; each vertex in the tree has maximum degree 3
-    create_RC_tree(clusters, static_cast<int>(parent_tree.size()), 0, [] (int A, int B) {return A+B;}, false,false); //randomized=false -- use the deterministic contraction method //defretval=0 -- default cluster val (ex -inf, inf, 0) //print=false -- don't print contraction sizes
+    if (extra_print) std::cout << "made base clusters" << std::endl;
+    create_RC_tree(clusters, static_cast<int>(parent_tree.size()), 0, [] (int A, int B) {return A+B;}, false,extra_print); //randomized=false -- use the deterministic contraction method //defretval=0 -- default cluster val (ex -inf, inf, 0) //print=false -- don't print contraction sizes
+    if (extra_print) std::cout << "made tree " << std::endl;
 }
 
 //TOD2* test on T types other than ints? 
@@ -134,38 +139,43 @@ void run_tree(int NUM_TRIALS, parlay::sequence<cluster<int,int>>& clusters, int 
 
 
 //TOD2* adjust LCA code to work with forest (multiple roots!) (all tests so far on 1 tree only)
-void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,parlay::random_generator& pgen, double forest_ratio, double chain_ratio) {
+void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,parlay::random_generator& pgen, double forest_ratio, double chain_ratio, bool extra_print=false) {
+
+    if (extra_print) std::cout << "starting n " << n << std::endl;
+   // extra_print=false; //temporary
 
     std::uniform_int_distribution<int> dis(0,n-1);
 
     for (int iter = 0; iter < NUM_TREES; iter++) {
+       // if (iter == 24) extra_print=true; //specific iter of interest
+        if (extra_print) std::cout << "starting tree " << iter << std::endl;
         //generate random parent tree (permuted)
         parlay::sequence<int> parent_tree = generate_random_tree_perm_par(n,pgen,chain_ratio); //TOD2* switch to random perm tree generate_random_tree(n,gen); // 
         ////generate_random_tree_perm(n,gen,chain_ratio);//
 
         divide_into_forests_par(n,parent_tree,forest_ratio,pgen);
         //see the clusters
-        //print_parent_tree(parent_tree,"parent tree:");
+       // if (extra_print) print_parent_tree(parent_tree,"parent tree:");
         //for debugging
         // parlay::sequence<parlay::sequence<int>> child_tree(parent_tree.size(),parlay::sequence<int>());
         // partree_to_childtree(parent_tree,child_tree);
         // print_child_tree(child_tree,"child tree");
-
+        if (extra_print) std::cout << "about to make clusters" << std::endl;
         //create the RC tree
         parlay::sequence<cluster<int,int>> clusters;
-        get_RC_tree(clusters,parent_tree);
+        get_RC_tree(clusters,parent_tree,extra_print);
       
         //sanity check that the RC tree is valid before main test
         //TOD2* reinstall this check (subtree sums check currently failing)
         // test_rc_valid(parent_tree, clusters,true); //true for print
 
    
-        //printTree(clusters);
+        //if (extra_print) printTree(clusters);
        
         //std::cout << "num roots: " << num_roots(parent_tree) << std::endl;
-
-
+        if (extra_print) std::cout << "about to run LCA" << std::endl;
         run_tree(NUM_TRIALS,clusters,k,parent_tree,gen,dis,iter,forest_ratio,chain_ratio);
+        if (extra_print) std::cout << "finished LCA" << std::endl;
 
         deleteRCtree(clusters);
 
@@ -210,33 +220,33 @@ void large_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
 //~6s of testing time
 void small_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
     //test_lca(n, # trials, # trees, k, rand gen, rand ||gen, forest ratio, chain ratio);
-   // std::cout << "1" << std::endl;
-    test_lca(1,2,100,1,gen,pgen,0,.3);
-    //    std::cout << "1" << std::endl;
-    test_lca(2,10,20,2,gen,pgen,0.3,.3); 
+//    // std::cout << "1" << std::endl;
+//     test_lca(1,2,100,1,gen,pgen,0,.3);
+//     //    std::cout << "1" << std::endl;
+//     test_lca(2,10,20,2,gen,pgen,0.3,.3); 
+//       //  std::cout << "1" << std::endl;
+        test_lca(3,10,20,3,gen,pgen,0.15,.3); 
+//       //  std::cout << "1" << std::endl;
+
+//     test_lca(4,10,100,3,gen,pgen,0.5,.3); 
+//      //  std::cout << "1" << std::endl;
+
+//     test_lca(5,10,100,5,gen,pgen,0.25,.3); 
+//       //  std::cout << "1" << std::endl;
+
+//     test_lca(6,10,10,10000,gen,pgen,0.2,.3); //note that k >> n is okay
+//       //  std::cout << "1" << std::endl;
+
+//     test_lca(7,10,100,7,gen,pgen,0.1,.3); 
+//        // std::cout << "1" << std::endl;
+
+    // test_lca(8,10,100,100,gen,pgen,0.6,.3);  
+//       //  std::cout << "1" << std::endl;
+
+    test_lca(9,10,200,20,gen,pgen,0.05,.3,true); 
       //  std::cout << "1" << std::endl;
-    test_lca(3,10,20,3,gen,pgen,0.15,.3); 
-      //  std::cout << "1" << std::endl;
 
-    test_lca(4,10,100,3,gen,pgen,0.5,.3); 
-     //  std::cout << "1" << std::endl;
-
-    test_lca(5,10,100,5,gen,pgen,0.25,.3); 
-      //  std::cout << "1" << std::endl;
-
-    test_lca(6,10,10,10000,gen,pgen,0.2,.3); //note that k >> n is okay
-      //  std::cout << "1" << std::endl;
-
-    test_lca(7,10,100,7,gen,pgen,0.1,.3); 
-       // std::cout << "1" << std::endl;
-
-    test_lca(8,10,100,100,gen,pgen,0.6,.3);  
-      //  std::cout << "1" << std::endl;
-
-    test_lca(9,10,100,20,gen,pgen,0.05,.3); 
-      //  std::cout << "1" << std::endl;
-
-    test_lca(10,10,100,17,gen,pgen,0.01,.3); 
+   // test_lca(10,10,100,17,gen,pgen,0.01,.3); 
       //  std::cout << "1" << std::endl;
 }
 
@@ -396,11 +406,20 @@ void test_perm() {
     print_child_tree(child_tree,"child tree");
 }
 
+//designed to fail?
+void fail_test(std::mt19937& gen, parlay::random_generator& pgen) {
+
+    test_lca(8,100,10,100,gen,pgen,.6,.3,true); //how would this line affect the next?? (and each parameter here matters*)
+    test_lca(9,10,3,20,gen,pgen,0.05,.3,true); 
+
+
+}
+
 int main(int argc, char* argv[]) {
 
     parlay::internal::timer tim = parlay::internal::timer();
 
-    std::cout << "hello world!3" << std::endl;
+    std::cout << "hello world!31å" << std::endl;
 
     int n = 10; //defaults
     int NUM_TRIALS = 1;
@@ -417,13 +436,25 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Batch size: " << k << std::endl;
 
-    test_lca(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,0,.3); //0 is forest ratio
+    //test_lca(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,0,.3); //0 is forest ratio
     //extensive_test_perm(n,NUM_TREES,gen);
 
     std::cout << "Time: " << tim.next_time() << std::endl;
 
-    more_test_lca(gen,pgen);
+    //more_test_lca(gen,pgen);
+
+    fail_test(gen,pgen);
+
 
     std::cout << "Time: " << tim.next_time() << std::endl;
+
+    // std::cout << "start" << std::endl;
+    // parlay::sequence<cluster<int,int>> clusters;
+
+    // auto parent_tree = give_example_tree3();
+    // get_RC_tree(clusters,parent_tree);
+
+    // std::cout << "yay" << std::endl;
+    // deleteRCtree(clusters);
 
 }
