@@ -1,31 +1,21 @@
 //file to test LCA with
 //TOD2* what happens when running on -03 optimization flag? Would code still pass tests? 
 
-// //header copied from RC.cpp
-// #include <iostream>
-// #include <string>
-// #include <chrono>
-// #include <iomanip>
-// #include <fstream>
-// #include <string>
-// #include <random>
-// #include <time.h>
-// #include <cmath>
-// #include "../include/parlay/primitives.h"
-// #include "../include/parlay/sequence.h"
-// #include "../include/parlay/internal/get_time.h"
-// #include "../examples/samplesort.h"
-// #include<stdio.h>
+#include <iostream>
+#include <random>
+#include <cmath>
+#include "../include/parlay/primitives.h"
+#include "../include/parlay/sequence.h"
+#include "../include/parlay/internal/get_time.h"
 
-// #include "RC_test.h"
-// #include "RC.h"
+//RC tree funs
+#include "RC_test.h"
+#include "RC.h"
 
-// //need our LCA funs
-// #include "LCA.h"
-// #include "VanillaLCA.h"
-// #include "random_trees.h"
-
-#include "LCAstable.cpp"
+//need our LCA funs
+#include "LCA.h"
+#include "VanillaLCA.h"
+#include "random_trees.h"
 
 const bool PRINT_B = false;
 
@@ -155,7 +145,7 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
 
         divide_into_forests_par(n,parent_tree,forest_ratio,pgen);
         //see the clusters
-       // if (extra_print) print_parent_tree(parent_tree,"parent tree:");
+        if (extra_print) print_parent_tree(parent_tree,"parent tree:");
         //for debugging
         // parlay::sequence<parlay::sequence<int>> child_tree(parent_tree.size(),parlay::sequence<int>());
         // partree_to_childtree(parent_tree,child_tree);
@@ -409,7 +399,7 @@ void test_perm() {
 //designed to fail?
 void fail_test(std::mt19937& gen, parlay::random_generator& pgen) {
 
-    test_lca(8,100,10,100,gen,pgen,.6,.3,true); //how would this line affect the next?? (and each parameter here matters*)
+    test_lca(8,100,10,100,gen,pgen,.6,.3,false); //how would this line affect the next?? (and each parameter here matters*)
     test_lca(9,10,3,20,gen,pgen,0.05,.3,true); 
 
 
@@ -419,7 +409,7 @@ int main(int argc, char* argv[]) {
 
     parlay::internal::timer tim = parlay::internal::timer();
 
-    std::cout << "hello world!31å" << std::endl;
+    std::cout << "hello world!31" << std::endl;
 
     int n = 10; //defaults
     int NUM_TRIALS = 1;

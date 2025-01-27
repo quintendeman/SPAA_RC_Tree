@@ -4,14 +4,12 @@
 #ifndef FIXED_LCA_H //! cannot define function of this name, good to know
 #define FIXED_LCA_H
 
-//header copied from RC.h
 #include "RC.h"
 #include "cluster.h"
 #include "parhash_include/parlay_hash/unordered_map.h" //for parlayhash concurrent hash map
 #include "static_par_LCA.h"
 #include "static_seqn_LCA.h"
 #include "random_trees.h"
-
 #include<bitset>
 
 const bool PRINT_FL = false; //flag for print debugging

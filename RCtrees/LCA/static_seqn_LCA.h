@@ -6,8 +6,6 @@
 #include<math.h>
 #include "utils.h"
 
-
-
 //T is indexing type
 template<typename T>
 struct LCAnode {

@@ -5,8 +5,6 @@
 
 #include <atomic>
 #include <random>
-#include <set>
-#include <algorithm>
 #include <iostream>
 #include <mutex>
 #include <parlay/alloc.h>

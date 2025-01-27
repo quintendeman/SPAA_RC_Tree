@@ -9,9 +9,6 @@
 #include "RC.h"
 #include "cluster.h"
 #include "parhash_include/parlay_hash/unordered_map.h" //for parlayhash concurrent hash map
-#include "static_par_LCA.h"
-#include "static_seqn_LCA.h"
-#include "random_trees.h"
 #include "fixedLCA.h"
 
 #include<bitset>

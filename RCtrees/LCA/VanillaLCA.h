@@ -2,16 +2,6 @@
 #ifndef VANILLA_LCA_H
 #define VANILLA_LCA_H
 
-
-#include <iostream>
-#include <string>
-#include <chrono>
-#include <iomanip>
-#include <fstream>
-#include <string>
-#include <random>
-#include <time.h>
-#include <cmath>
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
 #include "random_trees.h"
