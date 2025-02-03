@@ -6,7 +6,6 @@
 */
 
 #include <atomic>
-#include <random>
 #include <set>
 #include <algorithm>
 #include <iostream>
@@ -14,7 +13,6 @@
 #include "../examples/helper/graph_utils.h"
 #include <parlay/alloc.h>
 #include "../examples/counting_sort.h"
-#include <parlay/random.h>
 
 #include "cluster.h"
 #include "utils.h" //for bit tricks

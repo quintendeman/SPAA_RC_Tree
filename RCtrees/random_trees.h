@@ -209,17 +209,23 @@ parlay::sequence<T> generate_random_tree_par(T n, parlay::random_generator& pgen
     assert(n > 0);
 
     std::uniform_real_distribution<double> dis(0,1);
+    dis(pgen); //resettle random generator
+    parlay::sequence<double> random_bits(2*n+1,-1);
 
     //if the 1st n nodes all had 2 children, we would have 2*n+1 node tree
     parlay::sequence<T> extended = parlay::tabulate(2*n+1,[&] (T i) {return (i-1) >> 1; });
     extended[0]=0; //0 is root
+    //pseq(extended,"printing extended");
     parlay::sequence<bool> packbools = parlay::tabulate(2*n+1,[&] (T i) {
         if (i == 0 || i % 2 == 1) return true; //always keep at least one child
         auto r = pgen[i];
         double coin = dis(r);
-        if (coin < chain_ratio) return true;
+        random_bits[i]=coin;
+        if (coin > chain_ratio) return true;
         return false;
     });
+    //pseq(packbools,"pack bools");
+    //pseq(random_bits,"rand bits");
     //only take true positions
     auto filtered = parlay::pack(extended,packbools);
     //return the n-prefix of filtered
@@ -275,6 +281,7 @@ parlay::sequence<T> generate_random_perm_par(T n, parlay::random_generator& pgen
     parlay::sequence<T> cand = parlay::tabulate(n,[&] (T i) {return i;}); //set of #s that still lack a map (remaining domain)
     parlay::sequence<T> available_choices = parlay::tabulate(n,[&] (T i) {return i;}); //remaining range
     std::uniform_real_distribution<double> dis(0, 1);
+    dis(pgen); //resettle generator
 
     //set counters to start at 0
     parlay::sequence<std::atomic<int>> counters = parlay::tabulate(cand.size(),[&] (size_t i) {return std::atomic<int>(0);});
@@ -430,6 +437,7 @@ template<typename T>
 void divide_into_forests_par(T n, parlay::sequence<T>& parents, double ratio,parlay::random_generator& pgen) {
 
     std::uniform_real_distribution<double> dis(0,1);
+    dis(pgen);
 
     parlay::parallel_for(0,n,[&] (size_t i) {
         auto r = pgen[i];

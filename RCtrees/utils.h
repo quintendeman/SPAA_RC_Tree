@@ -85,7 +85,7 @@ void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int&
 }
 
 
-void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int& NUM_TREES, int& BATCH_SIZE) {
+void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int& pseed, int& NUM_TREES, int& BATCH_SIZE) {
     for (int i = 1; i < argc; i++) {
         std::string arg=argv[i];
         if (arg=="-n" && i+1 < argc) {
@@ -103,6 +103,9 @@ void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int&
         }
         if (arg=="-k" && i+1 < argc) {
             BATCH_SIZE=std::stoi(argv[i+1]);
+        }
+        if (arg=="-pseed" && i+1 < argc) {
+            pseed=std::stoi(argv[i+1]);
         }
 
     }

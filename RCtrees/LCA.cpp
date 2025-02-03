@@ -210,34 +210,34 @@ void large_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
 //~6s of testing time
 void small_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
     //test_lca(n, # trials, # trees, k, rand gen, rand ||gen, forest ratio, chain ratio);
-//    // std::cout << "1" << std::endl;
-//     test_lca(1,2,100,1,gen,pgen,0,.3);
-//     //    std::cout << "1" << std::endl;
-//     test_lca(2,10,20,2,gen,pgen,0.3,.3); 
-//       //  std::cout << "1" << std::endl;
+   // std::cout << "1" << std::endl;
+    test_lca(1,2,100,1,gen,pgen,0,.3);
+    //    std::cout << "1" << std::endl;
+    test_lca(2,10,20,2,gen,pgen,0.3,.3); 
+      //  std::cout << "1" << std::endl;
         test_lca(3,10,20,3,gen,pgen,0.15,.3); 
-//       //  std::cout << "1" << std::endl;
-
-//     test_lca(4,10,100,3,gen,pgen,0.5,.3); 
-//      //  std::cout << "1" << std::endl;
-
-//     test_lca(5,10,100,5,gen,pgen,0.25,.3); 
-//       //  std::cout << "1" << std::endl;
-
-//     test_lca(6,10,10,10000,gen,pgen,0.2,.3); //note that k >> n is okay
-//       //  std::cout << "1" << std::endl;
-
-//     test_lca(7,10,100,7,gen,pgen,0.1,.3); 
-//        // std::cout << "1" << std::endl;
-
-    // test_lca(8,10,100,100,gen,pgen,0.6,.3);  
-//       //  std::cout << "1" << std::endl;
-
-    test_lca(9,10,200,20,gen,pgen,0.05,.3,true); 
       //  std::cout << "1" << std::endl;
 
-   // test_lca(10,10,100,17,gen,pgen,0.01,.3); 
+    test_lca(4,10,100,3,gen,pgen,0.5,.3); 
+     //  std::cout << "1" << std::endl;
+
+    test_lca(5,10,100,5,gen,pgen,0.25,.3); 
       //  std::cout << "1" << std::endl;
+
+    test_lca(6,10,10,10000,gen,pgen,0.2,.3); //note that k >> n is okay
+      //  std::cout << "1" << std::endl;
+
+    test_lca(7,10,100,7,gen,pgen,0.1,.3); 
+       // std::cout << "1" << std::endl;
+
+    test_lca(8,10,100,100,gen,pgen,0.6,.3);  
+        std::cout << "1" << std::endl;
+
+    test_lca(9,10,200,20,gen,pgen,0.05,.3); 
+       std::cout << "1" << std::endl;
+
+   test_lca(10,10,100,17,gen,pgen,0.01,.3); 
+       std::cout << "1" << std::endl;
 }
 
 // //a chain (large and mid sized)
@@ -399,7 +399,7 @@ void test_perm() {
 //designed to fail?
 void fail_test(std::mt19937& gen, parlay::random_generator& pgen) {
 
-    test_lca(8,100,10,100,gen,pgen,.6,.3,false); //how would this line affect the next?? (and each parameter here matters*)
+    //test_lca(8,100,10,100,gen,pgen,.6,.3,false); //how would this line affect the next?? (and each parameter here matters*)
     test_lca(9,10,3,20,gen,pgen,0.05,.3,true); 
 
 
@@ -419,21 +419,21 @@ int main(int argc, char* argv[]) {
     int pseed = 43;
     double forest_ratio = 5.0/n;//1.41 / n; //ratio scales with n to not disconnect too much
 
-    parse_input(argc,argv,n,NUM_TRIALS,seed,NUM_TREES,k);
+    parse_input(argc,argv,n,NUM_TRIALS,seed,pseed,NUM_TREES,k);
 
     std::mt19937 gen(seed);
     parlay::random_generator pgen(pseed);
 
     std::cout << "Batch size: " << k << std::endl;
 
-    //test_lca(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,0,.3); //0 is forest ratio
+    test_lca(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,0,.3); //0 is forest ratio
     //extensive_test_perm(n,NUM_TREES,gen);
 
     std::cout << "Time: " << tim.next_time() << std::endl;
 
-    //more_test_lca(gen,pgen);
+    more_test_lca(gen,pgen);
 
-    fail_test(gen,pgen);
+    //fail_test(gen,pgen);
 
 
     std::cout << "Time: " << tim.next_time() << std::endl;
