@@ -84,6 +84,7 @@ public:
     cluster(const cluster& other) :
         counter(other.counter.load())
     {
+
         for(short i = 0; i < max_neighbours; i++)
             this->children[i] = other.children[i];
     }
