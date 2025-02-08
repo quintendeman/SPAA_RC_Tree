@@ -304,6 +304,8 @@ void balanced_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
 
 }
 
+//TODO k ~ n test
+
 // //large k testing
 void large_k_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
     test_lca(10,10,10,2000,gen,pgen,.1,.3);
@@ -364,7 +366,7 @@ void single_tree_lca(std::mt19937& gen, parlay::random_generator& pgen) {
     test_lca(120020409,90,20,10001,gen,pgen,1,.4);
 
 }
-
+//benchmarking times TOD2*
 
 void extensive_lca(std::mt19937& gen, parlay::random_generator& pgen,parlay::internal::timer& tim) {
     small_test_lca(gen, pgen); //test small #s (edge case)
