@@ -95,6 +95,10 @@ void handle_answers(parlay::sequence<std::tuple<int,int,int>>& queries, parlay::
 
 void run_tree(int NUM_TRIALS, parlay::sequence<cluster<int,int>>& clusters, int k,  parlay::sequence<int>& parent_tree, std::mt19937& gen,  std::uniform_int_distribution<int>& dis, int iter, double forest_ratio, double chain_ratio) {
 
+    parlay::internal::timer myt;
+    
+    std::cout << "about to start LCA" << myt.next_time() << std::endl;
+
     for (int iter2 = 0; iter2 < NUM_TRIALS; iter2++) {
         parlay::sequence<std::tuple<int,int,int>> queries;
 
@@ -105,6 +109,8 @@ void run_tree(int NUM_TRIALS, parlay::sequence<cluster<int,int>>& clusters, int 
             int r = dis(gen);
             queries.push_back(std::make_tuple(u,v,r));
         }
+
+        std::cout << "read queries " << myt.next_time() << std::endl;
 
         //NOTE! answers size initialized here*
         parlay::sequence<cluster<int,int>*> answers(k);
@@ -119,6 +125,7 @@ void run_tree(int NUM_TRIALS, parlay::sequence<cluster<int,int>>& clusters, int 
 
         batchLCA(clusters,queries,answers);
 
+        std::cout << "did LCA  " << myt.next_time() << std::endl;
         for (int i = 0; i < clusters.size(); i++) {
             if (clusters[i].counter!=0) {
                 std::cout << "error counter not 0 after" << std::endl;
@@ -130,6 +137,8 @@ void run_tree(int NUM_TRIALS, parlay::sequence<cluster<int,int>>& clusters, int 
         //TODO* uncomment
         handle_answers(queries,answers,k,parent_tree,clusters,iter,iter2,forest_ratio,chain_ratio);
 
+
+        std::cout << "handled answers " << myt.next_time() << std::endl;
 
         
         //reset on each print debug
@@ -149,7 +158,11 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
 
     std::uniform_int_distribution<int> dis(0,n-1);
 
+    parlay::internal::timer t2;
+
     for (int iter = 0; iter < NUM_TREES; iter++) {
+
+       std::cout << "starting tree " << t2.next_time() << std::endl;
        // if (iter == 24) extra_print=true; //specific iter of interest
         if (extra_print) std::cout << "starting tree " << iter << std::endl;
         //generate random parent tree (permuted)
@@ -159,6 +172,9 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
         divide_into_forests_par(n,parent_tree,forest_ratio,pgen);
         //see the clusters
         if (extra_print) print_parent_tree(parent_tree,"parent tree:");
+
+        std::cout << "manual tree " << t2.next_time() << std::endl;
+
         //for debugging
         // parlay::sequence<parlay::sequence<int>> child_tree(parent_tree.size(),parlay::sequence<int>());
         // partree_to_childtree(parent_tree,child_tree);
@@ -167,6 +183,9 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
         //create the RC tree
         parlay::sequence<cluster<int,int>> clusters;
         get_RC_tree(clusters,parent_tree,extra_print);
+
+               std::cout << "starting RC " << t2.next_time() << std::endl;
+
       
         //sanity check that the RC tree is valid before main test
         //TOD2* reinstall this check (subtree sums check currently failing)
@@ -485,26 +504,28 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Batch size: " << k << std::endl;
 
+    std::cout << "about to start" << tim.next_time() << std::endl;
+
     test_lca(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,0,.3); //0 is forest ratio
     //extensive_test_perm(n,NUM_TREES,gen);
 
-    std::cout << "Time: " << tim.next_time() << std::endl;
+    // std::cout << "Time: " << tim.next_time() << std::endl;
 
+    // more_test_lca(gen,pgen);
     extensive_lca(gen,pgen,tim);
-    //more_test_lca(gen,pgen);
 
-    //fail_test(gen,pgen);
+    // //fail_test(gen,pgen);
 
 
     // std::cout << "Time: " << tim.next_time() << std::endl;
 
-    // std::cout << "start" << std::endl;
-    // parlay::sequence<cluster<int,int>> clusters;
+    // // std::cout << "start" << std::endl;
+    // // parlay::sequence<cluster<int,int>> clusters;
 
-    // auto parent_tree = give_example_tree3();
-    // get_RC_tree(clusters,parent_tree);
+    // // auto parent_tree = give_example_tree3();
+    // // get_RC_tree(clusters,parent_tree);
 
-    // std::cout << "yay" << std::endl;
-    // deleteRCtree(clusters);
+    // // std::cout << "yay" << std::endl;
+    // // deleteRCtree(clusters);
 
 }
