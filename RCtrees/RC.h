@@ -334,7 +334,8 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
         {
             if(w < v)
                 continue;
-            auto edge_cluster = cluster_allocator::alloc();
+            //auto edge_cluster = cluster_allocator::alloc(); //TOD2* which one?
+            cluster<T,D>* edge_cluster = cluster_allocator::create();
             edge_cluster->index = -1;
             edge_cluster->state = base_edge | live;
             edge_cluster->data = defretval;
@@ -440,7 +441,9 @@ void create_base_clusters(parlay::sequence<cluster<T,D>>& base_clusters, parlay:
             // std::string print_string = std::to_string(v) + " -- " + std::to_string(w) + " tiebreak succeeded\n";
             // std::cout << print_string;
 
-            auto edge_cluster = cluster_allocator::alloc();
+            //auto edge_cluster = cluster_allocator::alloc(); //TOD2* which one?
+            cluster<T,D>* edge_cluster = cluster_allocator::create();
+
             edge_cluster->index = -1;
             edge_cluster->state = base_edge | live;
             edge_cluster->data = weight;
@@ -678,16 +681,32 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defre
 
 
         check_mis(candidates); // TODO remove
-
+        //TOD2* restore to 3 independent calls? 
         if (print) std::cout << "x2" << std::endl;
 
-
-        
-        parlay::parallel_for(0, candidates.size(), [&] (T i){
+         parlay::parallel_for(0, candidates.size(), [&] (T i){
             candidates[i]->cluster_ptr->first_contracted_node = candidates[i]->prev;
+            
+        });
+        if (print) std::cout << "x2.1" << std::endl;
+         parlay::parallel_for(0, candidates.size(), [&] (T i){
             contract(candidates[i]);
+        });
+
+                if (print) std::cout << "x2.2" << std::endl;
+
+         parlay::parallel_for(0, candidates.size(), [&] (T i){
+        
             accumulate(candidates[i], defretval, assocfunc);
         });
+
+        if (print) std::cout << "x2.3" << std::endl;
+
+        // parlay::parallel_for(0, candidates.size(), [&] (T i){
+        //     candidates[i]->cluster_ptr->first_contracted_node = candidates[i]->prev;
+        //     contract(candidates[i]);
+        //     accumulate(candidates[i], defretval, assocfunc);
+        // });
 
         if (print) std::cout << "x3" << std::endl;
 
@@ -716,9 +735,11 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defre
  * Only frees the "floating" edge clusters
 */
 template<typename T, typename D>
-void deleteRCtree(parlay::sequence<cluster<T, D>> &base_clusters)
+void deleteRCtree(parlay::sequence<cluster<T, D>> &base_clusters, bool extra_print=false)
 {
     using cluster_allocator = parlay::type_allocator<cluster<T,D>>;
+
+    if (extra_print) std::cout << "started destroy" << std::endl;
 
     parlay::parallel_for(0, base_clusters.size(), [&] (T i){
         auto& clstr = base_clusters[i];
@@ -745,6 +766,8 @@ void deleteRCtree(parlay::sequence<cluster<T, D>> &base_clusters)
             }
         }
     });
+
+    if (extra_print) std::cout << "finished destroy" << std::endl;
 }
 
 template<typename T, typename D>

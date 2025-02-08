@@ -275,7 +275,7 @@ void create_map_trees(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>& 
     h.alt_child_tree = parlay::tabulate(h.sn,[&] (size_t s) {
         T a = h.involved_nodes[s]; //a is the index in the RC tree/clusters list
         parlay::sequence<T> my_children;
-        for (int j = 0; j < clusters[a].children.size(); j++) {
+        for (int j = 0; j < clusters[a].children.size(); j++) { 
             if (clusters[a].children[j] != nullptr && index_map.Find(clusters[a].children[j]->index) != std::nullopt) {
                 my_children.push_back(*index_map.Find(clusters[a].children[j]->index));
             }
@@ -288,6 +288,10 @@ void create_map_trees(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>& 
         T a = h.involved_nodes[u];
         if (a==h.root->index) { 
             return *index_map.Find(h.root->index); //parent of root is itself
+        }
+        else if (clusters[a].parent == nullptr) {
+            std::cout << "Error parent is nullptr" << std::endl;
+            exit(3002);
         }
         else {
             return *index_map.Find(clusters[a].parent->index);
@@ -672,6 +676,15 @@ void batch_fixed_LCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* ro
     //find all nodes involved in this calculation. the indexing in involved_nodes is arbitrary (but will become important, beacuse we will map to it with index_map)
     find_nodes_involved(clusters,k,queries,h);
 
+    //tree of 1 //TOD2* is this needed?
+    // if (h.sn == 1) { 
+    //     for (int i = 0; i < answers.size(); i++) {
+    //         answers[i] = h.involved_nodes[0];
+    //     }      
+    //     return;
+    // }
+ 
+
     parlay::parlay_unordered_map<T,T> index_map = parlay::parlay_unordered_map<T,T>(2*h.sn); //will get overwritten
 
     if (PRINT_FL) {
@@ -711,7 +724,7 @@ void batch_fixed_LCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* ro
 
     batch_fixed_LCA_casework(clusters,queries,answers,k,h,index_map);
 
-    //std::cout << "h5" << std::endl << std::endl << std::endl;
+   //std::cout << "h5" << std::endl << std::endl << std::endl;
 
 
 }

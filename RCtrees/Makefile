@@ -41,7 +41,7 @@ testTreeGen.out: testTreeGen.cpp $(BASE_DEPS)
 
 # Clean up build files
 clean:
-	rm -f RC.out testMST.out testTreeGen.out LCA.out sslca.out splca.out
+	rm -f RC.out testMST.out testTreeGen.out sslca.out splca.out lca.out
 	
 
 # Phony targets
