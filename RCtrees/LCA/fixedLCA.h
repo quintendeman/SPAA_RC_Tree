@@ -663,6 +663,9 @@ void batch_fixed_LCA_casework(parlay::sequence<cluster<T,D>>& clusters,parlay::s
 template<typename T, typename D>
 void batch_fixed_LCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* root, parlay::sequence<std::tuple<T,T>>& queries, parlay::sequence<T>& answers) {
 
+    parlay::internal::timer t3;
+    t3.start();
+
     //std::cout << "h1" << std::endl;
 
     //std::cout << "new call of batch fixed LCA" << std::endl;
@@ -675,6 +678,9 @@ void batch_fixed_LCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* ro
 
     //find all nodes involved in this calculation. the indexing in involved_nodes is arbitrary (but will become important, beacuse we will map to it with index_map)
     find_nodes_involved(clusters,k,queries,h);
+
+    std::string ps = "after find involved: " + std::to_string(t3.next_time()) + "\n";
+    //std::cout << ps;
 
     //tree of 1 //TOD2* is this needed?
     // if (h.sn == 1) { 
@@ -697,10 +703,16 @@ void batch_fixed_LCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* ro
     //create the subset of the tree we are working on (from involved_nodes), the hashmap to get from the RCtree to this alt tree and back
     create_map_trees(clusters,h,index_map);
 
+
+    ps = "after map trees " + std::to_string(t3.next_time()) + "\n";
+    //std::cout << ps;
+
     //std::cout << "h2" << std::endl;
     //prepare the static data structure (unrelated to RC)
     static_preprocess(clusters,h,index_map);
 
+    ps="after static preprocess " + std::to_string(t3.next_time()) + "\n";
+    //std::cout << ps;
     //std::cout << "h3" << std::endl;
 
 
@@ -721,8 +733,14 @@ void batch_fixed_LCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* ro
     }
 
     //std::cout << "h4" << std::endl;
+   
+    ps="after RC preprocess " + std::to_string(t3.next_time()) + "\n";
+    //std::cout << ps;
 
     batch_fixed_LCA_casework(clusters,queries,answers,k,h,index_map);
+
+    ps = "after casework " + std::to_string(t3.next_time()) + "\n";
+    //std::cout << ps;
 
    //std::cout << "h5" << std::endl << std::endl << std::endl;
 
