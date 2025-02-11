@@ -205,7 +205,7 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
     }
 
     printf("success on test n: %d trials: %d trees: %d k: %d forr: %f chainr: %f\n", n, NUM_TRIALS,NUM_TREES,k,forest_ratio,chain_ratio);
-    std::cout << "dummy print" std::endl; // needed to get shown in outfile 
+    std::cout << "dummy print" << std::endl; // needed to get shown in outfile 
 }
 
     

@@ -275,6 +275,7 @@ parlay::sequence<T> generate_random_perm_seq(T n, std::mt19937& gen) {
 //randomly permute elements 0 through n-1, in parallel
 //TOD2* use more delayed sequences instead of tabulates (here and throughout code)
 //TOD2* neaten, slightly spaghetti
+//Write race, deprecate this code
 template<typename T>
 parlay::sequence<T> generate_random_perm_par(T n, parlay::random_generator& pgen) {
     parlay::sequence<T> perm(n,-1); //i maps to perm[i]
