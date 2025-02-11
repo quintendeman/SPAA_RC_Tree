@@ -275,7 +275,7 @@ parlay::sequence<T> generate_random_perm_seq(T n, std::mt19937& gen) {
 //randomly permute elements 0 through n-1, in parallel
 //TOD2* use more delayed sequences instead of tabulates (here and throughout code)
 //TOD2* neaten, slightly spaghetti
-//Write race, deprecate this code
+//use parlay::random_shuffle instead
 template<typename T>
 parlay::sequence<T> generate_random_perm_par(T n, parlay::random_generator& pgen) {
     parlay::sequence<T> perm(n,-1); //i maps to perm[i]
@@ -307,7 +307,8 @@ parlay::sequence<T> generate_random_perm_par(T n, parlay::random_generator& pgen
         });
 
         //keep track of which picks go through
-        parlay::sequence<bool> pick_remains(pick.size(),true);
+        //TOD2* change from atomic
+        parlay::sequence<std::atomic<bool>> pick_remains(pick.size(),std::atomic<bool>(true));
 
         parlay::parallel_for(0,pick.size(),[&] (size_t i) {
             //if we were the first to pick a certain #, add to perm
@@ -378,8 +379,11 @@ parlay::sequence<T> generate_random_tree_perm(T num_elements, std::mt19937& gen,
 template<typename T>
 parlay::sequence<T> generate_random_tree_perm_par(T num_elements, parlay::random_generator& pgen, double chain_ratio) {
     parlay::sequence<T> parents = generate_random_tree_par(num_elements,pgen,chain_ratio); //get parent tree, unpermuted
-
-    parlay::sequence<T> perm = generate_random_perm_par(num_elements,pgen); //get permutation
+    //TOD2* adjust
+    std::uniform_int_distribution<size_t> dis; //range over all size_t vals
+    size_t shuffle_seed = dis(pgen);
+    auto vals = parlay::delayed_tabulate(num_elements,[&] (T i) {return i;});
+    auto perm = random_shuffle(vals,parlay::random(shuffle_seed)); //get permutation
 
     // print_parent_tree(parents,"par tree original");
 

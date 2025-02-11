@@ -2,6 +2,7 @@
 //TOD2* what happens when running on -03 optimization flag? Would code still pass tests? 
 
 #include <iostream>
+#include <fstream>
 #include <random>
 #include <cmath>
 #include "../include/parlay/primitives.h"
@@ -17,7 +18,8 @@
 #include "VanillaLCA.h"
 #include "random_trees.h"
 
-const bool PRINT_B = false;
+const bool PRINT_B = false; //progress prints
+const bool PRINT_T = false; //timer prints
 
 //TOD2* is there a better way to do this?
 //Find the root of the RC tree, store in ans.
@@ -44,8 +46,57 @@ void get_RC_tree(parlay::sequence<cluster<int,int>>& clusters,  parlay::sequence
     if (extra_print) std::cout << "made tree " << std::endl;
 }
 
+void error_print(parlay::sequence<cluster<int,int>*>& answers, parlay::sequence<int>& real_answers, int iter, int iter2, parlay::sequence<int>& parent_tree, int k, double forest_ratio, double chain_ratio, std::string error_file_prefix, parlay::sequence<std::tuple<int,int,int>>& queries, int i) {
+    if (answers[i]==nullptr) {
+        std::cout << "answers[i] is nullptr, real: " << real_answers[i] << std::endl;
+    }
+    else {
+        std::cout << "Said: " << answers[i]->index << "real: " << real_answers[i] << std::endl;
+
+    }
+    
+    std::cout << "Tree# " << iter << ", " << "Trial: " << iter2 << std::endl;
+    std::cout << "Stats: n: " << parent_tree.size() << " k: " << k << " forest-ratio: " << forest_ratio << ", chain-ratio: " << chain_ratio << std::endl;
+
+    //counter naming to avoid destroying previous files
+    std::ifstream mf;
+    mf.open("counter.txt");
+    int my_counter=0;
+    mf >> my_counter;
+
+    mf.close();
+
+    std::ofstream mf2;
+    mf2.open("counter.txt");
+    mf2 << (my_counter + 1) << "\n";
+    mf2.close();
+
+    //couple file with console output for fuller picture
+    std::ofstream myfile;
+    std::string new_file_name = error_file_prefix + std::to_string(my_counter) + ".txt";
+    myfile.open(new_file_name);
+    myfile << "Writing break abort failed case into file. \n";
+    myfile << parent_tree.size() << "\n";
+    for (int val = 0; val < parent_tree.size(); val++) {
+        myfile << parent_tree[val] << " ";
+    }
+    myfile << "\n";
+    myfile << k << "\n";
+    for (int val = 0; val < queries.size(); val++) {
+        myfile << std::get<0>(queries[val]) << " " << std::get<1>(queries[val]) << " " << std::get<2>(queries[val]) << " ";
+    }
+    myfile << "\n";
+    myfile.close();
+
+    //see the clusters
+    //printTree(clusters);
+
+    //print_parent_tree(parent_tree,"parent tree");
+
+}
+
 //TOD2* test on T types other than ints? 
-void handle_answers(parlay::sequence<std::tuple<int,int,int>>& queries, parlay::sequence<cluster<int,int>*>& answers, int k, parlay::sequence<int>& parent_tree, parlay::sequence<cluster<int,int>>& clusters, int iter, int iter2, double forest_ratio, double chain_ratio) {
+void handle_answers(parlay::sequence<std::tuple<int,int,int>>& queries, parlay::sequence<cluster<int,int>*>& answers, int k, parlay::sequence<int>& parent_tree, parlay::sequence<cluster<int,int>>& clusters, int iter, int iter2, double forest_ratio, double chain_ratio, std::string error_file_prefix="error_log") {
 
     parlay::sequence<int> real_answers = parlay::tabulate(k,[&] (size_t i) {
         int u = std::get<0>(queries[i]);
@@ -53,84 +104,137 @@ void handle_answers(parlay::sequence<std::tuple<int,int,int>>& queries, parlay::
         int rprime = std::get<2>(queries[i]);
         return unrooted_forest_lca(parent_tree,u,v,rprime);
     });
-    //std::cout << "<";
-    for (int i  = 0; i < k; i++) {
+    //do checks in parallel, this is bottleneck?
+    bool any_bad = parlay::reduce(parlay::delayed_tabulate(k,[&] (size_t i) {
         int u = std::get<0>(queries[i]);
         int v = std::get<1>(queries[i]);
         int rprime = std::get<2>(queries[i]);
-        //this version uses the fixed to arbitrary LCA trick for the real ans (but this was tested so okay)
+        if ((answers[i]==nullptr && real_answers[i] != -1) || (answers[i] != nullptr && answers[i]->index != real_answers[i])) {
+            return true; //set that error does exist
+
+        }
+        return false;
+
+    }),MonoidOr()) ;
+
+    //std::cout << "<";
+    if (any_bad) { //if there was a bad output, go through sequentially to find error
+        for (int i  = 0; i < k; i++) {
+            int u = std::get<0>(queries[i]);
+            int v = std::get<1>(queries[i]);
+            int rprime = std::get<2>(queries[i]);
+            //this version uses the fixed to arbitrary LCA trick for the real ans (but this was tested so okay)
+        
+            // std::cout << u << " " << v << " " << rprime << " LCA: " << real_answers[i];
+            // if (i == k-1) std::cout << ">";    
+            // std::cout << std::endl;
     
-        // std::cout << u << " " << v << " " << rprime << " LCA: " << real_answers[i];
-        // if (i == k-1) std::cout << ">";    
-        // std::cout << std::endl;
-
-        if (answers[i] == nullptr && real_answers[i]==-1 ) {
-            if (PRINT_B) std::cout << "lca queried nodes not connected, hence -1" << std::endl;
-        }
-
-        else if (answers[i]==nullptr || answers[i]->index != real_answers[i]) {
-            std::cout << "break abort" << std::endl;
-            if (answers[i]==nullptr) {
-                std::cout << "answers[i] is nullptr, real: " << real_answers[i] << std::endl;
+            if (answers[i] == nullptr && real_answers[i]==-1 ) {
+                if (PRINT_B) std::cout << "lca queried nodes not connected, hence -1" << std::endl;
             }
-            else {
-                std::cout << "Said: " << answers[i]->index << "real: " << real_answers[i] << std::endl;
-
-            }
-            
-            std::cout << "Tree# " << iter << ", " << "Trial: " << iter2 << std::endl;
-            std::cout << "Stats: n: " << parent_tree.size() << " k: " << k << " forest-ratio: " << forest_ratio << ", chain-ratio: " << chain_ratio << std::endl;
-
-            //see the clusters
-            //printTree(clusters);
-
-            //print_parent_tree(parent_tree,"parent tree");
-
-            std::cout << "bad exit" << std::endl;
-
-            std::exit(5);
+                //TOD2* uncomment
+            else if (answers[i]==nullptr || answers[i]->index != real_answers[i]) {
+                
+                error_print(answers,real_answers,iter,iter2,parent_tree,k,forest_ratio,chain_ratio,error_file_prefix,queries, i);
+                std::cout << "break abort, bad exit" << std::endl;
+    
+    
+                std::exit(5);
+               
+    
+                
+            } //TOD2* uncomment
         }
+        std::cout << "because is bad triggered should never reach here, error" << std::endl;
+        exit(5002);
+
     }
+    
 }
 
-void run_tree(int NUM_TRIALS, parlay::sequence<cluster<int,int>>& clusters, int k,  parlay::sequence<int>& parent_tree, std::mt19937& gen,  std::uniform_int_distribution<int>& dis, int iter, double forest_ratio, double chain_ratio) {
+void run_from_file(std::string file) {
+    std::ifstream my_file;
+    my_file.open(file);
+    std::string first_line;
+    std::getline(my_file,first_line);
+    std::cout << "first line: " << first_line << std::endl;
+    int n = 0;
+    my_file >> n;
+    int temp;
+    parlay::sequence<int> parent_tree(n);
+    for (int i = 0; i < n; i++) {
+        my_file >> temp;
+        parent_tree[i]=temp;
+    }
+    int k = 0;
+    my_file >> k;
+    parlay::sequence<std::tuple<int,int,int>> queries(k);
+    int t1, t2, t3 = 0;
+    for (int i = 0; i < k; i++) {
+        my_file >> t1 >> t2 >> t3;
+        queries[i]=std::make_tuple(t1,t2,t3);
+    }
+    std::cout << "n is " << n << std::endl;
+    std::cout << "k is " << k << std::endl;
+    for (int i = 0; i < queries.size(); i++) {
+        std::cout << std::get<0>(queries[i]) << ", " << std::get<1>(queries[i]) << ", " << std::get<2>(queries[i]) << std::endl; 
+
+    }
+    print_parent_tree(parent_tree,"rf par tree");
+    parlay::sequence<cluster<int,int>> clusters;
+    get_RC_tree(clusters,parent_tree,false);
+    int NUM_TRIALS, iter, iter2 =-1; //because we chose the trial
+    double forest_ratio, chain_ratio = -1; //because we already made tree
+
+    parlay::sequence<cluster<int,int>*> answers(k);
+
+    batchLCA(clusters,queries,answers);
+    handle_answers(queries,answers,k,parent_tree,clusters,iter,iter2,forest_ratio,chain_ratio,"alt.txt"); //alt is alt error file to avoid covering previous print
+
+    deleteRCtree(clusters);
+
+
+}
+
+void run_tree(int NUM_TRIALS, parlay::sequence<cluster<int,int>>& clusters, int k,  parlay::sequence<int>& parent_tree, parlay::random_generator& pgen,  std::uniform_int_distribution<int>& dis, int iter, double forest_ratio, double chain_ratio) {
 
     parlay::internal::timer myt;
     
-    std::cout << "about to start LCA" << myt.next_time() << std::endl;
+    //std::cout << "about to start LCA" << myt.next_time() << std::endl;
+
+    dis(pgen); //stepping pgen
 
     for (int iter2 = 0; iter2 < NUM_TRIALS; iter2++) {
-        parlay::sequence<std::tuple<int,int,int>> queries;
-
         //TOD2* test using variable batch sizes on same tree?
-        for (int i = 0; i < k; i++) {
-            int u = dis(gen);
-            int v = dis(gen);
-            int r = dis(gen);
-            queries.push_back(std::make_tuple(u,v,r));
-        }
+        parlay::sequence<std::tuple<int,int,int>> queries = parlay::tabulate(k,[&] (size_t i) {
+            auto r = pgen[i];
+            return std::make_tuple(dis(r),dis(r),dis(r));
+        });
 
-        std::cout << "read queries " << myt.next_time() << std::endl;
+        //std::cout << "read queries " << myt.next_time() << std::endl;
 
         //NOTE! answers size initialized here*
         parlay::sequence<cluster<int,int>*> answers(k);
 
         if (PRINT_B) std::cout << "about to batch" << std::endl;
 
-        for (int i = 0; i < clusters.size(); i++) {
-            if (clusters[i].counter!=0) {
-                std::cout << "error counter not 0 before" << std::endl;
-            }
-        }
+        //Theta(n) too expensive given that LCA is O(k log n)
+        // parlay::parallel_for(0,clusters.size(),[&] (size_t i) {
+        //     if (clusters[i].counter!=0) {
+        //         std::cout << "error counter not 0 before" << std::endl;
+        //         exit(5000);
+        //     }
+        // });
 
         batchLCA(clusters,queries,answers);
 
-        std::cout << "did LCA  " << myt.next_time() << std::endl;
-        for (int i = 0; i < clusters.size(); i++) {
-            if (clusters[i].counter!=0) {
-                std::cout << "error counter not 0 after" << std::endl;
-            }
-        }
+        if (PRINT_B) std::cout << "did LCA  " << myt.next_time() << std::endl;
+        // parlay::parallel_for(0,clusters.size(),[&] (size_t i) {
+        //     if (clusters[i].counter!=0) {
+        //         std::cout << "error counter not 0 before" << std::endl;
+        //         exit(5000);
+        //     }
+        // });
 
         if (PRINT_B) std::cout << "done batching" << std::endl;
 
@@ -138,7 +242,7 @@ void run_tree(int NUM_TRIALS, parlay::sequence<cluster<int,int>>& clusters, int 
         handle_answers(queries,answers,k,parent_tree,clusters,iter,iter2,forest_ratio,chain_ratio);
 
 
-        std::cout << "handled answers " << myt.next_time() << std::endl;
+        if (PRINT_B) std::cout << "handled answers " << myt.next_time() << std::endl;
 
         
         //reset on each print debug
@@ -162,7 +266,7 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
 
     for (int iter = 0; iter < NUM_TREES; iter++) {
 
-       std::cout << "starting tree " << t2.next_time() << std::endl;
+       if (PRINT_T) std::cout << "starting tree " << iter << " at time " << t2.next_time() << std::endl;
        // if (iter == 24) extra_print=true; //specific iter of interest
         if (extra_print) std::cout << "starting tree " << iter << std::endl;
         //generate random parent tree (permuted)
@@ -173,7 +277,7 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
         //see the clusters
         if (extra_print) print_parent_tree(parent_tree,"parent tree:");
 
-        std::cout << "manual tree " << t2.next_time() << std::endl;
+        if (PRINT_T) std::cout << "manual tree " << t2.next_time() << std::endl;
 
         //for debugging
         // parlay::sequence<parlay::sequence<int>> child_tree(parent_tree.size(),parlay::sequence<int>());
@@ -184,7 +288,7 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
         parlay::sequence<cluster<int,int>> clusters;
         get_RC_tree(clusters,parent_tree,extra_print);
 
-               std::cout << "starting RC " << t2.next_time() << std::endl;
+        if (PRINT_T) std::cout << "Finished RC " << t2.next_time() << std::endl;
 
       
         //sanity check that the RC tree is valid before main test
@@ -196,8 +300,9 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
        
         //std::cout << "num roots: " << num_roots(parent_tree) << std::endl;
         if (extra_print) std::cout << "about to run LCA" << std::endl;
-        run_tree(NUM_TRIALS,clusters,k,parent_tree,gen,dis,iter,forest_ratio,chain_ratio);
+        run_tree(NUM_TRIALS,clusters,k,parent_tree,pgen,dis,iter,forest_ratio,chain_ratio);
         if (extra_print) std::cout << "finished LCA" << std::endl;
+        if (PRINT_T) std::cout << "finished LCA " << t2.next_time() << std::endl;
 
         deleteRCtree(clusters,extra_print);
 
@@ -277,7 +382,7 @@ void small_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
 // ~ 300 mil tree budget
 void chain_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
     std::cout << "about to start chain 5" << std::endl;
-    test_lca(5,100,3,10,gen,pgen,0,1,true);
+    test_lca(5,100,3,10,gen,pgen,0,1,false);
         std::cout << "about to start chain 50" << std::endl;
 
     test_lca(50,100,3,10,gen,pgen,0,1);
@@ -320,6 +425,16 @@ void balanced_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
     test_lca(1200000,10,3,3000,gen,pgen,0,0);
     test_lca(1200000,10,3,3000,gen,pgen,0.5,0); //many forests
     test_lca(90000000,11,3,3000,gen,pgen,0,0);
+
+}
+
+//k ~ n test
+void n_k_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
+    test_lca(10,10,10,10,gen,pgen,.1,.3);
+    test_lca(200,5,5,210,gen,pgen,.1,.3);
+    test_lca(10000,5,5,7000,gen,pgen,.01,.2);
+    test_lca(100000000,1000,10,100005000,gen,pgen,.001,.3);
+    test_lca(70000000,1000,10,50000000,gen,pgen,.05,.3);
 
 }
 
@@ -383,44 +498,47 @@ void single_tree_lca(std::mt19937& gen, parlay::random_generator& pgen) {
     test_lca(120020409,90,20,10001,gen,pgen,1,.4);
 
 }
-
+//benchmarking times TOD2*
 
 void extensive_lca(std::mt19937& gen, parlay::random_generator& pgen,parlay::internal::timer& tim) {
     small_test_lca(gen, pgen); //test small #s (edge case)
-    std::cout << tim.next_time() << std::endl;
+    std::cout << "Small test done in " << tim.next_time() << std::endl;
 
     chain_test_lca(gen,pgen); //vary balanced vs chain formation
-        std::cout << tim.next_time() << std::endl;
+        std::cout << "Chain test done in " << tim.next_time() << std::endl;
 
     balanced_test_lca(gen,pgen);
-        std::cout << tim.next_time() << std::endl;
+        std::cout << "Balanced test done in  " << tim.next_time() << std::endl;
 
 
     large_k_test_lca(gen,pgen);
-        std::cout << tim.next_time() << std::endl;
+        std::cout << "Large k test done in " << tim.next_time() << std::endl;
 
     small_k_test_lca(gen,pgen);
 
-    std::cout << tim.next_time() << std::endl;
+    std::cout << "Small k test done in " << tim.next_time() << std::endl;
+
+    n_k_test_lca(gen,pgen);
+    std::cout << "n~k test done in " << tim.next_time() << std::endl;
 
     isolated_test_lca(gen,pgen); //isolated vs connected
-        std::cout << tim.next_time() << std::endl;
+        std::cout << "Isolated test done in " << tim.next_time() << std::endl;
 
     mostly_forests_lca(gen,pgen);
-        std::cout << tim.next_time() << std::endl;
+        std::cout << "Mostly forests test done in " << tim.next_time() << std::endl;
 
     few_forests_lca(gen,pgen);
-        std::cout << tim.next_time() << std::endl;
+        std::cout << "Few forests done in " << tim.next_time() << std::endl;
 
     single_tree_lca(gen,pgen);
-        std::cout << tim.next_time() << std::endl;
+        std::cout << "Single tree done in " << tim.next_time() << std::endl;
 
 
     grand_test_lca(gen,pgen,100); //just lots of random values
-    std::cout << tim.next_time() << std::endl;
+    std::cout << "Grand test done in " << tim.next_time() << std::endl;
 
     large_test_lca(gen,pgen);
-        std::cout << tim.next_time() << std::endl;
+    std::cout << "Large test done in " << tim.next_time() << std::endl;
 
 
     //TOD2* test on T types other than int, Ex. custom T types (user defined structs?)
@@ -491,9 +609,12 @@ int main(int argc, char* argv[]) {
     int seed = 42; //fixed seed for easier testing
     int pseed = 43;
     double forest_ratio = 5.0/n;//1.41 / n; //ratio scales with n to not disconnect too much
+    double chain_ratio = .3;
+    bool is_from_file = false;
+    std::string filename = "";
 
 
-    parse_input(argc,argv,n,NUM_TRIALS,seed,pseed,NUM_TREES,k);
+    parse_input(argc,argv,n,NUM_TRIALS,seed,pseed,NUM_TREES,k,forest_ratio,chain_ratio,is_from_file,filename);
 
     std::cout << "pseed: " << pseed << std::endl;
 
@@ -501,29 +622,40 @@ int main(int argc, char* argv[]) {
     parlay::random_generator pgen(pseed);
 
     std::cout << "Batch size: " << k << std::endl;
+    std::cout << "for ratio: " << forest_ratio << std::endl;
+    std::cout << "chain ratio: " << chain_ratio << std::endl;
 
     std::cout << "about to start" << tim.next_time() << std::endl;
 
-    test_lca(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,0,.3); //0 is forest ratio
-    //extensive_test_perm(n,NUM_TREES,gen);
+    if (is_from_file) {
+        std::cout << "running from file " << filename << std::endl;
+        run_from_file(filename);
+    }
+    else {
 
-    // std::cout << "Time: " << tim.next_time() << std::endl;
+        //test_lca(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,forest_ratio,chain_ratio); //0 is forest ratio
+        //extensive_test_perm(n,NUM_TREES,gen);
 
-    // more_test_lca(gen,pgen);
-    extensive_lca(gen,pgen,tim);
+        // std::cout << "Time: " << tim.next_time() << std::endl;
 
-    // //fail_test(gen,pgen);
+        // more_test_lca(gen,pgen);
+        extensive_lca(gen,pgen,tim);
+
+        // //fail_test(gen,pgen);
 
 
-    // std::cout << "Time: " << tim.next_time() << std::endl;
+        // std::cout << "Time: " << tim.next_time() << std::endl;
 
-    // // std::cout << "start" << std::endl;
-    // // parlay::sequence<cluster<int,int>> clusters;
+        // // std::cout << "start" << std::endl;
+        // // parlay::sequence<cluster<int,int>> clusters;
 
-    // // auto parent_tree = give_example_tree3();
-    // // get_RC_tree(clusters,parent_tree);
+        // // auto parent_tree = give_example_tree3();
+        // // get_RC_tree(clusters,parent_tree);
 
-    // // std::cout << "yay" << std::endl;
-    // // deleteRCtree(clusters);
+        // // std::cout << "yay" << std::endl;
+        // // deleteRCtree(clusters);
+
+    }
+
 
 }

@@ -157,6 +157,8 @@ void batchLCA_singletree(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>
 //return nullptr if the query vertices are in separate trees (meaning that they can't have a common ancestor)
 template<typename T, typename D>
 void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::tuple<T,T,T>>& queries, parlay::sequence<cluster<T,D>*>& answers) {
+    parlay::internal::timer t3;
+    t3.start();
 
     int nc = clusters.size(); //vertices + edges~
     int k = queries.size(); //batch size
@@ -261,6 +263,10 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::t
 
         std::cout << "about to single tree LCA" << std::endl;
     }
+    
+    std::string ps = "processed global info time " + std::to_string(t3.next_time()) + "\n";
+    //std::cout << ps;
+
     //in parallel, look at the queries for each root //TOD2* replace
     parlay::parallel_for(0,queries_by_tree.size(),[&] (size_t i) {
     //for (int i = 0; i < queries_by_tree.size(); i++) {
