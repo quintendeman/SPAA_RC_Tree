@@ -259,7 +259,8 @@ void create_map_trees(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>& 
     });
 
     //invariant: index_map and involved_nodes are inverses of each other
-    bool should_error = false;
+    //must be atomic because of concurrent writes
+    std::atomic<bool> should_error(false);
     parlay::parallel_for(0,h.sn,[&] (T i) {
         if (*index_map.Find(h.involved_nodes[i]) != i) {
             should_error=true;

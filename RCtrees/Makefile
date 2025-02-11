@@ -26,7 +26,7 @@ sslca.out : static_seqn_LCA.cpp $(LCA_DEPS) $(BASE_DEPS)
 
 #Linux case sensitive, LCA.cpp not lca.cpp
 lca.out : LCA.cpp $(LCA_DEPS) $(BASE_DEPS)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o lca.out LCA.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o lca2.out LCA.cpp
 
 
 RC.out: RC.cpp $(BASE_DEPS) $(MST_DEPS) $(QUERY_DEPS)

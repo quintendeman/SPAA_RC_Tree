@@ -140,4 +140,13 @@ void pseq(parlay::sequence<T>& seq, std::string message) {
     std::cout << std::endl;
 }
 
+
+struct MonoidOr {
+    bool identity=false;
+    bool operator()(bool a, bool b) {
+        return a || b;
+    }
+};
+
 #endif
+

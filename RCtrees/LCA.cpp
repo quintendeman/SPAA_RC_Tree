@@ -46,7 +46,7 @@ void get_RC_tree(parlay::sequence<cluster<int,int>>& clusters,  parlay::sequence
     if (extra_print) std::cout << "made tree " << std::endl;
 }
 
-void error_print(parlay::sequence<cluster<int,int>*>& answers, parlay::sequence<int>& real_answers, int iter, int iter2, parlay::sequence<int>& parent_tree, int k, double forest_ratio, double chain_ratio, std::string error_file_prefix, parlay::sequence<std::tuple<int,int,int>>& queries) {
+void error_print(parlay::sequence<cluster<int,int>*>& answers, parlay::sequence<int>& real_answers, int iter, int iter2, parlay::sequence<int>& parent_tree, int k, double forest_ratio, double chain_ratio, std::string error_file_prefix, parlay::sequence<std::tuple<int,int,int>>& queries, int i) {
     if (answers[i]==nullptr) {
         std::cout << "answers[i] is nullptr, real: " << real_answers[i] << std::endl;
     }
@@ -105,19 +105,20 @@ void handle_answers(parlay::sequence<std::tuple<int,int,int>>& queries, parlay::
         return unrooted_forest_lca(parent_tree,u,v,rprime);
     });
     //do checks in parallel, this is bottleneck?
-    bool is_bad = false;
-    parlay::parallel_for(0,k,[&] (size_t i) {
+    bool any_bad = parlay::reduce(parlay::delayed_tabulate(k,[&] (size_t i) {
         int u = std::get<0>(queries[i]);
         int v = std::get<1>(queries[i]);
         int rprime = std::get<2>(queries[i]);
-        if ((answers[i]==nullptr && real_answers != -1) || (answers[i] != nullptr && answers[i]->index != real_answers[i])) {
-            is_bad=true; //set that error does exist
+        if ((answers[i]==nullptr && real_answers[i] != -1) || (answers[i] != nullptr && answers[i]->index != real_answers[i])) {
+            return true; //set that error does exist
 
         }
+        return false;
 
-    });
+    }),MonoidOr()) ;
+
     //std::cout << "<";
-    if (is_bad) { //if there was a bad output, go through sequentially to find error
+    if (any_bad) { //if there was a bad output, go through sequentially to find error
         for (int i  = 0; i < k; i++) {
             int u = std::get<0>(queries[i]);
             int v = std::get<1>(queries[i]);
@@ -134,7 +135,7 @@ void handle_answers(parlay::sequence<std::tuple<int,int,int>>& queries, parlay::
                 //TOD2* uncomment
             else if (answers[i]==nullptr || answers[i]->index != real_answers[i]) {
                 
-                error_print(answers,real_answers,iter,iter2,parent_tree,k,forest_ratio,chain_ratio,error_file_prefix,queries);
+                error_print(answers,real_answers,iter,iter2,parent_tree,k,forest_ratio,chain_ratio,error_file_prefix,queries, i);
                 std::cout << "break abort, bad exit" << std::endl;
     
     
