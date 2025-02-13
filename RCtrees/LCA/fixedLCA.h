@@ -617,7 +617,7 @@ T case_c_not_uv(parlay::sequence<cluster<T,D>>& clusters,parlay::sequence<std::t
 
     bool v_bet = is_cluster_between(c,v,clusters,h,index_map);
     //    std::cout << "h4.14" << std::endl;
-    //if (PRINT_FL) {
+    if (PRINT_FL) {
         std::cout << "Debugging info for case c not uv " << std::endl;
         std::cout << "\tu's highest ancestor in c is " << x << std::endl;
         std::cout << "\tv's high ancestor in c is " << y << std::endl;
@@ -625,7 +625,7 @@ T case_c_not_uv(parlay::sequence<cluster<T,D>>& clusters,parlay::sequence<std::t
         std::cout << "\tc is between v and root is " << v_bet << std::endl;
         std::cout << "\tclosest to u on cluster path is " << closest_on_cluster_path(clusters,&clusters[x],u,h,index_map) << std::endl;
         std::cout << "\tclosest to v on cluster path is " << closest_on_cluster_path(clusters,&clusters[y],v,h,index_map) << std::endl;
-   // }
+    }
     if (u_bet && v_bet) return c;
     else if (u_bet) return closest_on_cluster_path(clusters,&clusters[y],v,h,index_map);
     else if (v_bet) return closest_on_cluster_path(clusters,&clusters[x],u,h,index_map);
@@ -647,14 +647,14 @@ void batch_fixed_LCA_casework(parlay::sequence<cluster<T,D>>& clusters,parlay::s
         T c = h.involved_nodes[h.common_boundaries[i]]; //common boundary CLUSTER index
 
         //if (PRINT_FL) t* 
-        printf("(u,v,c): (%d %d %d)\n",u,v,c);
-        std::cout << "u level " << h.augmented_vertices[*index_map.Find(u)].level << std::endl;
-        std::cout << "v level " << h.augmented_vertices[*index_map.Find(v)].level << std::endl;
-        std::cout << "c level " << h.augmented_vertices[*index_map.Find(c)].level << std::endl;
+        // printf("(u,v,c): (%d %d %d)\n",u,v,c);
+        // std::cout << "u level " << h.augmented_vertices[*index_map.Find(u)].level << std::endl;
+        // std::cout << "v level " << h.augmented_vertices[*index_map.Find(v)].level << std::endl;
+        // std::cout << "c level " << h.augmented_vertices[*index_map.Find(c)].level << std::endl;
 
         //first cases, relations between u,v,c,r
         if (u ==r || v == r || c == r) {
-            std::cout << "Root case" << std::endl;
+            //std::cout << "Root case" << std::endl;
             answers[i]=r;
         }
         else if (c == u || c == v) //if u root, u is LCA
@@ -746,9 +746,7 @@ void batch_fixed_LCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* ro
    
     ps="after RC preprocess " + std::to_string(t3.next_time()) + "\n";
 
-    std::cout << "is between vals" << std::endl;
-    std::cout << "u=649 " << "c=542" << is_cluster_between(54236589,64936148,clusters,h,index_map);
-
+  
     //std::cout << ps;
 
     batch_fixed_LCA_casework(clusters,queries,answers,k,h,index_map);

@@ -414,7 +414,7 @@ void chain_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
     test_lca(1000000,10,3,1000,gen,pgen,0,1);
         std::cout << "about to start chain 10mil" << std::endl;
 
-    test_lca(100000000,10,3,1000,gen,pgen,0,1);
+    test_lca(100000000,5,3,1000,gen,pgen,0,1);
         std::cout << "finished chain 10mil" << std::endl;
 
 
@@ -443,8 +443,8 @@ void n_k_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
     test_lca(10,10,10,10,gen,pgen,.1,.3);
     test_lca(200,5,5,210,gen,pgen,.1,.3);
     test_lca(10000,5,5,7000,gen,pgen,.01,.2);
-    test_lca(100000000,1000,10,100005000,gen,pgen,.001,.3);
-    test_lca(70000000,1000,10,50000000,gen,pgen,.05,.3);
+    test_lca(100000000,10,10,100005000,gen,pgen,.001,.3);
+    test_lca(70000000,10,10,50000000,gen,pgen,.05,.3);
 
 }
 
@@ -641,7 +641,7 @@ int main(int argc, char* argv[]) {
         std::cout << "running from file " << filename << std::endl;
         run_from_file(filename);
     }
-    else {
+    else if (forest_ratio==-1) {
 
         //test_lca(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,forest_ratio,chain_ratio); //0 is forest ratio
         //extensive_test_perm(n,NUM_TREES,gen);
@@ -664,6 +664,11 @@ int main(int argc, char* argv[]) {
 
         // // std::cout << "yay" << std::endl;
         // // deleteRCtree(clusters);
+
+    }
+    else {
+        test_lca(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,forest_ratio,chain_ratio); //0 is forest ratio
+
 
     }
 

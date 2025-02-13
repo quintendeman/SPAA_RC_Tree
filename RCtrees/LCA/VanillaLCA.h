@@ -168,9 +168,9 @@ T unrooted_lca(parlay::sequence<T>& parent_tree, T u, T v, T r, T rprime) {
     auto lca_urp = vanilla_lca(parent_tree,u,rprime,r);
     auto lca_vrp = vanilla_lca(parent_tree,v,rprime,r);
 
-    std::cout << "uv lca " << lca_uv << std::endl;
-    std::cout << "ur'  lca " << lca_urp << std::endl;
-    std::cout << "vr' lca " << lca_vrp << std::endl;
+    // std::cout << "uv lca " << lca_uv << std::endl;
+    // std::cout << "ur'  lca " << lca_urp << std::endl;
+    // std::cout << "vr' lca " << lca_vrp << std::endl;
 
     //return the lca that is different (which also happens to be deeper in the original tree)
     return logic_lca(lca_uv,lca_urp,lca_vrp);
@@ -181,7 +181,7 @@ T unrooted_forest_lca(parlay::sequence<T>& parent_forest, T u, T v, T rprime) {
     T uroot = get_root(parent_forest,u);
     T vroot = get_root(parent_forest,v);
     T rprime_root = get_root(parent_forest,rprime);
-    std::cout << "uroot " << uroot << std::endl;
+    //std::cout << "uroot " << uroot << std::endl;
     
     if (uroot != vroot || uroot != rprime_root) {
         return -1; //disconnected
