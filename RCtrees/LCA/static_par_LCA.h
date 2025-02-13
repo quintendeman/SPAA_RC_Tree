@@ -237,10 +237,10 @@ void set_size_par(parlay::sequence<parlay::sequence<T>>& child_tree, parlay::seq
 //note that inlabel does not need a tree recursive computation, because of interval property of preorder
 template<typename T>
 void set_inlabel_par(parlay::sequence<parlay::sequence<T>>& child_tree, T root, parlay::sequence<LCAnode<T>>& av) {
-
+    long long one=1;
     parlay::parallel_for(0,av.size(),[&] (size_t node) {
         int i = floor(log2((av[node].preorder-1) ^ (av[node].preorder+av[node].size-1)));
-        av[node].inlabel=(1<<i)*floor((av[node].preorder+av[node].size-1)/(1<<i));
+        av[node].inlabel=(one<<i)*floor((av[node].preorder+av[node].size-1)/(one<<i));
 
     });
 
@@ -252,6 +252,7 @@ void set_inlabel_par(parlay::sequence<parlay::sequence<T>>& child_tree, T root, 
 //top down computation
 template<typename T>
 void set_ascendant_par(parlay::sequence<T>& parent_tree, parlay::sequence<parlay::sequence<T>>& child_tree, T root, parlay::sequence<LCAnode<T>>& augmented_vertices) {
+    long long one =1;
 
     T l = floor(log2(parent_tree.size())); //l (from paper) -- level depth of full binary tree with n nodes
 
@@ -267,7 +268,7 @@ void set_ascendant_par(parlay::sequence<T>& parent_tree, parlay::sequence<parlay
             auto s = stack[j];
 
             if (s == root) {
-            augmented_vertices[s].ascendant = 1 << l; //2^l
+            augmented_vertices[s].ascendant = one << l; //2^l
             }
             else {
                 //same inlabel, just pass down same ascendant value
@@ -279,7 +280,7 @@ void set_ascendant_par(parlay::sequence<T>& parent_tree, parlay::sequence<parlay
                 
                     T i = r1(augmented_vertices[s].inlabel);
 
-                    augmented_vertices[s].ascendant = augmented_vertices[parent_tree[s]].ascendant | (1 << i); //or instead of +
+                    augmented_vertices[s].ascendant = augmented_vertices[parent_tree[s]].ascendant | (one << i); //or instead of +
 
 
                 }

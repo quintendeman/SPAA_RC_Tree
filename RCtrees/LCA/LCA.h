@@ -138,16 +138,22 @@ void batchLCA_singletree(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>
     }
     //TOD2* uncomment
     batch_fixed_LCA(clusters,root,queries_vr,answers_vr);
-    if (PRINT_L) {
+    //if (PRINT_L) {
         std::cout << std::endl << std::endl << std::endl;
-        std::cout << "answer print" << std::endl;
+        std::cout << "answer print uv ur' vr'" << std::endl;
         for (int i = 0; i < answers_uv.size(); i++) {
             std::cout << i << ": " << std::get<0>(queries[i]) << " " << std::get<1>(queries[i]) << " " << std::get<2>(queries[i]) << " " << answers_uv[i] << " " << answers_ur[i] << " " << answers_vr[i] << std::endl;
         }
-    }
+    //}
 
     answers=parlay::tabulate(k,[&] (size_t i) {
         return &clusters[logic_lca(answers_uv[i],answers_ur[i],answers_vr[i])]; //this logic in Vanilla LCA
+    });
+    parlay::parallel_for(k,[&] (size_t i) {
+        if (answers[i]->index != logic_lca(answers_uv[i],answers_ur[i],answers_vr[i])) {
+            std::cout << "abort, answer index not the lca given" << std::endl;
+            exit(7002);
+        }
     });
     if (PRINT_L) std::cout << "exit" << std::endl;
 

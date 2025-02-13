@@ -14,7 +14,7 @@ struct LCAnode {
     T preorder; //position visited in preorder traversal (lchild yourself rchild)
     T num_rightmost_zeroes; //of preorder
     T level; //level in tree (0 is root, leaves are higher)
-    T ascendant; //composition of inlabel of all ancestors
+    long long ascendant; //composition of inlabel of all ancestors
     T size;
 
     void print() {
@@ -38,7 +38,7 @@ parlay::sequence<parlay::sequence<T>> preprocess_la(parlay::sequence<T>& parent_
     parlay::sequence<parlay::sequence<T>> table = parlay::tabulate(parent_tree.size(),[&] (size_t i) {return parlay::sequence<T>(av[i].level+1,-1);});
     
     parlay::parallel_for(0,parent_tree.size(),[&] (size_t i) {
-        int count = 0;
+        long long count = 0;
         T val = i;
         table[i][count]=val; //need duplicate here, in case val is root
 
@@ -54,7 +54,7 @@ parlay::sequence<parlay::sequence<T>> preprocess_la(parlay::sequence<T>& parent_
 
 //use the lookup table to get the i^{th} ancestor of node
 template<typename T>
-T query_la(parlay::sequence<parlay::sequence<T>>& table, T node, int ith) {
+T query_la(parlay::sequence<parlay::sequence<T>>& table, T node, long long ith) {
     return table[node][ith];
 }
 
@@ -215,10 +215,10 @@ void set_inlabel(parlay::sequence<parlay::sequence<T>>& child_tree, T root, parl
 //get the correct inlabel for s, *assuming that all children have had their inlabel correctly assigned*
 template<typename T>
 T get_inlabel(parlay::sequence<parlay::sequence<T>>& child_tree, parlay::sequence<LCAnode<T>>& augmented_vertices, T s) {
-    int inlabel = augmented_vertices[s].preorder;
-    int max_zeroes_seen = r1(augmented_vertices[s].preorder);
+    long long inlabel = augmented_vertices[s].preorder;
+    long long max_zeroes_seen = r1(augmented_vertices[s].preorder);
     for (T i = 0; i < child_tree[s].size(); i++) {
-        int cand = r1(augmented_vertices[child_tree[s][i]].inlabel);
+        long long cand = r1(augmented_vertices[child_tree[s][i]].inlabel);
         if (cand > max_zeroes_seen) {
             max_zeroes_seen = cand;
             inlabel = augmented_vertices[child_tree[s][i]].inlabel;
@@ -237,13 +237,14 @@ void set_ascendant(parlay::sequence<T>& parent_tree, parlay::sequence<parlay::se
     stack.push_back(root);
 
     T l = floor(log2(parent_tree.size())); //l (from paper) -- level depth of full binary tree with n nodes
+    long long one=1;
 
     while (stack.size() > 0) {
         auto s = stack.back();
         stack.pop_back();
         //if we're looking at the root
         if (s == root) {
-            augmented_vertices[s].ascendant = 1 << l; //2^l
+            augmented_vertices[s].ascendant = one << l; //2^l
         }
         else {
             //same inlabel, just pass down same ascendant value
@@ -255,7 +256,7 @@ void set_ascendant(parlay::sequence<T>& parent_tree, parlay::sequence<parlay::se
               
                 T i = r1(augmented_vertices[s].inlabel);
 
-                augmented_vertices[s].ascendant = augmented_vertices[parent_tree[s]].ascendant | (1 << i); //or instead of +
+                augmented_vertices[s].ascendant = augmented_vertices[parent_tree[s]].ascendant | (one << i); //or instead of +
 
 
             }
@@ -291,10 +292,10 @@ void set_head(parlay::sequence<T>& head, parlay::sequence<LCAnode<T>>& augmented
 //case2 -- INLABEL(v) ancestor of INLABEL(u)
 //case3 -- INLABEL(u) and INLABEL(v) not ancestors of each other
 template<typename T>
-std::pair<int,T> get_imax(parlay::sequence<LCAnode<T>>& av, T u, T v) {
-    int i1 = r1(av[u].inlabel);
-    int i2 = r1(av[v].inlabel);
-    int i3 = static_cast<int>(log2(av[u].inlabel ^ av[v].inlabel));
+std::pair<long long,T> get_imax(parlay::sequence<LCAnode<T>>& av, T u, T v) {
+    long long i1 = r1(av[u].inlabel);
+    long long i2 = r1(av[v].inlabel);
+    long long i3 = static_cast<long long>(log2(av[u].inlabel ^ av[v].inlabel));
     if (i1 >= i2 && i1 >= i3) {
         return std::make_pair(i1,u);
     }
@@ -305,20 +306,22 @@ std::pair<int,T> get_imax(parlay::sequence<LCAnode<T>>& av, T u, T v) {
 //Step 2 of implementation (Section 4 Schieber & Vishkin)
 //separating out for readability
 template<typename T>
-std::pair<int,int> get_inlabelz(parlay::sequence<LCAnode<T>>& av, T u, T v, int imax) {
-    int common = av[u].ascendant & av[v].ascendant;
+std::pair<long long,long long> get_inlabelz(parlay::sequence<LCAnode<T>>& av, T u, T v, long long imax) {
+    long long common = av[u].ascendant & av[v].ascendant;
+    long long one = 1;
     //std::cout << "common is " << common << std::endl;
-    int ci = (1 << imax) * (common >> imax);
-    int jz = r1(ci);
+    long long ci = (one << imax) * (common >> imax);
+    long long jz = r1(ci);
     //std::cout << "j index is  " << jz << std::endl;
-    int mask = -1 ^ ((1 << jz)-1);
-    return std::make_pair((av[u].inlabel & mask) | (1 << jz),jz);
+    long long mask = -1 ^ ((one << jz)-1);
+    return std::make_pair((av[u].inlabel & mask) | (one << jz),jz);
 }
 
 //Step 3 of implementation (section 4 Schieber & Vishkin)
 template<typename T>
-int get_hat(parlay::sequence<T>& head, parlay::sequence<T>& parent_tree,parlay::sequence<LCAnode<T>>& av, T u, int inlabel_z, int jz) {
-    int xhat=-1;
+long long get_hat(parlay::sequence<T>& head, parlay::sequence<T>& parent_tree,parlay::sequence<LCAnode<T>>& av, T u, long long inlabel_z, long long jz) {
+    long long xhat=-1;
+    long long one=1;
     if (av[u].inlabel == inlabel_z) {
         //std::cout << "inlabels same easy hat" << std::endl;
         xhat=u;
@@ -329,14 +332,14 @@ int get_hat(parlay::sequence<T>& head, parlay::sequence<T>& parent_tree,parlay::
         xhat=parent_tree[u];
     }
     else {
-        int w = -1;
-        int trimmed_ancestor = (1 << jz) - 1;
+        long long w = -1;
+        long long trimmed_ancestor = (one << jz) - 1;
         //std::cout << "trimmed ancestor : " << trimmed_ancestor << std::endl;
-        int k = l1(av[u].ascendant & trimmed_ancestor); //TOD2* is the xor with inlabelz needed?  //((1 << l1(inlabel_z))-1)
-        //int k = l1(av[u].ascendant);
+        long long k = l1(av[u].ascendant & trimmed_ancestor); //TOD2* is the xor with inlabelz needed?  //((1 << l1(inlabel_z))-1)
+        //long long k = l1(av[u].ascendant);
         //std::cout << "get hat k is " << k << std::endl;
-        int mask =-1 ^ ((1 << k)-1);
-        int inlabel_w = (av[u].inlabel & mask) | (1 << k);
+        long long mask =-1 ^ ((one << k)-1);
+        long long inlabel_w = (av[u].inlabel & mask) | (one << k);
        // std::cout << "in label w is " << inlabel_w << std::endl;
         w = head[inlabel_w];
         xhat = parent_tree[w];
@@ -360,27 +363,28 @@ T query(parlay::sequence<T>& head, parlay::sequence<T>& parent_tree,parlay::sequ
     }
     //if u and v are not on the same path
     auto i_pair = get_imax(av,u,v);
-    int imax = i_pair.first;
+    long long imax = i_pair.first;
+    long long one=1;
 
     //std::cout << "imax is " << imax << std::endl;
 
-    int mask = -1 ^ ((1 << imax) - 1); //zeroes in positions smaller than imax, 1s everywhere else
+    long long mask = -1 ^ ((one << imax) - 1); //zeroes in positions smaller than imax, 1s everywhere else
     //i_pair.second is the index of the vertex from which we take the base inlabel (the l-i leftmost bits)
     //std::cout << "mask: " << mask << std::endl;
     //std::cout << "chosen inlabel: " << av[i_pair.second].inlabel << std::endl;
-    int b = ((av[i_pair.second].inlabel & mask) & (-1 - (1 << imax) + 1)) | (1 << imax);
+    long long b = ((av[i_pair.second].inlabel & mask) & (-1 - (one << imax) + 1)) | (one << imax);
     //std::cout << "b is " << b << std::endl;
 
     auto output = get_inlabelz(av,u,v,imax);
-    int inlabel_z = output.first;
-    int jz = output.second;
+    long long inlabel_z = output.first;
+    long long jz = output.second;
 
 
     //std::cout << "z's in label is " << inlabel_z << std::endl;
 
   
-    int xhat=get_hat(head,parent_tree,av,u,inlabel_z,jz);
-    int yhat=get_hat(head,parent_tree,av,v,inlabel_z,jz);
+    long long xhat=get_hat(head,parent_tree,av,u,inlabel_z,jz);
+    long long yhat=get_hat(head,parent_tree,av,v,inlabel_z,jz);
 
     //std::cout << "uhat is " << xhat << ", " << "vhat is " << yhat << std::endl;
 

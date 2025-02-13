@@ -59,6 +59,9 @@ void error_print(parlay::sequence<cluster<int,int>*>& answers, parlay::sequence<
     std::cout << "Stats: n: " << parent_tree.size() << " k: " << k << " forest-ratio: " << forest_ratio << ", chain-ratio: " << chain_ratio << std::endl;
 
     //counter naming to avoid destroying previous files
+    if (error_file_prefix!="nofileprint") {
+
+    
     std::ifstream mf;
     mf.open("counter.txt");
     int my_counter=0;
@@ -87,6 +90,10 @@ void error_print(parlay::sequence<cluster<int,int>*>& answers, parlay::sequence<
     }
     myfile << "\n";
     myfile.close();
+    }
+    else {
+        std::cout << "no file print specified " << std::endl;
+    }
 
     //see the clusters
     //printTree(clusters);
@@ -168,19 +175,22 @@ void run_from_file(std::string file) {
     }
     int k = 0;
     my_file >> k;
+    k=1; //TOD2* change back
     parlay::sequence<std::tuple<int,int,int>> queries(k);
     int t1, t2, t3 = 0;
-    for (int i = 0; i < k; i++) {
+    for (int i = 0; i < k+1; i++) { //TOd2* change back
         my_file >> t1 >> t2 >> t3;
-        queries[i]=std::make_tuple(t1,t2,t3);
+        if (i > 0)  //restriction for error_log4
+        queries[i-1]=std::make_tuple(t1,t2,t3);  //TOD2* change back
     }
+
     std::cout << "n is " << n << std::endl;
     std::cout << "k is " << k << std::endl;
     for (int i = 0; i < queries.size(); i++) {
         std::cout << std::get<0>(queries[i]) << ", " << std::get<1>(queries[i]) << ", " << std::get<2>(queries[i]) << std::endl; 
 
     }
-    print_parent_tree(parent_tree,"rf par tree");
+    //print_parent_tree(parent_tree,"rf par tree");
     parlay::sequence<cluster<int,int>> clusters;
     get_RC_tree(clusters,parent_tree,false);
     int NUM_TRIALS, iter, iter2 =-1; //because we chose the trial
@@ -189,7 +199,7 @@ void run_from_file(std::string file) {
     parlay::sequence<cluster<int,int>*> answers(k);
 
     batchLCA(clusters,queries,answers);
-    handle_answers(queries,answers,k,parent_tree,clusters,iter,iter2,forest_ratio,chain_ratio,"alt.txt"); //alt is alt error file to avoid covering previous print
+    handle_answers(queries,answers,k,parent_tree,clusters,iter,iter2,forest_ratio,chain_ratio,"nofileprint"); //alt is alt error file to avoid covering previous print
 
     deleteRCtree(clusters);
 

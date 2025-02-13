@@ -48,10 +48,33 @@ inline bool extract_bit(T number, int offset_from_right)
     Sets the value of b
     sizeof(T) must be less than 16 bytes
 
-    Using bit-tricks, we avoid a for loop
+
+    Uses for loop instead of log
+
 */
+
 template <typename T>
 inline char first_different_bit(const T a, const T b, bool* bit)
+{
+    T difference = a ^ b;
+    char num_bits = sizeof(T) * 8;
+    
+    for(char i = num_bits-1; i >= 0; i--)
+    {
+        bool inspected_bit = extract_bit(difference, i);
+        if(inspected_bit)
+        {
+            if(bit) *bit = extract_bit(b, i);
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+//use bit tracks
+template <typename T>
+inline char first_different_bit_alt(const T a, const T b, bool* bit)
 {
     T difference = a ^ b;
     if (difference==0) return -1;
