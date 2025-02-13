@@ -260,6 +260,7 @@ void create_map_trees(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>& 
 
     //invariant: index_map and involved_nodes are inverses of each other
     //must be atomic because of concurrent writes
+    //note that this check is O(n) span for the write if should_error is true -- but if should_error is true, then the code is broken anyway, so this is okay (because on a correct run this never gets called span is maintained)
     std::atomic<bool> should_error(false);
     parlay::parallel_for(0,h.sn,[&] (T i) {
         if (*index_map.Find(h.involved_nodes[i]) != i) {
