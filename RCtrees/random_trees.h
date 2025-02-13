@@ -276,6 +276,7 @@ parlay::sequence<T> generate_random_perm_seq(T n, std::mt19937& gen) {
 //TOD2* use more delayed sequences instead of tabulates (here and throughout code)
 //TOD2* neaten, slightly spaghetti
 //use parlay::random_shuffle instead
+//note: span not polylog due to concurrent writes? (use random shuffle instead)
 template<typename T>
 parlay::sequence<T> generate_random_perm_par(T n, parlay::random_generator& pgen) {
     parlay::sequence<T> perm(n,-1); //i maps to perm[i]
