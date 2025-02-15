@@ -548,7 +548,7 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
         {
             if(w < v)
                 continue;
-            auto edge_cluster = cluster_allocator::alloc();
+            auto edge_cluster = cluster_allocator::create();
             edge_cluster->index = -1;
             edge_cluster->state = base_edge | live;
             edge_cluster->data = defretval;
@@ -654,7 +654,7 @@ void create_base_clusters(parlay::sequence<cluster<T,D>>& base_clusters, parlay:
             // std::string print_string = std::to_string(v) + " -- " + std::to_string(w) + " tiebreak succeeded\n";
             // std::cout << print_string;
 
-            auto edge_cluster = cluster_allocator::alloc();
+            auto edge_cluster = cluster_allocator::create();
             edge_cluster->index = -1;
             edge_cluster->state = base_edge | live;
             edge_cluster->data = weight;
@@ -1476,7 +1476,7 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
 }
 
 template<typename T, typename D>
-void testPathQueryValid(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<T>& parents, parlay::sequence<D>& weights)
+void testPathQueryValid(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<T>& parents, parlay::sequence<D>& weights, parlay::sequence<T>& random_perm_map)
 {
     parlay::parallel_for(0, 1000, [&] (T i) {
         T start_index = rand() % clusters.size();
@@ -1491,7 +1491,7 @@ void testPathQueryValid(parlay::sequence<cluster<T,D>>& clusters, parlay::sequen
         }
         end_index = index;
 
-        D pathQueryResult = PathQuery(&clusters[start_index], &clusters[end_index], (D) 0.0, [] (D a, D b) {return a + b;});
+        D pathQueryResult = PathQuery(&clusters[random_perm_map[start_index]], &clusters[random_perm_map[end_index]], (D) 0.0, [] (D a, D b) {return a + b;});
 
         auto almost_equal = [] (D A, D B) -> bool {
         const double tolerance = 0.001;
