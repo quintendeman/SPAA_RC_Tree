@@ -5,7 +5,7 @@
 #include "RC.h"
 #include <queue>
 #include <set>
-#include "../examples/kruskal.h"
+#include "../examples/filter_kruskal.h"
 #include "RCdynamic.h"
 
 
