@@ -2,7 +2,8 @@
 #include "../include/parlay/primitives.h"
 #include <cmath>
 
-static const int max_edges = 3;
+static const int max_edges = 1 << 30; // an ungodly high number
+// static const int max_edges = 3; 
 
 enum distribution {
         constant,
@@ -348,7 +349,7 @@ class TreeGen
             T total_size;
             if(dist == constant)
             {
-                sizes = parlay::tabulate((T)(num_vertices/(mean)), [&] (T i) {
+                sizes = parlay::tabulate((T)((num_vertices)/(mean) + 2), [&] (T i) {
                     return (T) mean;
                 });
                 total_size = parlay::reduce(sizes);
@@ -426,8 +427,8 @@ class TreeGen
 
                     auto indices = parlay::tabulate(cumul_sizes.size(), [] (T i) {return i;});
                     auto location = parlay::find_if(indices, [&] (T i) {return cumul_sizes[i] > this->num_vertices;});
-                    // std::cout << "Num vertices " << this->num_vertices << std::endl;
-                    // std::cout << "Last cumul " << cumul_sizes[cumul_sizes.size()-1] << std::endl;
+                    std::cout << "Num vertices " << this->num_vertices << std::endl;
+                    std::cout << "Last cumul " << cumul_sizes[cumul_sizes.size()-1] << std::endl;
                 
                     assert(location != indices.end());
                     T index_which_exceeds = *location;
