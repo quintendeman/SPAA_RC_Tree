@@ -39,13 +39,12 @@ class TreeGen
         parlay::sequence<T> parents;
         parlay::sequence<interGraphConnect> interconnects;
         parlay::sequence<D> weights;
+        parlay::sequence<T> random_perm_map;
         // parlay::sequence<bool> exists;
 
         
         /*
-            l is the probability of picking the immediate left node 
-            AND
-            the probability of picking the immediate left subgraph
+            
         */
         TreeGen(T num_vertices, D min_weight = 0.0, D max_weight = 1.0, double l = 0.95f, double mean = 1000.0f, distribution dist = uniform )
         {
@@ -62,6 +61,7 @@ class TreeGen
             this->lg = lg;
             this->mean = mean;
             this->num_vertices = num_vertices;
+            this->random_perm_map = parlay::random_permutation(num_vertices);
         }
 
 
@@ -146,7 +146,7 @@ class TreeGen
 
         void generateInterconnects()
         {
-            parlay::random_generator gen(15213);
+            parlay::random_generator gen(rand());
             std::uniform_real_distribution<double> dis_ur(0, 1);
             
             interconnects = parlay::tabulate(this->subgraphs.size(), [&] (T i) {
@@ -221,7 +221,7 @@ class TreeGen
 
         parlay::sequence<std::pair<T,T>> generateDeleteEdges(double prob = 1.0) // probability of
         {
-            parlay::random_generator gen(15213);
+            parlay::random_generator gen(rand());
             std::uniform_real_distribution<double> dis_ur(0, 1);
 
             assert(prob <= 1.0 && prob >= 0.0);
@@ -243,7 +243,8 @@ class TreeGen
                     counts[std::get<0>(std::get<2>(ICG))].fetch_add(-1);
                     counts[std::get<1>(std::get<2>(ICG))].fetch_add(-1);
                     parents[std::get<0>(std::get<2>(ICG))] = std::get<0>(std::get<2>(ICG));
-                    return std::pair<T,T>(std::get<0>(std::get<2>(ICG)), std::get<1>(std::get<2>(ICG)));
+                    // return std::pair<T,T>(std::get<0>(std::get<2>(ICG)), std::get<1>(std::get<2>(ICG)));
+                    return std::pair<T,T>(random_perm_map[std::get<0>(std::get<2>(ICG))], random_perm_map[std::get<1>(std::get<2>(ICG))]);
                 }
             });
             retpairs = parlay::filter(retpairs, [&] (std::pair<T,T> pr) {
@@ -257,7 +258,7 @@ class TreeGen
         {
 
             edgelist retedgelist;
-            parlay::random_generator gen(15213);
+            parlay::random_generator gen(rand());
             std::uniform_real_distribution<double> dis_ur(0, 1);
 
             assert(prob <= 1.0 && prob >= 0.0);
@@ -302,7 +303,7 @@ class TreeGen
                     counts[my_index].fetch_add(-1);
                     // std::cout << "Just decremented " << my_index << " counts" << std::endl;
                 
-                    return edge(i, i, (D) i);
+                    return edge(i, i, (D) i); // invalid edge to yourself
                 }
 
                 short old_parent_val = counts[random_parent_index].fetch_add(1);
@@ -330,7 +331,12 @@ class TreeGen
 
                 exists = true;
 
-                return std::get<2>(ICG);
+                // return std::get<2>(ICG);
+                edge edge_to_return = std::get<2>(ICG);
+                std::get<0>(edge_to_return) = random_perm_map[std::get<0>(edge_to_return)];
+                std::get<1>(edge_to_return) = random_perm_map[std::get<1>(edge_to_return)];
+                // return std::get<2>(ICG);
+                return edge_to_return;
             });
 
             retedgelist = parlay::filter(retedgelist, [] (edge E) {
@@ -355,7 +361,7 @@ class TreeGen
             }
             else if(dist == uniform)
             {
-                parlay::random_generator gen(15213); // CMU's postal code
+                parlay::random_generator gen(rand());
                 std::uniform_int_distribution<T> dis(1, (T)(this->mean * 2));
 
 
@@ -368,7 +374,7 @@ class TreeGen
             }
             else if(dist == geometric)
             {
-                parlay::random_generator gen(15213); // CMU's postal code
+                parlay::random_generator gen(rand()); 
                 std::geometric_distribution<T> dis(1/mean);
                 // std::geometric_distribution<T> dis(0.01);
 
@@ -489,7 +495,8 @@ class TreeGen
         parlay::sequence<edge> getAllEdges()
         {
             auto retedges = parlay::tabulate(num_vertices, [&] (T i) {
-                return edge(i, parents[i], weights[i]);
+                // return edge(i, parents[i], weights[i]);
+                return edge(random_perm_map[i], random_perm_map[parents[i]], weights[i]);
             });
             retedges = parlay::filter(retedges, [] (edge E) {
                 return std::get<0>(E) != std::get<1>(E);

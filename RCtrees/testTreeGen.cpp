@@ -1,6 +1,8 @@
 #include <iostream>
 #include "treeGen.h"
 
+#include <chrono>
+
 #include "RC.h"
 #include "RCdynamic.h"
 #include <ctime>    // For time()
@@ -47,7 +49,7 @@ int main(int argc, char* argv[])
     {
         std::cout << "Testing graph " << I+1 << std::endl;
 
-        TreeGen<vertex, double> TG(graph_size, min_weight, max_weight, 0.1, 40, exponential);
+        TreeGen<vertex, double> TG(graph_size, min_weight, max_weight, 0.9, 20, uniform);
 
         TG.generateInitialEdges();
 
@@ -84,6 +86,10 @@ int main(int argc, char* argv[])
         const vertex max_degree = 3;
         
         parlay::sequence<cluster<vertex, double>> clusters; 
+
+
+        auto static_creation_start = std::chrono::high_resolution_clock::now(); //
+
         create_base_clusters(clusters, retedges, max_degree, graph_size);
         
         // printTree(clusters);
@@ -91,6 +97,10 @@ int main(int argc, char* argv[])
 
         create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
 
+        auto static_creation_end = std::chrono::high_resolution_clock::now();
+
+        std::chrono::duration<double>  dur = static_creation_end - static_creation_start;
+        std::cout << "static elapsed time: " << dur.count() << " seconds\n";
 
 
         // return 0;
@@ -115,7 +125,7 @@ int main(int argc, char* argv[])
 
         std::cout << TG.interconnects.size() << " number of dynamic edges " << std::endl;
 
-        for(unsigned int i = 0; i < 5; i++)
+        for(unsigned int i = 0; i < 0; i++)
         {
             std::cout << "testing batchinsert " << i+1 << std::endl;
             double del_prob = (rand() % 100);
@@ -143,10 +153,14 @@ int main(int argc, char* argv[])
                 return A + B;
             });
 
-            testPathQueryValid(clusters, TG.parents, TG.weights);
+            testPathQueryValid(clusters, TG.parents, TG.weights, TG.random_perm_map);
         }
 
         deleteRCtree(clusters);
+
+        parlay::internal::memory_clear();
+        parlay::type_allocator<cluster<long,double>>::finish();
+        parlay::type_allocator<node<long,double>>::finish();
 
         
 

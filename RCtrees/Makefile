@@ -1,6 +1,6 @@
 # Variables
 CXX = g++
-CXXFLAGS = -O0 -std=c++17 -pthread -g -Werror -Wparentheses
+CXXFLAGS = -O3 -std=c++17 -pthread -g -Werror -Wparentheses
 # CXXFLAGS = -O0 -flto -std=c++17 -pthread -g -Werror -Wparentheses
 INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/
 LDFLAGS = -ljemalloc
@@ -18,7 +18,7 @@ testMST.out: testMST.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o testMST.out testMST.cpp
 
 testTreeGen.out: testTreeGen.cpp treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h 
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o testTreeGen.out testTreeGen.cpp
+	$(CXX) -DPARLAY_USE_STD_ALLOC $(CXXFLAGS) $(INCLUDES) -o testTreeGen.out testTreeGen.cpp
 
 
 # Clean up build files
