@@ -42,8 +42,6 @@ node<T,D>* get_edge(T v, T w, parlay::sequence<cluster<T,D>>& clusters, unsigned
     return nullptr;
 }
 
-
-//bug?, requires that counters not set by default to zero? (if another function changes, could error?) TOD2* (how do we know that internal node counters all start at zero?) FIXME
 template<typename T, typename D, typename assocfunc>
 void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, assocfunc func, parlay::sequence<cluster<T, D>>& clusters, const D& defretval = 0.00f)
 {   
@@ -645,7 +643,6 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
                 }
                 if(edge_node == nullptr)
                 {
-                    //auto newEdgeClstrPtr = cluster_allocator::alloc(); TOD2* revert?
 
                     auto newEdgeClstrPtr = cluster_allocator::create();
 

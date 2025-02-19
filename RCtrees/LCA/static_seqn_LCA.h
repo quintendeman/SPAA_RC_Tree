@@ -32,7 +32,7 @@ struct LCAnode {
 //O(nd) work
 //la = level ancestors
 //max_level = depth of tree (to know how many ancestors to hold)
-//TOD2* space inefficient, because shallower children need less space than deep children
+//Note: is somewhat space inefficient, because shallower children need less space than deep children
 template<typename T>
 parlay::sequence<parlay::sequence<T>> preprocess_la(parlay::sequence<T>& parent_tree,parlay::sequence<LCAnode<T>>& av, T root) {
     parlay::sequence<parlay::sequence<T>> table = parlay::tabulate(parent_tree.size(),[&] (size_t i) {return parlay::sequence<T>(av[i].level+1,-1);});
@@ -326,7 +326,6 @@ long long get_hat(parlay::sequence<T>& head, parlay::sequence<T>& parent_tree,pa
         //std::cout << "inlabels same easy hat" << std::endl;
         xhat=u;
     }
-   // additional case not mentioned in paper!? is this needed? TOD2*
     else if (av[parent_tree[u]].inlabel == inlabel_z) {
         //std::cout << "parent is xhat" << std::endl;
         xhat=parent_tree[u];
@@ -335,7 +334,7 @@ long long get_hat(parlay::sequence<T>& head, parlay::sequence<T>& parent_tree,pa
         long long w = -1;
         long long trimmed_ancestor = (one << jz) - 1;
         //std::cout << "trimmed ancestor : " << trimmed_ancestor << std::endl;
-        long long k = l1(av[u].ascendant & trimmed_ancestor); //TOD2* is the xor with inlabelz needed?  //((1 << l1(inlabel_z))-1)
+        long long k = l1(av[u].ascendant & trimmed_ancestor); 
         //long long k = l1(av[u].ascendant);
         //std::cout << "get hat k is " << k << std::endl;
         long long mask =-1 ^ ((one << k)-1);

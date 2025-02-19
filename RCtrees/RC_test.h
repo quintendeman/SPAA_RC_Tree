@@ -95,8 +95,6 @@ void test_rc_valid(const parlay::sequence<vertex>& parents, parlay::sequence<clu
         return a + b;
     }, clusters);
 
-    //TOD2* is this a good subtree query test? Because are we given that the direction giver will be an RC tree parent of the random cluster? 
-
     auto random_index = rand() % parents.size();
     if (print)
     std::cout << "Root: " << random_index << " Parent: " << parents[random_index] << std::endl;

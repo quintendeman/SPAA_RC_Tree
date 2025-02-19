@@ -130,13 +130,11 @@ void batchLCA_singletree(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>
         std::cout << std::endl << std::endl << std::endl;
         std::cout << "Starting 2nd query call u r" << std::endl;
     }
-    //TOD2* uncomment
     batch_fixed_LCA(clusters,root,queries_ur,answers_ur);
     if (PRINT_L) {
         std::cout << std::endl << std::endl << std::endl;
         std::cout << "Starting 3rd query call v r" << std::endl;
     }
-    //TOD2* uncomment
     batch_fixed_LCA(clusters,root,queries_vr,answers_vr);
     if (PRINT_L) {
         std::cout << std::endl << std::endl << std::endl;
@@ -228,7 +226,6 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::t
         }
     }
 
-    //TOD2* within a lambda function like this, better to write arugment type as reference? std::tuple<T,T,T>& query? Or does [&] already handle that?
 
     //find which queries all contain members in the same tree
     auto answerable_query_indices = parlay::filter(rangk,[&] (T i) {
@@ -273,9 +270,8 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::t
     std::string ps = "processed global info time " + std::to_string(t3.next_time()) + "\n";
     //std::cout << ps;
 
-    //in parallel, look at the queries for each root //TOD2* replace
+    //in parallel, look at the queries for each root 
     parlay::parallel_for(0,queries_by_tree.size(),[&] (size_t i) {
-    //for (int i = 0; i < queries_by_tree.size(); i++) {
 
         //list of queries associated with root queries_by_tree[i].first
         parlay::sequence<std::tuple<T,T,T>> query_list = parlay::map(queries_by_tree[i].second,[&] (T j) {return queries[j];});
@@ -288,7 +284,6 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::t
         parlay::parallel_for(0,answer_list.size(),[&] (size_t j) {
             answers[queries_by_tree[i].second[j]]=answer_list[j];
         });
-    //}
     });
     
 

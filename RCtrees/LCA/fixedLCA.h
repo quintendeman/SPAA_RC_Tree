@@ -314,8 +314,8 @@ void static_preprocess(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>&
         std::cout << "error, root's parent is not itself " << std::endl;
         exit(2201);
     }
-    //create static LCA structure
-    h.head = parlay::sequence<int>(2*h.sn+1);
+    //create static LCA structure (note head only needs sn+1 space)
+    h.head = parlay::sequence<int>(h.sn+1);
     h.augmented_vertices = parlay::sequence<LCAnode<T>>(h.sn);
 
     //give augmented vertices a (default) id. This id just used for printing.
@@ -448,7 +448,6 @@ void RC_preprocess(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<st
 //uses level ancestors as a subroutine
 //takes in index u on CLUSTERS
 //returns as index on CLUSTERS not on alt_tree
-//TOD2* check all uses of << for int overflow
 template<typename T, typename D>
 T closest_on_cluster_path(parlay::sequence<cluster<T,D>>& clusters, cluster<T,D>* B, T u, LCAhelper<T,D>& h,parlay::parlay_unordered_map<T,T>& index_map) {
     //if (PRINT_FL)  std::cout << "running closest on cluster path for " << u  << " in " << B->index << std::endl;
@@ -480,7 +479,7 @@ T closest_on_cluster_path(parlay::sequence<cluster<T,D>>& clusters, cluster<T,D>
 
     //if (PRINT_FL) std::cout << "\trel bits is " << rel_bits << std::endl;
     
-    if (rel_bits.to_ulong() == 0) { //if there are no unary clusters in this range, u itself must be on the cluster path  //TODO* is this u or b? Look back on? (see thread history)
+    if (rel_bits.to_ulong() == 0) { //if there are no unary clusters in this range, u itself must be on the cluster path 
         //if (PRINT_FL) std::cout << "\tno unary clusters on path, return u itself" << std::endl;
         return u;
     }
@@ -692,14 +691,6 @@ void batch_fixed_LCA(parlay::sequence<cluster<T,D>>& clusters,  cluster<T,D>* ro
 
     std::string ps = "after find involved: " + std::to_string(t3.next_time()) + "\n";
     //std::cout << ps;
-
-    //tree of 1 //TOD2* is this needed?
-    // if (h.sn == 1) { 
-    //     for (int i = 0; i < answers.size(); i++) {
-    //         answers[i] = h.involved_nodes[0];
-    //     }      
-    //     return;
-    // }
  
 
     parlay::parlay_unordered_map<T,T> index_map = parlay::parlay_unordered_map<T,T>(2*h.sn); //will get overwritten

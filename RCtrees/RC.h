@@ -334,7 +334,6 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
         {
             if(w < v)
                 continue;
-            //auto edge_cluster = cluster_allocator::alloc(); //TOD2* which one?
             cluster<T,D>* edge_cluster = cluster_allocator::create();
             edge_cluster->index = -1;
             edge_cluster->state = base_edge | live;
@@ -441,7 +440,6 @@ void create_base_clusters(parlay::sequence<cluster<T,D>>& base_clusters, parlay:
             // std::string print_string = std::to_string(v) + " -- " + std::to_string(w) + " tiebreak succeeded\n";
             // std::cout << print_string;
 
-            //auto edge_cluster = cluster_allocator::alloc(); //TOD2* which one?
             cluster<T,D>* edge_cluster = cluster_allocator::create();
 
             edge_cluster->index = -1;
@@ -658,66 +656,31 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defre
     auto count = 0;
     do
     {
-        if (print) std::cout << "counter " << count << std::endl;
         check_consistency(tree_nodes); // TODO remove
 
-        if (print) std::cout << "past consistency check"  << std::endl;
         // break;
         auto eligible = parlay::filter(tree_nodes, [] (auto node_ptr){
             return node_ptr->get_num_neighbours_live() <= 2;
         });
-
-        if (print) std::cout << "x1" << std::endl;
-
         
         set_MIS(eligible);
-
-                if (print) std::cout << "x1.1" << std::endl;
 
         auto candidates = parlay::filter(eligible, [] (auto node_ptr){
             return node_ptr->cluster_ptr->state & IS_MIS_SET;
         });
-                if (print) std::cout << "x1.2" << std::endl;
 
 
         check_mis(candidates); // TODO remove
-        //TOD2* restore to 3 independent calls? 
-        if (print) std::cout << "x2" << std::endl;
-
-         parlay::parallel_for(0, candidates.size(), [&] (T i){
+      
+        parlay::parallel_for(0, candidates.size(), [&] (T i){
             candidates[i]->cluster_ptr->first_contracted_node = candidates[i]->prev;
-            
-        });
-        if (print) std::cout << "x2.1" << std::endl;
-         parlay::parallel_for(0, candidates.size(), [&] (T i){
             contract(candidates[i]);
-        });
-
-                if (print) std::cout << "x2.2" << std::endl;
-
-         parlay::parallel_for(0, candidates.size(), [&] (T i){
-        
             accumulate(candidates[i], defretval, assocfunc);
         });
 
-        if (print) std::cout << "x2.3" << std::endl;
-
-        // parlay::parallel_for(0, candidates.size(), [&] (T i){
-        //     candidates[i]->cluster_ptr->first_contracted_node = candidates[i]->prev;
-        //     contract(candidates[i]);
-        //     accumulate(candidates[i], defretval, assocfunc);
-        // });
-
-        if (print) std::cout << "x3" << std::endl;
-
-
-        
         tree_nodes = parlay::filter(tree_nodes, [] (auto node_ptr) {
             return node_ptr->state & live;
         });
-
-        if (print) std::cout << "x4" << std::endl;
-
         
         recreate_last_levels(tree_nodes);
 

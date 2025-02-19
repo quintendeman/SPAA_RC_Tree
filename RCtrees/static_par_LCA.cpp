@@ -40,8 +40,8 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, std::mt19937& gen) {
     print_parent_tree(parent_tree,"parent tree");
     print_child_tree(child_tree,"child tree");
 
-    //head needs to store all inlabels, must be slightly bigger? come back to TOD2
-    parlay::sequence<int> head(2*n+1);
+    //head needs to store all inlabels, must be slightly bigger than n
+    parlay::sequence<int> head(n+1);
     parlay::sequence<LCAnode<int>> augmented_vertices(n);
     for (int i = 0; i < n; i++) {
         augmented_vertices[i].id=i; //id is index

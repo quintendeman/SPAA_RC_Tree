@@ -510,26 +510,21 @@ void single_tree_lca(std::mt19937& gen, parlay::random_generator& pgen) {
 }
 //benchmarking times TOD2*
 
+//highlights of testing, for quick on laptop
+void mid_test_lca(std::mt19937& gen, parlay::random_generator& pgen,parlay::internal::timer& tim) {
+    small_test_lca(gen,pgen);
+    test_lca(5500,100,3,100,gen,pgen,1,0.3);
+    test_lca(10000001,100,3,50000,gen,pgen,.11,.2);
+    test_lca(200000,79,100,7999,gen,pgen,.82,0.6);
+    test_lca(10000,5,5,7000,gen,pgen,.01,.22);
+    test_lca(100000,100,3,1000,gen,pgen,0,1);
+
+}
+
 void extensive_lca(std::mt19937& gen, parlay::random_generator& pgen,parlay::internal::timer& tim) {
+    
     small_test_lca(gen, pgen); //test small #s (edge case)
     std::cout << "Small test done in " << tim.next_time() << std::endl;
-
-    chain_test_lca(gen,pgen); //vary balanced vs chain formation
-        std::cout << "Chain test done in " << tim.next_time() << std::endl;
-
-    balanced_test_lca(gen,pgen);
-        std::cout << "Balanced test done in  " << tim.next_time() << std::endl;
-
-
-    large_k_test_lca(gen,pgen);
-        std::cout << "Large k test done in " << tim.next_time() << std::endl;
-
-    small_k_test_lca(gen,pgen);
-
-    std::cout << "Small k test done in " << tim.next_time() << std::endl;
-
-    n_k_test_lca(gen,pgen);
-    std::cout << "n~k test done in " << tim.next_time() << std::endl;
 
     isolated_test_lca(gen,pgen); //isolated vs connected
         std::cout << "Isolated test done in " << tim.next_time() << std::endl;
@@ -549,6 +544,24 @@ void extensive_lca(std::mt19937& gen, parlay::random_generator& pgen,parlay::int
 
     large_test_lca(gen,pgen);
     std::cout << "Large test done in " << tim.next_time() << std::endl;
+
+
+    chain_test_lca(gen,pgen); //vary balanced vs chain formation
+        std::cout << "Chain test done in " << tim.next_time() << std::endl;
+
+    balanced_test_lca(gen,pgen);
+        std::cout << "Balanced test done in  " << tim.next_time() << std::endl;
+
+
+    large_k_test_lca(gen,pgen);
+        std::cout << "Large k test done in " << tim.next_time() << std::endl;
+
+    small_k_test_lca(gen,pgen);
+
+    std::cout << "Small k test done in " << tim.next_time() << std::endl;
+
+    n_k_test_lca(gen,pgen);
+    std::cout << "n~k test done in " << tim.next_time() << std::endl;
 
 
     //TOD2* test on T types other than int, Ex. custom T types (user defined structs?)
@@ -665,6 +678,9 @@ int main(int argc, char* argv[]) {
         // // std::cout << "yay" << std::endl;
         // // deleteRCtree(clusters);
 
+    }
+    else if (forest_ratio==-2) {
+        mid_test_lca(gen,pgen,tim);
     }
     else {
         test_lca(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,forest_ratio,chain_ratio); //0 is forest ratio
