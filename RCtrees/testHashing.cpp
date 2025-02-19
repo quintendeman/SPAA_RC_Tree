@@ -125,9 +125,18 @@ int main(int argc, char* argv[])
 
     std::cout << "Graph size " << graph_size << std::endl;
 
-    for(int II = 0; II < 10; II++)
-    {
+    double static_gen_time = 0.0f;
+    double dynamic_gen_time = 0.0f;
+    double static_tern_time = 0.0f;
+    double dynamic_tern_time = 0.0f;
+    int static_counter = 0;
+    int dynamic_counter = 0;
 
+    const int maxII = 8;
+
+    for(int II = 0; II < maxII; II++)
+    {
+        std::cout << "II " << II << std::endl;
         TreeGen<long, double> TG(graph_size, min_weight, max_weight, 0.1, 20, exponential, true, II);
 
         TG.generateInitialEdges();
@@ -175,14 +184,23 @@ int main(int argc, char* argv[])
 
         testPathQueryValid(clusters, TG.parents, TG.weights, TG.random_perm_map, graph_size);
 
-        const int maxi = 20;
+        dynamic_gen_time = 0.0f;
+        dynamic_counter = 0;
+        dynamic_tern_time = 0.0f;
+
+        const int maxi = 8;
         long total_edge_size = retedges.size();
         for (unsigned int i = 0; i < maxi; i++) 
         {
           
-          double prob = (static_cast<double>(rand() % 100)) / 100.0f;
+          double prob = (static_cast<double>(rand() % 10000)) / 10000.0f;
           std::cout << "i: " << i << std::endl;
-          
+
+          double increment = (static_cast<double>(2 * i))/maxi;
+          prob+=increment;
+          if(prob > 1.0f)
+            prob = 1.0f;
+
           // Skip measuring this part
           auto del_pairs = TG.generateDeleteEdges(prob); // Don't measure this
 
@@ -198,6 +216,9 @@ int main(int argc, char* argv[])
           // Measure batchInsertEdge(ret_seqs.second, ret_seqs.first, clusters, (double) 0.0f, ...);
           
           prob = (static_cast<double>(rand() % 10000)) / 10000.0f;
+          prob+=increment;
+          if(prob > 1.0f)
+            prob = 1.0f;
 
           // Skip measuring this part
           auto add_truples = TG.generateAddEdges(prob); // Don't measure this
@@ -231,9 +252,24 @@ int main(int argc, char* argv[])
           std::cout << "  batchInsertEdge: " << final_insert_elapsed.count() << " seconds" << std::endl;
           // std::cout << "  TR.add_edges: " << add_elapsed.count() << " seconds" << std::endl;
           // std::cout << "  batchInsertEdge (2nd call): " << final_insert_elapsed.count() << " seconds" << std::endl;
+          if(i > maxi/2)
+          {
+            dynamic_gen_time+= delete_elapsed.count() + add_elapsed.count() + final_insert_elapsed.count();
+            dynamic_tern_time+=delete_elapsed.count() + add_elapsed.count();
+            dynamic_counter++;
+          }
       }
       deleteRCtree(clusters); 
+
+      if(II > maxII/2)
+      {
+        static_gen_time+=dur2.count();
+        static_tern_time+=dur1.count();
+        static_counter++;
+      }
     }
 
+    std::cout << "STATIC TIME " << static_gen_time/static_counter << " of which " << static_tern_time/static_counter << " was spent ternerizing" << std::endl;
+    std::cout << "DYNAMIC TIME " << dynamic_gen_time/dynamic_counter << " of which " << dynamic_tern_time/dynamic_counter << " was spent ternerizing" << std::endl;
 
 }

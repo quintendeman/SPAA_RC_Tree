@@ -80,6 +80,10 @@ public:
     std::array<std::atomic<bool>, max_neighbours> CGEntryValid;
     T vertex_count = 0;
 
+    // subtree stuff
+    std::array<D, max_neighbours> partial_sums;
+    std::array<std::atomic<char>, max_neighbours> partial_sum_complete;
+
 
     // short finalize_time = 0; // TODO remove
     // short asked_to_increment = 0; // TODO remove
