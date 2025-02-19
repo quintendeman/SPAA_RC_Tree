@@ -343,9 +343,9 @@ class ternarizer{
                     return contributions;
                 }));
 
-                std::cout << "cursor went from " << this->cursor << " to ";
+                // std::cout << "cursor went from " << this->cursor << " to ";
                 this->cursor += total_entries; 
-                std::cout << this->cursor << std::endl;
+                // std::cout << this->cursor << std::endl;
             }
 
             {
@@ -439,9 +439,9 @@ class ternarizer{
                     return contributions;
                 }));
 
-                std::cout << "cursor went from " << this->cursor << " to ";
+                // std::cout << "cursor went from " << this->cursor << " to ";
                 this->cursor += total_entries; 
-                std::cout << this->cursor << std::endl; 
+                // std::cout << this->cursor << std::endl; 
             }
 
             
@@ -481,9 +481,9 @@ class ternarizer{
                 return tern_node_ptrs;
             }));
 
-            std::cout << "cursor went from " << this->cursor << " to ";
+            // std::cout << "cursor went from " << this->cursor << " to ";
             this->cursor-= (2 * input_edges.size());
-            std::cout << this->cursor << std::endl;
+            // std::cout << this->cursor << std::endl;
             assert(this->cursor >= 0);
 
             auto all_delete_edges = parlay::flatten(parlay::delayed_tabulate(end_points.size(), [&] (T i) {
@@ -523,7 +523,7 @@ class ternarizer{
                 return true;
             });
 
-            std::cout << "Gathered " << all_tails.size() << " tails and " << end_points.size() << " others " << std::endl;  
+            // std::cout << "Gathered " << all_tails.size() << " tails and " << end_points.size() << " others " << std::endl;  
             
 
 
@@ -533,13 +533,13 @@ class ternarizer{
             {
                 parlay::random_generator gen(15213 + seed++ + this->max_index);
                 counter++;
-                assert(counter < 1000);
+                assert(counter < 10000); // To prevent, reasonably infinite loops
                 // for(auto& ptr : end_points)
                 //     std::cout << " " << *ptr;
                 // std::cout << std::endl;
                 // this->print_state();
 
-                std::cout << "end_points.size() = " << end_points.size() << std::endl;
+                // std::cout << "end_points.size() = " << end_points.size() << std::endl;
                 // randomly pick sqrt(n)
                 const double max_prob = 0.5;
                 const double min_prob = 0.4;
@@ -553,29 +553,29 @@ class ternarizer{
                 
 
 
-                // auto end_points_shortlisted = parlay::filter(end_points, [&] (auto* tnp){
-                //     auto r = gen[tnp->dummy_index];
-              
-                //     double random_val = dis_ur(r);
-                    
-
-                //     if(random_val < probability)
-                //     {
-                //         tnp->random_colour = random_val;
-                //         tnp->shortlisted = true;
-                //     }
-                //     else
-                //     {
-                //         tnp->random_colour = 0.0f;
-                //         tnp->shortlisted = false;
-                //     }
-                //     return tnp->shortlisted;
-                // });
+                
 
                 parlay::parallel_for(0, end_points.size(), [&] (T i) {
                     auto r = gen[i];
                     double random_val = dis_ur(r);
                     end_points[i]->random_colour = random_val;
+                    end_points[i]->shortlisted = false;
+                });
+
+                parlay::parallel_for(0, end_points.size(), [&] (T i) {
+                    auto& my_node = *end_points[i];
+                    const T& left = my_node.outgoing_edgeindices[0];
+                    const T& right = my_node.outgoing_edgeindices[2];
+                    double left_colour = 0.0f;
+                    double right_colour = 0.0f;
+                    if(left != -1)
+                        left_colour = this->simplified_tree[left].random_colour;
+                    if(right != -1)
+                        right_colour = this->simplified_tree[right].random_colour;
+                    const double& my_colour = my_node.random_colour;
+                    if(my_colour > left_colour && my_colour > right_colour)
+                        end_points[i]->shortlisted = true;
+
                 });
 
                 
@@ -597,16 +597,19 @@ class ternarizer{
                     assert(my_node.marked_for_deletion); // TODO remove
                     assert(!my_node.real);
 
-                    // am I in the IS
+                    if(!my_node.shortlisted)
+                        return ret_tuple;
+
+                    // // am I in the IS
                     T left = my_node.outgoing_edgeindices[0];
                     T right = my_node.outgoing_edgeindices[2];
 
                     assert(left != -1); // TODO remove
 
-                    double left_colour = this->simplified_tree[left].random_colour;
-                    double right_colour = right == -1 ? 0.0f : this->simplified_tree[right].random_colour;
-                    if(left_colour >= my_node.random_colour || right_colour >= my_node.random_colour)
-                        return ret_tuple; // I wasn't picked :(
+                    // double left_colour = this->simplified_tree[left].random_colour;
+                    // double right_colour = right == -1 ? 0.0f : this->simplified_tree[right].random_colour;
+                    // if(left_colour >= my_node.random_colour || right_colour >= my_node.random_colour)
+                    //     return ret_tuple; // I wasn't picked :(
                     
                     auto& left_node = this->simplified_tree[left];
 

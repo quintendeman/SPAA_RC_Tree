@@ -2,8 +2,7 @@
 #include "../include/parlay/primitives.h"
 #include <cmath>
 
-// static const int max_edges = 1 << 30;
-static const int max_edges = 3;
+static const int max_edges = 1 << 30;
 
 enum distribution {
         constant,
@@ -36,7 +35,7 @@ class TreeGen
         double max_weight;
 
         parlay::sequence<subgraph> subgraphs;
-        parlay::sequence<std::atomic<short>> counts;
+        // parlay::sequence<std::atomic<short>> counts;
         parlay::sequence<T> parents;
         parlay::sequence<interGraphConnect> interconnects;
         parlay::sequence<D> weights;
@@ -98,27 +97,27 @@ class TreeGen
                     return;
                 }
                 // try to increment myself
-                std::atomic<short>& my_count = counts[index];
-                std::atomic<short>& parent_count = counts[random_parent];
+                // std::atomic<short>& my_count = counts[index];
+                // std::atomic<short>& parent_count = counts[random_parent];
 
                 // std::cout << "sgtrying " << index << " -- " << random_parent << std::endl;
 
-                short old_count = my_count.fetch_add(1);
-                if(old_count >= max_edges) // failure
-                {
-                    my_count.fetch_add(-1);
-                    parents[index] = index;
-                    return;
-                }
+                // short old_count = my_count.fetch_add(1);
+                // if(old_count >= max_edges) // failure
+                // {
+                    // my_count.fetch_add(-1);
+                    // parents[index] = index;
+                    // return;
+                // }
                 // try to increment parent
-                short old_parent_count = parent_count.fetch_add(1);
-                if(old_parent_count >= max_edges)
-                {
-                    parent_count.fetch_add(-1);
-                    my_count.fetch_add(-1);
-                    parents[index] = index;
-                    return;
-                }
+                // short old_parent_count = parent_count.fetch_add(1);
+                // if(old_parent_count >= max_edges)
+                // {
+                    // parent_count.fetch_add(-1);
+                    // my_count.fetch_add(-1);
+                    // parents[index] = index;
+                    // return;
+                // }
                 // can add intergraph edge!
 
                 parents[index] = random_parent;
@@ -130,22 +129,22 @@ class TreeGen
 
         void verifyParents()
         {
-            parlay::sequence<std::atomic<short>> actual_counts = parlay::sequence<std::atomic<short>>(this->num_vertices);
+            // parlay::sequence<std::atomic<short>> actual_counts = parlay::sequence<std::atomic<short>>(this->num_vertices);
 
-            parlay::parallel_for(0, this->parents.size(), [&] (T i) {
-                if(parents[i] != i)
-                {
-                    actual_counts[i].fetch_add(1);
-                    actual_counts[parents[i]].fetch_add(1);
-                }
-            });
+            // parlay::parallel_for(0, this->parents.size(), [&] (T i) {
+            //     if(parents[i] != i)
+            //     {
+            //         actual_counts[i].fetch_add(1);
+            //         actual_counts[parents[i]].fetch_add(1);
+            //     }
+            // });
 
-            parlay::parallel_for(0, this->parents.size(), [&] (T i) {
-                if(this->counts[i] != actual_counts[i])
-                    std::cout << "[" << i << "] does not match " << this->counts[i] << " vs " << actual_counts[i] << std::endl;
-                assert(this->counts[i] == actual_counts[i]);
-                assert(this->counts[i] <= max_edges);
-            });
+            // parlay::parallel_for(0, this->parents.size(), [&] (T i) {
+            //     if(this->counts[i] != actual_counts[i])
+            //         std::cout << "[" << i << "] does not match " << this->counts[i] << " vs " << actual_counts[i] << std::endl;
+            //     assert(this->counts[i] == actual_counts[i]);
+            //     assert(this->counts[i] <= max_edges);
+            // });
         }
 
         void generateInterconnects()
@@ -190,20 +189,20 @@ class TreeGen
                 // std::cout << "Trying " << my_index << "/" << counts[my_index] << " -- " << parent_index << "/" << counts[parent_index] << std::endl;
 
                 // attempt to connect child and parent
-                short old_value = counts[my_index].fetch_add(1);
-                if(old_value >= max_edges)
-                {
-                    counts[my_index].fetch_add(-1);
-                    return defretIGC;
-                }
+                // short old_value = counts[my_index].fetch_add(1);
+                // if(old_value >= max_edges)
+                // {
+                    // counts[my_index].fetch_add(-1);
+                    // return defretIGC;
+                // }
 
-                short old_parent_value = counts[parent_index].fetch_add(1);
-                if(old_parent_value >= max_edges)
-                {
-                    counts[parent_index].fetch_add(-1);
-                    counts[my_index].fetch_add(-1);
-                    return defretIGC;
-                }
+                // short old_parent_value = counts[parent_index].fetch_add(1);
+                // if(old_parent_value >= max_edges)
+                // {
+                    // counts[parent_index].fetch_add(-1);
+                    // counts[my_index].fetch_add(-1);
+                    // return defretIGC;
+                // }
                 
                 parents[my_index] = parent_index;
 
@@ -244,8 +243,8 @@ class TreeGen
                 else
                 {
                     edge_live = false;
-                    counts[std::get<0>(std::get<2>(ICG))].fetch_add(-1);
-                    counts[std::get<1>(std::get<2>(ICG))].fetch_add(-1);
+                    // counts[std::get<0>(std::get<2>(ICG))].fetch_add(-1);
+                    // counts[std::get<1>(std::get<2>(ICG))].fetch_add(-1);
                     parents[std::get<0>(std::get<2>(ICG))] = std::get<0>(std::get<2>(ICG));
                     // return std::pair<T,T>(std::get<0>(std::get<2>(ICG)), std::get<1>(std::get<2>(ICG)));
                     return std::pair<T,T>(random_perm_map[std::get<0>(std::get<2>(ICG))], random_perm_map[std::get<1>(std::get<2>(ICG))]);
@@ -300,29 +299,29 @@ class TreeGen
                 assert(random_parent_index != my_index);
 
                 // Can I accept new counts
-                short old_my_val = counts[my_index].fetch_add(1);
+                // short old_my_val = counts[my_index].fetch_add(1);
                 // std::cout << "Just incremented " << my_index << " counts from " << old_my_val << std::endl;
-                if(old_my_val >= max_edges)
-                {
-                    counts[my_index].fetch_add(-1);
-                    // std::cout << "Just decremented " << my_index << " counts" << std::endl;
+                // if(old_my_val >= max_edges)
+                // {
+                //     counts[my_index].fetch_add(-1);
+                //     // std::cout << "Just decremented " << my_index << " counts" << std::endl;
                 
-                    return edge(i, i, (D) i); // invalid edge to yourself
-                }
+                //     return edge(i, i, (D) i); // invalid edge to yourself
+                // }
 
-                short old_parent_val = counts[random_parent_index].fetch_add(1);
+                // short old_parent_val = counts[random_parent_index].fetch_add(1);
                 // std::cout << "Justt incremented " << random_parent_index << " counts" << std::endl;
                 
-                if(old_parent_val >= max_edges)
-                {
-                    counts[random_parent_index].fetch_add(-1);
-                    // std::cout << "Justt decremented " << random_parent_index << " counts" << std::endl;
+                // if(old_parent_val >= max_edges)
+                // {
+                //     counts[random_parent_index].fetch_add(-1);
+                //     // std::cout << "Justt decremented " << random_parent_index << " counts" << std::endl;
                 
-                    counts[my_index].fetch_add(-1);
-                    // std::cout << "Justt decremented " << my_index << " counts" << std::endl;
+                //     counts[my_index].fetch_add(-1);
+                //     // std::cout << "Justt decremented " << my_index << " counts" << std::endl;
                 
-                    return edge(i, i, (D) i);
-                }
+                //     return edge(i, i, (D) i);
+                // }
 
                 parent_index = random_parent_index;
 
@@ -478,7 +477,7 @@ class TreeGen
             });
             assert(subgraphs[subgraphs.size()-1].second == this->num_vertices);
             
-            this->counts = parlay::sequence<std::atomic<short>>(this->num_vertices);
+            // this->counts = parlay::sequence<std::atomic<short>>(this->num_vertices);
             this->parents = parlay::sequence<T>(this->num_vertices);
             this->weights = parlay::sequence<D>(this->num_vertices);
 
