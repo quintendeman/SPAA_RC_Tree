@@ -2,6 +2,7 @@
 #include "../include/parlay/primitives.h"
 #include <cmath>
 
+// static const int max_edges = 1 << 30;
 static const int max_edges = 3;
 
 enum distribution {
@@ -46,7 +47,7 @@ class TreeGen
         /*
             
         */
-        TreeGen(T num_vertices, D min_weight = 0.0, D max_weight = 1.0, double l = 0.95f, double mean = 1000.0f, distribution dist = uniform )
+        TreeGen(T num_vertices, D min_weight = 0.0, D max_weight = 1.0, double l = 0.95f, double mean = 1000.0f, distribution dist = uniform, bool randomize_map = true)
         {
             assert(num_vertices > 0);
             assert(l > 0.0f && l < 1.0f); 
@@ -61,7 +62,10 @@ class TreeGen
             this->lg = lg;
             this->mean = mean;
             this->num_vertices = num_vertices;
-            this->random_perm_map = parlay::random_permutation(num_vertices);
+            if(randomize_map)
+                this->random_perm_map = parlay::random_permutation(num_vertices);
+            else
+                this->random_perm_map = parlay::tabulate(num_vertices, [] (T i) {return i;});
         }
 
 
@@ -365,7 +369,7 @@ class TreeGen
                 std::uniform_int_distribution<T> dis(1, (T)(this->mean * 2));
 
 
-                sizes = parlay::tabulate((T)(num_vertices*1.1/(mean)), [&] (T i) {
+                sizes = parlay::tabulate((T)(num_vertices/(mean)), [&] (T i) {
                     auto r = gen[i];
                     return dis(r);
                     // return (T) (i % 3);
@@ -378,7 +382,7 @@ class TreeGen
                 std::geometric_distribution<T> dis(1/mean);
                 // std::geometric_distribution<T> dis(0.01);
 
-                sizes = parlay::tabulate((T)(num_vertices*1.2/(mean)), [&] (T i) {
+                sizes = parlay::tabulate((T)(num_vertices/(mean)), [&] (T i) {
                     auto r = gen[i];
                     T retval = dis(r);
                     return retval > 0 ? retval : 1;
@@ -393,7 +397,7 @@ class TreeGen
                 std::exponential_distribution<double> dis(1/mean);
                 // std::geometric_distribution<T> dis(0.01);
 
-                sizes = parlay::tabulate((T)(num_vertices*1.2/(mean)), [&] (T i) {
+                sizes = parlay::tabulate((T)(num_vertices/(mean)), [&] (T i) {
                     auto r = gen[i];
                     double retval = dis(r);
                     T retT = ceil(retval);
@@ -423,6 +427,7 @@ class TreeGen
             }
             else
             {
+                std::cout << "Oversampled, last subgraph goes till " <<  total_size << " in size" << std::endl;
                 if(sizes.size() == 1) // there is only one subgraph
                 {
                     sizes[0]-= total_size-this->num_vertices;
@@ -431,10 +436,17 @@ class TreeGen
                 {
 
                     auto indices = parlay::tabulate(cumul_sizes.size(), [] (T i) {return i;});
-                    auto location = parlay::find_if(indices, [&] (T i) {return cumul_sizes[i] > this->num_vertices;});
                     // std::cout << "Num vertices " << this->num_vertices << std::endl;
                     // std::cout << "Last cumul " << cumul_sizes[cumul_sizes.size()-1] << std::endl;
-                
+
+                    T& last_cumul = cumul_sizes[cumul_sizes.size()-1];
+                    if(last_cumul < this->num_vertices)
+                    {
+                        last_cumul+= (this->num_vertices - last_cumul);
+                    }
+
+                    auto location = parlay::find_if(indices, [&] (T i) {return cumul_sizes[i] >= this->num_vertices;});
+
                     assert(location != indices.end());
                     T index_which_exceeds = *location;
                     

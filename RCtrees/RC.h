@@ -297,7 +297,7 @@ void set_MIS(parlay::sequence<node<T, D>*>& tree_nodes, bool use_tree_nodes = fa
     });
 
     auto colours = parlay::tabulate(cluster_ptrs.size(), [&] (T v) {
-        return cluster_ptrs[v]->colour;
+        return cluster_ptrs[v]->colour.load();
     });
 
     auto vertices = parlay::tabulate(cluster_ptrs.size(), [] (T v) {
@@ -1476,10 +1476,10 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
 }
 
 template<typename T, typename D>
-void testPathQueryValid(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<T>& parents, parlay::sequence<D>& weights, parlay::sequence<T>& random_perm_map)
+void testPathQueryValid(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<T>& parents, parlay::sequence<D>& weights, parlay::sequence<T>& random_perm_map, long base_size)
 {
     parlay::parallel_for(0, 1000, [&] (T i) {
-        T start_index = rand() % clusters.size();
+        T start_index = rand() % base_size;
         T index = start_index;
         T end_index;
         // doing sum!

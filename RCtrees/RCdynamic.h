@@ -410,13 +410,13 @@ void recursive_unParent(cluster<T,D>* cluster_ptr)
         bool retval = unParent(old_cluster_ptr);
         if(retval == false)
             break;
+        // old_cluster_ptr->parent = nullptr;
     }
 }
 
 template<typename T, typename D>
 void remove_affection_back(node<T,D>* node_ptr)
 {
-    
     do
     {
         node_ptr->state &= (~affected);
@@ -449,8 +449,8 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             std::cout << red << "This should never happen, nullptr on head?" << reset << std::endl;
             exit(1);
         }
-        ret_seq[0]->tiebreak() = i*2;
-        ret_seq[1]->tiebreak() = i*2 +1;
+        ret_seq[0]->cluster_ptr->tiebreak = i*2;
+        ret_seq[1]->cluster_ptr->tiebreak = i*2 +1;
         return ret_seq;
     }));
 
@@ -475,7 +475,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     }
 
     parlay::parallel_for(0, tree_nodes.size(), [&] (T i){
-        if(tree_nodes[i]->tiebreak() != i)
+        if(tree_nodes[i]->cluster_ptr->tiebreak != i)
             tree_nodes[i] = nullptr;
     });
 
@@ -724,7 +724,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             return node_ptr->cluster_ptr->state & IS_MIS_SET;
         });
 
-        if(clusters.size() <= 100)
+        if(clusters.size() <= 100 && PRINT_DYNAMIC)
         {
             printTree(clusters, count+2);
         }

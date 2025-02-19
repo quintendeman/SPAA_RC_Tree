@@ -67,8 +67,8 @@ public:
     T index;
     adjacency_list<T,D> adjacency;
     std::atomic<T> counter;
-    T tiebreak;
-    T& colour = tiebreak;
+    std::atomic<T> tiebreak;
+    std::atomic<T>& colour = tiebreak; // does this work
     cluster<T,D>* parent = nullptr;
     std::array<cluster<T,D>*, max_neighbours> children;
     node<T,D>* first_contracted_node = nullptr;
@@ -85,7 +85,7 @@ public:
     // short asked_to_increment = 0; // TODO remove
     int state;
 
-    cluster(void) : counter(0)
+    cluster(void) : counter(0), colour(tiebreak)
     {
         for(short i = 0; i < max_neighbours; i++)
             this->children[i] = nullptr;

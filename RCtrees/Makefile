@@ -8,7 +8,7 @@ TARGET = RC.out
 SRC = RC.cpp
 
 # Default target
-all: RC.out testMST.out testTreeGen.out
+all: RC.out testMST.out  testHashing.out testTreeGen.out
 
 # Rule to build the target
 RC.out: RC.cpp RC.h cluster.h RCdynamic.h adjacency_linked_list.h incMST.h
@@ -20,10 +20,13 @@ testMST.out: testMST.cpp
 testTreeGen.out: testTreeGen.cpp treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h 
 	$(CXX) -DPARLAY_USE_STD_ALLOC $(CXXFLAGS) $(INCLUDES) -o testTreeGen.out testTreeGen.cpp
 
+testHashing.out: treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h testHashing.cpp ternarizer.h
+	$(CXX) -DPARLAY_USE_STD_ALLOC $(CXXFLAGS)  -o testHashing.out testHashing.cpp $(INCLUDES)
+
 
 # Clean up build files
 clean:
-	rm -f RC.out testMST.out testTreeGen.out
+	rm -f *.out
 
 # Phony targets
 .PHONY: all clean
