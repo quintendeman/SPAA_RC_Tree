@@ -69,7 +69,7 @@ public:
     std::atomic<T> counter;
     std::atomic<T> tiebreak;
     std::atomic<T>& colour = tiebreak; // does this work
-    cluster<T,D>* parent = nullptr; // TODO convert to atomic and modify RCdynamic.h too to prevent obscure scenario of extra work (but should still be n)
+    std::atomic<cluster<T,D>*> parent = nullptr; // TODO convert to atomic and modify RCdynamic.h too to prevent obscure scenario of extra work (but should still be n)
     std::array<cluster<T,D>*, max_neighbours> children;
     node<T,D>* first_contracted_node = nullptr;
     D data;
@@ -344,8 +344,8 @@ public:
         std::cout << bright_green << this->data << " " << reset;
         std::cout << bright_magenta << this->counter << " " << reset;
         std::cout << bright_yellow;
-        if(this->parent)
-            std::cout << this->parent->index << " ";
+        if(this->parent.load())
+            std::cout << this->parent.load()->index << " ";
         else
             std::cout << "nl ";
         std::cout << reset;

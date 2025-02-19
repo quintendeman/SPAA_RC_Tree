@@ -801,7 +801,7 @@ void check_parents_children(parlay::sequence<cluster<T,D>>& clusters)
         if(cluster_ptr->parent != nullptr)
         {
             bool in_parent = false;
-            for(auto& par_child : cluster_ptr->parent->children)
+            for(auto& par_child : cluster_ptr->parent.load()->children)
             {
                 if(par_child == cluster_ptr)
                     in_parent = true;
@@ -810,7 +810,7 @@ void check_parents_children(parlay::sequence<cluster<T,D>>& clusters)
             {
                 std::cout << red << "RC tree parents inconsistent!" << reset << std::endl;
                 cluster_ptr->print();
-                cluster_ptr->parent->print();
+                cluster_ptr->parent.load()->print();
                 exit(1);
             }
         }
@@ -977,7 +977,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defre
     auto count = 0;
     do
     {
-        check_consistency(tree_nodes); // TODO remove
+        // check_consistency(tree_nodes); // TODO remove
         // break;
         auto eligible = parlay::filter(tree_nodes, [] (auto node_ptr){
             return node_ptr->get_num_neighbours_live() <= 2;
@@ -989,7 +989,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defre
             return node_ptr->cluster_ptr->state & IS_MIS_SET;
         });
 
-        check_mis(candidates); // TODO remove
+        // check_mis(candidates); // TODO remove
 
         
         parlay::parallel_for(0, candidates.size(), [&] (T i){
@@ -1013,6 +1013,8 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defre
         // std::cout << "[" << count  << "]: " << bold << tree_nodes.size() << reset << std::endl;
         count++;
     }while(tree_nodes.size() > 0 && count < 100);
+
+    assert(count < 100 && "Did your tree go into an infinite loop?");
 
 }
 
@@ -1059,11 +1061,11 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, 
         D data = std::get<2>(edges[i]);
 
         auto edge_ptr = get_edge(v, w, clusters);
-        if(edge_ptr == nullptr) // TODO REMOVE
-        {
-            std::cout << red << "Got a nullptr" << reset << std::endl;
-            exit(1);
-        }
+        // if(edge_ptr == nullptr) // TODO REMOVE
+        // {
+        //     std::cout << red << "Got a nullptr" << reset << std::endl;
+        //     exit(1);
+        // }
         edge_ptr->cluster_ptr->data = data;
 
         auto ret_ptr = edge_ptr->cluster_ptr;
@@ -1478,7 +1480,7 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
 template<typename T, typename D>
 void testPathQueryValid(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<T>& parents, parlay::sequence<D>& weights, parlay::sequence<T>& random_perm_map, long base_size)
 {
-    parlay::parallel_for(0, 1000, [&] (T i) {
+    parlay::parallel_for(0, 100000, [&] (T i) {
         T start_index = rand() % base_size;
         T index = start_index;
         T end_index;

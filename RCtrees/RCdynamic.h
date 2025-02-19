@@ -387,9 +387,18 @@ void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func)
 template<typename T, typename D>
 bool unParent(cluster<T,D>* cluster_ptr)
 {
-    if(cluster_ptr->parent == nullptr)
+    // if(cluster_ptr->parent == nullptr)
+    //     return false;
+    cluster<T,D>* expected = cluster_ptr->parent.load();
+    cluster<T,D>* old_parent_value = expected;
+    if(expected == nullptr)
         return false;
-    for(auto& parents_child : cluster_ptr->parent->children)
+    cluster<T,D>* new_value = nullptr;
+    bool success = cluster_ptr->parent.compare_exchange_strong(expected, new_value);
+    if(!success)
+        return false;
+
+    for(auto& parents_child : expected->children)
         if(parents_child == cluster_ptr)
         {
             parents_child = nullptr;
@@ -444,11 +453,11 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             // std::cout << v << " -- " << w << " added" << std::endl;
         }
         parlay::sequence<node<T,D>*> ret_seq = {clusters[v].adjacency.get_head(), clusters[w].adjacency.get_head()};
-        if(ret_seq[0] == nullptr || ret_seq[1] == nullptr) // TODO remove
-        {
-            std::cout << red << "This should never happen, nullptr on head?" << reset << std::endl;
-            exit(1);
-        }
+        // if(ret_seq[0] == nullptr || ret_seq[1] == nullptr) // TODO remove
+        // {
+        //     std::cout << red << "This should never happen, nullptr on head?" << reset << std::endl;
+        //     exit(1);
+        // }
         ret_seq[0]->cluster_ptr->tiebreak = i*2;
         ret_seq[1]->cluster_ptr->tiebreak = i*2 +1;
         return ret_seq;
@@ -761,12 +770,12 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         frontier = new_frontier;
 
         parlay::parallel_for(0, frontier.size(), [&] (T i){
-            if(frontier[i]->next == nullptr) // TODO remove
-            {
-                std::cout << "Should never happen!" << std::endl;
-                std::cout << "frontier[i] = " << frontier[i]->index() << std::endl;
-                exit(1);
-            }
+            // if(frontier[i]->next == nullptr) // TODO remove
+            // {
+            //     std::cout << "Should never happen!" << std::endl;
+            //     std::cout << "frontier[i] = " << frontier[i]->index() << std::endl;
+            //     exit(1);
+            // }
             frontier[i] = frontier[i]->next;
         });
 
@@ -806,7 +815,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
 
     // std::cout << "[dynamic] exited" << std::endl;
 
-    check_parents_children(clusters); // todo remove
+    // check_parents_children(clusters); // todo remove
 
     if(count == max_count)
     {

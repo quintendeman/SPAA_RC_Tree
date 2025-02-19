@@ -128,97 +128,110 @@ int main(int argc, char* argv[])
     for(int II = 0; II < 10; II++)
     {
 
+        TreeGen<long, double> TG(graph_size, min_weight, max_weight, 0.1, 20, exponential, true, II);
 
-      TreeGen<long, double> TG(graph_size, min_weight, max_weight, 0.1, 5, exponential);
+        TG.generateInitialEdges();
 
-      TG.generateInitialEdges();
+        auto retedges = TG.getAllEdges();
 
-      auto retedges = TG.getAllEdges();
+        // auto retedges = generate_high_degree_graphs(graph_size);
+        
+        auto static_creation_start = std::chrono::high_resolution_clock::now(); //
 
-    // auto retedges = generate_high_degree_graphs(graph_size);
-    
-    auto static_creation_start = std::chrono::high_resolution_clock::now(); //
+        ternarizer<long, double> TR(graph_size, 0);
 
-    ternarizer<long, double> TR(graph_size, 0);
+        auto ret_edge_modified = TR.add_edges(retedges);
 
-    auto ret_edge_modified = TR.add_edges(retedges);
+        auto static_creation_middle = std::chrono::high_resolution_clock::now();
+        
+        // TR.print_state();
+        TR.verify_simple_tree();
 
-    auto static_creation_middle = std::chrono::high_resolution_clock::now();
-    
-    // TR.print_state();
-    TR.verify_simple_tree();
+        
+        const long max_degree = 3;
+        parlay::sequence<cluster<long, double>> clusters; 
+        double defretval = 0.0;
 
-    
-    const long max_degree = 3;
-    parlay::sequence<cluster<long, double>> clusters; 
-    double defretval = 0.0;
+        parlay::sequence<wedge> empty_edges_sequence;
 
-    parlay::sequence<wedge> empty_edges_sequence;
+        create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
 
-    create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
+        create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
 
-    create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
+        auto static_creation_end = std::chrono::high_resolution_clock::now();
 
-    auto static_creation_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double>  dur1 = static_creation_middle - static_creation_start;
+        std::chrono::duration<double>  dur2 = static_creation_end - static_creation_start;
 
-    std::chrono::duration<double>  dur1 = static_creation_middle - static_creation_start;
-    std::chrono::duration<double>  dur2 = static_creation_end - static_creation_start;
+        std::cout << "static elapsed time: " << dur2.count() << " seconds of which " << dur1.count() << " were spent ternerizing \n";
 
-    std::cout << "static elapsed time: " << dur2.count() << " seconds of which " << dur1.count() << " were spent ternerizing \n";
+        // auto del_edges = generate_delete_edges(graph_size);
 
-    // auto del_edges = generate_delete_edges(graph_size);
+        // auto retpair = TR.delete_edges(del_edges);
 
-    // auto retpair = TR.delete_edges(del_edges);
-
-    // batchInsertEdge(retpair.second, retpair.first, clusters, (double) 0.0f, [] (double A, double B) {return A+B;});
-
+        // batchInsertEdge(retpair.second, retpair.first, clusters, (double) 0.0f, [] (double A, double B) {return A+B;});
 
 
-    testPathQueryValid(clusters, TG.parents, TG.weights, TG.random_perm_map, graph_size);
 
-    const int maxi = 20;
-    long total_edge_size = retedges.size();
-    for(unsigned int i = 0; i < maxi; i++)
-    {
-      double prob =( static_cast<double>(rand() % 100)) / 100.0f;
-      std::cout << "i: " << i << std::endl;
-      auto del_pairs = TG.generateDeleteEdges(prob);
+        testPathQueryValid(clusters, TG.parents, TG.weights, TG.random_perm_map, graph_size);
 
-      std::cout << "deleting " << del_pairs.size() << " edges " << std::endl;
+        const int maxi = 20;
+        long total_edge_size = retedges.size();
+        for (unsigned int i = 0; i < maxi; i++) 
+        {
+          
+          double prob = (static_cast<double>(rand() % 100)) / 100.0f;
+          std::cout << "i: " << i << std::endl;
+          
+          // Skip measuring this part
+          auto del_pairs = TG.generateDeleteEdges(prob); // Don't measure this
 
-      auto ret_seqs = TR.delete_edges(del_pairs);
+          // std::cout << "Deleting " << del_pairs.size() << " edges " << std::endl;
 
-      TR.verify_simple_tree();
+          // Measure TR.delete_edges(del_pairs)
+          auto delete_start = std::chrono::high_resolution_clock::now();
+          auto ret_seqs = TR.delete_edges(del_pairs);
+          auto delete_end = std::chrono::high_resolution_clock::now();
 
-      batchInsertEdge(ret_seqs.second, ret_seqs.first, clusters, (double) 0.0f, [] (double A, double B) {return A+B;});
+          // Skip measuring this part
 
-      testPathQueryValid(clusters, TG.parents, TG.weights, TG.random_perm_map, graph_size);
+          // Measure batchInsertEdge(ret_seqs.second, ret_seqs.first, clusters, (double) 0.0f, ...);
+          
+          prob = (static_cast<double>(rand() % 10000)) / 10000.0f;
 
-      prob =( static_cast<double>(rand() % 10000)) / 10000.0f;
-      auto add_truples = TG.generateAddEdges(prob);
+          // Skip measuring this part
+          auto add_truples = TG.generateAddEdges(prob); // Don't measure this
+          
+          // std::cout << "Adding " << add_truples.size() << " edges" << std::endl;
 
-      std::cout << "Adding " << add_truples.size() << " edges" << std::endl;
+          std::cout << "Total edges modified -" << del_pairs.size() << "+" << add_truples.size() << ":" << del_pairs.size() + add_truples.size() << std::endl;
 
-      add_truples = TR.add_edges(add_truples);
+          // Measure TR.add_edges(add_truples)
+          auto add_start = std::chrono::high_resolution_clock::now();
+          add_truples = TR.add_edges(add_truples);
+          add_truples.append(ret_seqs.first);
+          auto add_end = std::chrono::high_resolution_clock::now();
 
-      // long start = i*total_edge_size/maxi;
-      // long end = (i+1)*total_edge_size/maxi;
+          // Measure batchInsertEdge(empty_pairs, add_truples, clusters, (double) 0.0f, ...);
+          auto final_insert_start = std::chrono::high_resolution_clock::now();
+          parlay::sequence<std::pair<long, long>> empty_pairs;
+          // batchInsertEdge(ret_seqs.second, ret_seqs.first, clusters, (double) 0.0f, [] (double A, double B) {return A+B;});
+          batchInsertEdge(ret_seqs.second, add_truples, clusters, (double) 0.0f, [] (double A, double B) {return A+B;});
+          auto final_insert_end = std::chrono::high_resolution_clock::now();
 
-      // std::cout << "Start - end: " << start << " " << end << std::endl;
+          testPathQueryValid(clusters, TG.parents, TG.weights, TG.random_perm_map, graph_size); // Don't measure this
+          
+          // Calculate and print elapsed times for the relevant operations
+          std::chrono::duration<double> delete_elapsed = delete_end - delete_start;
+          std::chrono::duration<double> add_elapsed = add_end - add_start;
+          std::chrono::duration<double> final_insert_elapsed = final_insert_end - final_insert_start;
 
-      // auto add_truples = parlay::tabulate(end-start, [&] (long i) {
-      //   return retedges[start + i];
-      // });
-      // add_truples = TR.add_edges(add_truples);
-
-      TR.verify_simple_tree();
-
-      parlay::sequence<std::pair<long, long>> empty_pairs;
-
-      batchInsertEdge(empty_pairs, add_truples, clusters, (double) 0.0f, [] (double A, double B) {return A+B;});
-
-      testPathQueryValid(clusters, TG.parents, TG.weights, TG.random_perm_map, graph_size);
-    }
+          // Print the time taken for each measured section
+          std::cout << "  Time spent ternerizing: " << delete_elapsed.count() + add_elapsed.count() << " seconds" << std::endl;
+          std::cout << "  batchInsertEdge: " << final_insert_elapsed.count() << " seconds" << std::endl;
+          // std::cout << "  TR.add_edges: " << add_elapsed.count() << " seconds" << std::endl;
+          // std::cout << "  batchInsertEdge (2nd call): " << final_insert_elapsed.count() << " seconds" << std::endl;
+      }
       deleteRCtree(clusters); 
     }
 

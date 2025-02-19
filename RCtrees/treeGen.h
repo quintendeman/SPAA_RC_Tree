@@ -33,6 +33,7 @@ class TreeGen
         double mean;
         double min_weight;
         double max_weight;
+        long seed = 15213;
 
         parlay::sequence<subgraph> subgraphs;
         // parlay::sequence<std::atomic<short>> counts;
@@ -46,7 +47,7 @@ class TreeGen
         /*
             
         */
-        TreeGen(T num_vertices, D min_weight = 0.0, D max_weight = 1.0, double l = 0.95f, double mean = 1000.0f, distribution dist = uniform, bool randomize_map = true)
+        TreeGen(T num_vertices, D min_weight = 0.0, D max_weight = 1.0, double l = 0.95f, double mean = 1000.0f, distribution dist = uniform, bool randomize_map = true, long seed = 15213)
         {
             assert(num_vertices > 0);
             assert(l > 0.0f && l < 1.0f); 
@@ -61,6 +62,7 @@ class TreeGen
             this->lg = lg;
             this->mean = mean;
             this->num_vertices = num_vertices;
+            this->seed = seed;
             if(randomize_map)
                 this->random_perm_map = parlay::random_permutation(num_vertices);
             else
@@ -76,7 +78,7 @@ class TreeGen
                 return;
             }
             
-            parlay::random_generator gen(15213);
+            parlay::random_generator gen(seed++);
             std::uniform_real_distribution<double> dis_ur(0, 1);
 
             parlay::parallel_for(sg.first, sg.second, [&] (T index) {
@@ -149,7 +151,7 @@ class TreeGen
 
         void generateInterconnects()
         {
-            parlay::random_generator gen(rand());
+            parlay::random_generator gen(seed++);
             std::uniform_real_distribution<double> dis_ur(0, 1);
             
             interconnects = parlay::tabulate(this->subgraphs.size(), [&] (T i) {
@@ -224,7 +226,7 @@ class TreeGen
 
         parlay::sequence<std::pair<T,T>> generateDeleteEdges(double prob = 1.0) // probability of
         {
-            parlay::random_generator gen(rand());
+            parlay::random_generator gen(seed++);
             std::uniform_real_distribution<double> dis_ur(0, 1);
 
             assert(prob <= 1.0 && prob >= 0.0);
@@ -261,7 +263,7 @@ class TreeGen
         {
 
             edgelist retedgelist;
-            parlay::random_generator gen(rand());
+            parlay::random_generator gen(seed++);
             std::uniform_real_distribution<double> dis_ur(0, 1);
 
             assert(prob <= 1.0 && prob >= 0.0);
@@ -364,7 +366,7 @@ class TreeGen
             }
             else if(dist == uniform)
             {
-                parlay::random_generator gen(rand());
+                parlay::random_generator gen(seed++);
                 std::uniform_int_distribution<T> dis(1, (T)(this->mean * 2));
 
 
@@ -377,7 +379,7 @@ class TreeGen
             }
             else if(dist == geometric)
             {
-                parlay::random_generator gen(rand()); 
+                parlay::random_generator gen(seed++); 
                 std::geometric_distribution<T> dis(1/mean);
                 // std::geometric_distribution<T> dis(0.01);
 
@@ -392,7 +394,7 @@ class TreeGen
             else if(dist == exponential)
             {
                 std::cout << "Going exponential" << std::endl;
-                parlay::random_generator gen(15213); // CMU's postal code
+                parlay::random_generator gen(seed++); // CMU's postal code
                 std::exponential_distribution<double> dis(1/mean);
                 // std::geometric_distribution<T> dis(0.01);
 
@@ -405,7 +407,7 @@ class TreeGen
                 });
                 total_size = parlay::reduce(sizes);
             }
-            std::cout << "Total subgraphs: " << sizes.size() << std::endl;
+            
 
             auto retpair = parlay::scan(sizes);
             auto& cumul_sizes = retpair.first;
@@ -461,6 +463,8 @@ class TreeGen
                     });
                 }
             }
+
+            std::cout << "Total subgraphs: " << cumul_sizes.size() << std::endl;
 
             this->subgraphs= parlay::tabulate(cumul_sizes.size(), [&] (T i) {
                 if(i == (cumul_sizes.size() - 1))

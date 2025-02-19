@@ -18,10 +18,10 @@ testMST.out: testMST.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o testMST.out testMST.cpp
 
 testTreeGen.out: testTreeGen.cpp treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h 
-	$(CXX) -DPARLAY_USE_STD_ALLOC $(CXXFLAGS) $(INCLUDES) -o testTreeGen.out testTreeGen.cpp
+	$(CXX)  $(CXXFLAGS) $(INCLUDES) -o testTreeGen.out testTreeGen.cpp
 
 testHashing.out: treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h testHashing.cpp ternarizer.h
-	$(CXX) -DPARLAY_USE_STD_ALLOC $(CXXFLAGS)  -o testHashing.out testHashing.cpp $(INCLUDES)
+	$(CXX)  $(CXXFLAGS)  -o testHashing.out testHashing.cpp $(INCLUDES)
 
 
 # Clean up build files

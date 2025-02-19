@@ -216,7 +216,7 @@ void  top_down_ct(cluster<T,D>*& cluster_ptr, parlay::sequence<cluster<T,D>>& cl
             cluster_ptr->vertex_count = 0; // you can't actually have a nullary child so this doesn't matter
 
         }
-        else if(cluster_ptr->parent && (cluster_ptr->parent->state & is_marked)) // part of line 13 -- must be base edge by elimination
+        else if(cluster_ptr->parent.load() && (cluster_ptr->parent.load()->state & is_marked)) // part of line 13 -- must be base edge by elimination
         { // Do we even need is marked here?? I suspect not since parent must have been marked for recursion to occur
             assert(cluster_ptr->state & base_edge); // TODO remove asserts
             cluster<T,D>* lptr = nullptr;
