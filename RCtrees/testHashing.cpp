@@ -8,6 +8,7 @@
 #include "RC.h"
 #include "RCdynamic.h"
 #include "random_trees.h"
+#include "path_query.h"
 
 using wedge = std::tuple<long,long,double>;
 

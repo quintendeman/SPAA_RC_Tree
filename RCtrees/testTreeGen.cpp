@@ -6,6 +6,8 @@
 #include "RC.h"
 #include "RCdynamic.h"
 #include "random_trees.h"
+#include "path_query.h"
+
 #include <ctime>    // For time()
 
 
@@ -33,9 +35,8 @@ int main(int argc, char* argv[])
         }
     }
     else
-        graph_size = 100000000 + (rand() % 400000000l);    
-        
-    
+        graph_size = 1000000 + (rand() % 4000000l); //reduced graph size to fit in laptop 
+
 
 
     double min_weight = 0.0;
