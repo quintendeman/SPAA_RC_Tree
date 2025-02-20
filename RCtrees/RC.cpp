@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
 
     srand(time(NULL));
 
-    const vertex max_rand_size = 100000000l;
+    const vertex max_rand_size =10000000l; //100000000l;
     // vertex graph_size = rand() % max_rand_size; 
     vertex graph_size = 1; 
     for(unsigned short i = 0; i < 3; i++) // random but leaning more towards higher values
