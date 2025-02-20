@@ -421,13 +421,13 @@ class TreeGen
             
             if(total_size < this->num_vertices)
             {
-                std::cout << "Undersampled, last subgraph is  " <<  (this->num_vertices) - total_size << " in size" << std::endl;
+                // std::cout << "Undersampled, last subgraph is  " <<  (this->num_vertices) - total_size << " in size" << std::endl;
                 sizes.push_back((this->num_vertices) - total_size); 
                 actual_total_size+=(this->num_vertices) - total_size;
             }
             else
             {
-                std::cout << "Oversampled, last subgraph goes till " <<  total_size << " in size" << std::endl;
+                // std::cout << "Oversampled, last subgraph goes till " <<  total_size << " in size" << std::endl;
                 if(sizes.size() == 1) // there is only one subgraph
                 {
                     sizes[0]-= total_size-this->num_vertices;
@@ -463,7 +463,7 @@ class TreeGen
                 }
             }
 
-            std::cout << "Total subgraphs: " << cumul_sizes.size() << std::endl;
+            // std::cout << "Total subgraphs: " << cumul_sizes.size() << std::endl;
 
             this->subgraphs= parlay::tabulate(cumul_sizes.size(), [&] (T i) {
                 if(i == (cumul_sizes.size() - 1))

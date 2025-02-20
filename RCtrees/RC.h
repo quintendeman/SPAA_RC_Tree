@@ -281,61 +281,151 @@ void colour_nodes(parlay::sequence<node<T,D>*> tree_nodes)
 //     These clusters must have a maximum degree of 2
 // */
 template<typename T, typename D>
-void set_MIS(parlay::sequence<node<T, D>*>& tree_nodes, bool use_tree_nodes = false)
+void set_MIS(parlay::sequence<node<T, D>*>& tree_nodes, bool use_tree_nodes = false, bool randomized = true)
 {
-    auto cluster_ptrs = parlay::tabulate(tree_nodes.size(), [&] (T i) {
-        return tree_nodes[i]->cluster_ptr;
-    });
-    colour_nodes(tree_nodes);
-
-    parlay::parallel_for(0, cluster_ptrs.size(), [&] (T v) {
-        cluster_ptrs[v]->state &= (~IS_MIS_SET);
-        if(use_tree_nodes)
-            cluster_ptrs[v]->set_neighbour_mis(false, tree_nodes[v]);
-        else
-            cluster_ptrs[v]->set_neighbour_mis(false);
-    });
-
-    auto colours = parlay::tabulate(cluster_ptrs.size(), [&] (T v) {
-        return cluster_ptrs[v]->colour.load();
-    });
-
-    auto vertices = parlay::tabulate(cluster_ptrs.size(), [] (T v) {
-        return v;
-    });
-
-    auto result = vertices;
-
-    parlay::sequence<unsigned long> offsets = counting_sort(vertices.begin(), vertices.end(), result.begin(), colours.begin(), 8 * sizeof(unsigned long));
-
-
-    for(uint i = 0; i < offsets.size(); i++)
+    
+    if(!randomized)
     {
-        T start_index;
-        if (i == 0)
-            start_index = 0;
-        else
-            start_index = offsets[i-1];
-        T end_index = offsets[i];
 
-        parlay::parallel_for(start_index, end_index, [&] (T i) {
-            T v = result[i];
+        auto cluster_ptrs = parlay::delayed_tabulate(tree_nodes.size(), [&] (T i) {
+            return tree_nodes[i]->cluster_ptr;
+        });
+        colour_nodes(tree_nodes);
+
+        parlay::parallel_for(0, cluster_ptrs.size(), [&] (T v) {
+            cluster_ptrs[v]->state &= (~IS_MIS_SET);
             if(use_tree_nodes)
-            {
-                if(cluster_ptrs[v]->get_neighbour_mis(tree_nodes[v]) == true)
+                cluster_ptrs[v]->set_neighbour_mis(false, tree_nodes[v]);
+            else
+                cluster_ptrs[v]->set_neighbour_mis(false);
+        });
+
+        auto colours = parlay::delayed_tabulate(cluster_ptrs.size(), [&] (T v) {
+            return cluster_ptrs[v]->colour.load();
+        });
+
+        auto vertices = parlay::tabulate(cluster_ptrs.size(), [] (T v) {
+            return v;
+        });
+
+        auto result = vertices;
+
+        parlay::sequence<unsigned long> offsets = counting_sort(vertices.begin(), vertices.end(), result.begin(), colours.begin(), 8 * sizeof(unsigned long));
+
+        for(uint i = 0; i < offsets.size(); i++)
+        {
+            T start_index;
+            if (i == 0)
+                start_index = 0;
+            else
+                start_index = offsets[i-1];
+            T end_index = offsets[i];
+
+            parlay::parallel_for(start_index, end_index, [&] (T i) {
+                T v = result[i];
+                if(use_tree_nodes)
+                {
+                    if(cluster_ptrs[v]->get_neighbour_mis(tree_nodes[v]) == true)
+                    {
+                        cluster_ptrs[v]->state &= (~IS_MIS_SET);
+                        return;
+                    } 
+                }
+                else if(cluster_ptrs[v]->get_neighbour_mis() == true)
                 {
                     cluster_ptrs[v]->state &= (~IS_MIS_SET);
                     return;
-                } 
-            }
-            else if(cluster_ptrs[v]->get_neighbour_mis() == true)
-            {
-                cluster_ptrs[v]->state &= (~IS_MIS_SET);
-                return;
-            }
-            cluster_ptrs[v]->state |= IS_MIS_SET;
-        });
+                }
+                cluster_ptrs[v]->state |= IS_MIS_SET;
+            });
+        }
     }
+    else // randomized
+    {
+        //
+        auto cluster_ptrs = parlay::delayed_tabulate(tree_nodes.size(), [&] (T i) {
+            return tree_nodes[i]->cluster_ptr;
+        });
+        
+        parlay::random_generator gen;
+        std::uniform_int_distribution<T> dis(1, 1l << 60l); // range should be enough
+        
+
+        parlay::parallel_for(0, cluster_ptrs.size(), [&] (T v) {
+            cluster_ptrs[v]->state &= (~IS_MIS_SET);
+            auto r = gen[v];
+            cluster_ptrs[v]->colour = dis(r);
+            // if(use_tree_nodes)
+            // {
+            //     // auto& my_node = tree_nodes[v];
+            //     // for(auto& edge_ptr : my_node->adjacents)
+            //     // {
+            //     //     if(edge_ptr == nullptr)
+            //     //         continue;
+            //     //     if(edge_ptr->state & (base_edge | binary_cluster))
+            //     //     {
+            //     //         auto ngbr_node = get_other_side(my_node, edge_ptr);
+            //     //         auto r = gen[v];
+            //     //         ngbr_node->colour = static_cast<T>(0);
+            //     //     }
+            //     // }
+            // }
+            // else
+            // {
+            //     // auto& my_node = cluster_ptrs[v]->adjacency.get_tail();
+            //     // for(auto& edge_ptr : my_node->adjacents)
+            //     // {
+            //     //     if(edge_ptr == nullptr)
+            //     //         continue;
+            //     //     if(edge_ptr->state & (base_edge | binary_cluster))
+            //     //     {
+            //     //         auto ngbr_node = get_other_side(my_node, edge_ptr);
+            //     //         ngbr_node->colour = static_cast<T>(0);
+            //     //     }
+            //     // }
+            // }
+        });
+
+        parlay::parallel_for(0, cluster_ptrs.size(), [&] (T v) {
+            bool in_mis = true;
+            T my_colour = cluster_ptrs[v]->colour.load();
+            if(use_tree_nodes)
+            {
+                auto& my_node = tree_nodes[v];
+                for(auto& edge_ptr : my_node->adjacents)
+                {
+                    if(edge_ptr == nullptr)
+                        continue;
+                    if(edge_ptr->state & (base_edge | binary_cluster))
+                    {
+                        auto ngbr_node = get_other_side(my_node, edge_ptr);
+                        if(ngbr_node->cluster_ptr->colour > my_colour)
+                            in_mis = false;
+                    }
+                }
+            }
+            else
+            {
+                auto my_node = cluster_ptrs[v]->adjacency.get_tail();
+                for(auto& edge_ptr : my_node->adjacents)
+                {
+                    if(edge_ptr == nullptr)
+                        continue;
+                    if(edge_ptr->state & (base_edge | binary_cluster))
+                    {
+                        auto ngbr_node = get_other_side(my_node, edge_ptr);
+                        if(ngbr_node->cluster_ptr->colour >= my_colour)
+                            in_mis = false;
+                    }
+                }
+            }
+            if(in_mis)
+                cluster_ptrs[v]->state |= IS_MIS_SET;
+        });
+
+
+    }
+
 }
 
 template<typename T, typename D>
@@ -359,7 +449,7 @@ void finalize(node<T,D>* contracted_node)
 template<typename T, typename D>
 void contract(node<T,D>* node_ptr, bool affect = false)
 {
-    
+    node_ptr->cluster_ptr->colour = static_cast<T>(0);
     if(node_ptr->get_num_neighbours_live() == 0)
     {
         node_ptr->state &= (~(unary_cluster | binary_cluster | nullary_cluster));
@@ -531,7 +621,8 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
         cluster<T,D> base_cluster;
         return base_cluster;
     });
-    // TODO merge with above!
+    // TODO merge with above! 
+    // Don't! it crashes the program :)
     parlay::parallel_for(0, base_clusters.size(), [&] (T i){
         base_clusters[i].index = i;
         base_clusters[i].add_empty_level(live, 0);
@@ -984,7 +1075,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defre
         });
 
         
-        set_MIS(eligible);
+        set_MIS(eligible, false, randomized);
         auto candidates = parlay::filter(eligible, [] (auto node_ptr){
             return node_ptr->cluster_ptr->state & IS_MIS_SET;
         });

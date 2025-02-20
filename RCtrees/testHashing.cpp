@@ -3,6 +3,7 @@
 #include "treeGen.h"
 #include <parlay/hash_table.h>
 #include <chrono>
+#include <cstdlib>
 #include "ternarizer.h"
 #include "RC.h"
 #include "RCdynamic.h"
@@ -97,33 +98,60 @@ auto generate_delete_edges(long graph_size)
   });
 }
 
+static void print_help() {
+    std::cout << "Usage: ./program [options]\n"
+              << "Options:\n"
+              << "  --graph_size <num>    Set graph size (default: 100000)\n"
+              << "  --dist <e|g|c|u>      Set distribution: exponential (e), geometric (g), constant (c), uniform (u) (default: e)\n"
+              << "  --ln <value>          Set ln parameter (default: 0.1)\n"
+              << "  --mean <value>        Set mean value (default: 20.0)\n"
+              << "  --randomized          Enable randomized mode\n"
+              << "  --help                Show this help message\n";
+}
+
 int main(int argc, char* argv[])
 {
     
-    long graph_size;
+    long graph_size = 100000;
+    auto distribution = exponential; // either exponential, geometric, constant or linear
+    double ln = 0.1;
+    double mean = 20.0;
+    bool randomized = false;
 
     // std::cout << "Argc " << argc << std::endl;
 
-    if(argc >= 2)
-    {
-        std::string arg = argv[1];
-        if (arg.find_first_not_of("0123456789") == std::string::npos)
-        {
-            graph_size = std::stol(argv[1]);
-        }
-        else
-        {
-        graph_size = 100000000 + (rand() % 400000000l);    
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--graph_size" && i + 1 < argc) {
+            graph_size = std::stol(argv[++i]);
+        } else if (arg == "--dist" && i + 1 < argc) {
+            std::string dist_arg = argv[++i];
+            if (dist_arg == "e") {
+                distribution = exponential;
+            } else if (dist_arg == "g") {
+                distribution = geometric;
+            } else if (dist_arg == "c") {
+                distribution = constant;
+            } else if (dist_arg == "u") {
+                distribution = uniform;
+            } else {
+                std::cerr << "Invalid distribution type\n";
+                return 1;
+            }
+        } else if (arg == "--randomized") {
+          randomized = true;
+        } else if (arg == "--ln" && i + 1 < argc) {
+            ln = std::stod(argv[++i]);
+        } else if (arg == "--mean" && i + 1 < argc) {
+            mean = std::stod(argv[++i]);
         }
     }
-    else
-        graph_size = 100000000 + (rand() % 400000000l);    
         
 
     const double min_weight = 0.0;
     const double max_weight = 100.0f;
 
-    std::cout << "Graph size " << graph_size << std::endl;
+    // std::cout << "Graph size " << graph_size << std::endl;
 
     double static_gen_time = 0.0f;
     double dynamic_gen_time = 0.0f;
@@ -136,8 +164,8 @@ int main(int argc, char* argv[])
 
     for(int II = 0; II < maxII; II++)
     {
-        std::cout << "II " << II << std::endl;
-        TreeGen<long, double> TG(graph_size, min_weight, max_weight, 0.1, 20, exponential, true, II);
+        // std::cout << "II " << II << std::endl;
+        TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true, II);
 
         TG.generateInitialEdges();
 
@@ -156,7 +184,6 @@ int main(int argc, char* argv[])
         // TR.print_state();
         TR.verify_simple_tree();
 
-        
         const long max_degree = 3;
         parlay::sequence<cluster<long, double>> clusters; 
         double defretval = 0.0;
@@ -172,7 +199,7 @@ int main(int argc, char* argv[])
         std::chrono::duration<double>  dur1 = static_creation_middle - static_creation_start;
         std::chrono::duration<double>  dur2 = static_creation_end - static_creation_start;
 
-        std::cout << "static elapsed time: " << dur2.count() << " seconds of which " << dur1.count() << " were spent ternerizing \n";
+        // std::cout << "static elapsed time: " << dur2.count() << " seconds of which " << dur1.count() << " were spent ternerizing \n";
 
         // auto del_edges = generate_delete_edges(graph_size);
 
@@ -194,7 +221,7 @@ int main(int argc, char* argv[])
         {
           
           double prob = (static_cast<double>(rand() % 10000)) / 10000.0f;
-          std::cout << "i: " << i << std::endl;
+          // std::cout << "i: " << i << std::endl;
 
           double increment = (static_cast<double>(2 * i))/maxi;
           prob+=increment;
@@ -225,7 +252,7 @@ int main(int argc, char* argv[])
           
           // std::cout << "Adding " << add_truples.size() << " edges" << std::endl;
 
-          std::cout << "Total edges modified -" << del_pairs.size() << "+" << add_truples.size() << ":" << del_pairs.size() + add_truples.size() << std::endl;
+          // std::cout << "Total edges modified -" << del_pairs.size() << "+" << add_truples.size() << ":" << del_pairs.size() + add_truples.size() << std::endl;
 
           // Measure TR.add_edges(add_truples)
           auto add_start = std::chrono::high_resolution_clock::now();
@@ -237,7 +264,7 @@ int main(int argc, char* argv[])
           auto final_insert_start = std::chrono::high_resolution_clock::now();
           parlay::sequence<std::pair<long, long>> empty_pairs;
           // batchInsertEdge(ret_seqs.second, ret_seqs.first, clusters, (double) 0.0f, [] (double A, double B) {return A+B;});
-          batchInsertEdge(ret_seqs.second, add_truples, clusters, (double) 0.0f, [] (double A, double B) {return A+B;});
+          batchInsertEdge(ret_seqs.second, add_truples, clusters, (double) 0.0f, [] (double A, double B) {return A+B;}, randomized);
           auto final_insert_end = std::chrono::high_resolution_clock::now();
 
           testPathQueryValid(clusters, TG.parents, TG.weights, TG.random_perm_map, graph_size); // Don't measure this
@@ -248,8 +275,8 @@ int main(int argc, char* argv[])
           std::chrono::duration<double> final_insert_elapsed = final_insert_end - final_insert_start;
 
           // Print the time taken for each measured section
-          std::cout << "  Time spent ternerizing: " << delete_elapsed.count() + add_elapsed.count() << " seconds" << std::endl;
-          std::cout << "  batchInsertEdge: " << final_insert_elapsed.count() << " seconds" << std::endl;
+          // std::cout << "  Time spent ternerizing: " << delete_elapsed.count() + add_elapsed.count() << " seconds" << std::endl;
+          // std::cout << "  batchInsertEdge: " << final_insert_elapsed.count() << " seconds" << std::endl;
           // std::cout << "  TR.add_edges: " << add_elapsed.count() << " seconds" << std::endl;
           // std::cout << "  batchInsertEdge (2nd call): " << final_insert_elapsed.count() << " seconds" << std::endl;
           if(i > maxi/2)
@@ -269,7 +296,31 @@ int main(int argc, char* argv[])
       }
     }
 
-    std::cout << "STATIC TIME " << static_gen_time/static_counter << " of which " << static_tern_time/static_counter << " was spent ternerizing" << std::endl;
-    std::cout << "DYNAMIC TIME " << dynamic_gen_time/dynamic_counter << " of which " << dynamic_tern_time/dynamic_counter << " was spent ternerizing" << std::endl;
+    // std::cout << "STATIC TIME " << static_gen_time/static_counter << " of which " << static_tern_time/static_counter << " was spent ternerizing" << std::endl;
+    // std::cout << "DYNAMIC TIME " << dynamic_gen_time/dynamic_counter << " of which " << dynamic_tern_time/dynamic_counter << " was spent ternerizing" << std::endl;
+    std::cout << parlay::internal::init_num_workers() << ",";
+    std::cout << graph_size << "," << ln << "," << mean << ",";
+    switch(distribution){
+      case exponential:
+        std::cout << "e";
+        break;
+      case geometric:
+        std::cout << "g";
+        break;
+      case constant:
+        std::cout << "c";
+        break;
+      case uniform:
+        std::cout << "u";
+        break;
+    }
 
+    
+    
+    std::cout << "," << static_gen_time/static_counter << "," << static_tern_time/static_counter << "," << dynamic_gen_time/dynamic_counter << "," << dynamic_tern_time/dynamic_counter << ",";
+    if(randomized)
+      std::cout << "true";
+    else
+      std::cout << "false";
+    std::cout << std::endl;
 }
