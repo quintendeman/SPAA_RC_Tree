@@ -576,13 +576,15 @@ bool possibly_equal(parlay::sequence<parlay::sequence<T>>& childtree1, parlay::s
     Returns an array of parents such that the parents of index V would be parents[V]
 */
 template <typename T>
-parlay::sequence<T> generate_tree_graph(T num_elements, int seed=time(0))
+parlay::sequence<T> generate_tree_graph(T num_elements)
 {
     assert(num_elements > 0);
 
     parlay::sequence<T> dummy_initial_parents = parlay::tabulate(num_elements, [&] (T v) {return (T) 0;});
 
-    parlay::random_generator gen(seed); //default seed is time(0)
+    std::mt19937 sgen(std::random_device{}());
+    std::uniform_int_distribution<int> dis0(1,std::numeric_limits<int>::max()-1);
+    parlay::random_generator gen(dis0(sgen)); //default seed is time(0)
     std::uniform_real_distribution<double> dis(0, 1);    
 
     parlay::parallel_for(0, num_elements, [&] (T v) {
