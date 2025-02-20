@@ -669,7 +669,7 @@ class ternarizer{
                 auto& my_node = *all_tails[i];
                 assert(this->tail_indices[my_node.v] == my_node.dummy_index); // TODO remove both
                 assert(my_node.outgoing_edgeindices[2] == -1);
-                assert(simplified_tree[my_node.outgoing_edgeindices[0]].outgoing_edgeindices[2] = my_node.dummy_index);
+                assert(simplified_tree[my_node.outgoing_edgeindices[0]].outgoing_edgeindices[2] == my_node.dummy_index);
 
                 this->tail_indices[my_node.v] = my_node.outgoing_edgeindices[0];
                 this->simplified_tree[my_node.outgoing_edgeindices[0]].outgoing_edgeindices[2] = -1;
