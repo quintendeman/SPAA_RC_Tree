@@ -81,8 +81,8 @@ void find_nodes_involved(parlay::sequence<cluster<T,D>>& clusters, int k, parlay
         parlay::parallel_for(0,stack.size(),[&] (size_t i) {
             //a is an index in clusters
             auto a = stack[i];
-            if (a != h.root -> index && clusters[a].parent->counter.fetch_add(1)==0) { //if we aren't at the root and we are the first child here
-                new_stack[i]=clusters[a].parent->index; //look @ in the next iteration
+            if (a != h.root -> index && clusters[a].parent.load()->counter.fetch_add(1)==0) { //if we aren't at the root and we are the first child here
+                new_stack[i]=clusters[a].parent.load()->index; //look @ in the next iteration
             }   
 
         });
@@ -296,7 +296,7 @@ void create_map_trees(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>& 
             exit(3002);
         }
         else {
-            return *index_map.Find(clusters[a].parent->index);
+            return *index_map.Find(clusters[a].parent.load()->index);
         }
     });
 

@@ -77,8 +77,9 @@ void forest_find_nodes_involved(parlay::sequence<cluster<T,D>>& clusters, int k,
         parlay::parallel_for(0,stack.size(),[&] (size_t i) {
             //a is an index in clusters
             auto a = stack[i];
-            if (!isNullary(&clusters[a]) && clusters[a].parent->counter.fetch_add(1)==0) { //if we aren't at the root and we are the first child here
-                new_stack[i]=clusters[a].parent->index; //look @ in the next iteration
+            //load needed because parent is atomic
+            if (!isNullary(&clusters[a]) && clusters[a].parent.load()->counter.fetch_add(1)==0) { //if we aren't at the root and we are the first child here
+                new_stack[i]=clusters[a].parent.load()->index; //look @ in the next iteration
             }   
 
         });
