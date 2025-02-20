@@ -1,8 +1,8 @@
-jemellocpath="/usr/local/lib/libjemalloc.so"
+jemellocpath="/usr/lib/x86_64-linux-gnu/libjemalloc.so"
 
 echo "This script collects data for static and dynamic tree generation. Please set the LD_PRELOAD for jemelloc in this script, by default it is $jemellocpath"
 
-echo "num_threads,graph_size,ln,mean,dist,static_gen_time,static_tern_time,dynamic_gen_time,dynamic_dist_time" > output.csv
+echo "num_threads,graph_size,ln,mean,dist,static_gen_time,static_tern_time,dynamic_gen_time,dynamic_tern_time,randomize" > output.csv
 
 
 CONST_GRAPH_SIZE=750 # graph size to use when running experiment with varying number of threads
@@ -39,7 +39,7 @@ for PNT in "${NUM_THREADS[@]}"; do
 done
 
 for PNT in "${NUM_THREADS[@]}"; do
-    LD_PRELOAD=$jemellocpath PARLAY_NUM_THREADS=$PNT ./testHashing.out --ln 0.1 --mean 20 --dist e --graph_size $CONST_GRAPH_SIZE --randomized >> output.csv
+    LD_PRELOAD=$jemellocpath PARLAY_NUM_THREADS=$PNT ./testHashing.out --ln 0.1 --mean 20 --dist e --graph_size $CONST_GRAPH_SIZE  >> output.csv
 done
 
 for PNT in "${NUM_THREADS[@]}"; do
@@ -51,5 +51,5 @@ for PNT in "${NUM_THREADS[@]}"; do
 done
 
 for PNT in "${NUM_THREADS[@]}"; do
-    LD_PRELOAD=$jemellocpath PARLAY_NUM_THREADS=$PNT ./testHashing.out --ln 0.9 --mean 40 --dist u --graph_size $CONST_GRAPH_SIZE >> output.csv
+    LD_PRELOAD=$jemellocpath PARLAY_NUM_THREADS=$PNT ./testHashing.out --ln 0.9 --mean 40 --dist u --graph_size $CONST_GRAPH_SIZE --randomized >> output.csv
 done
