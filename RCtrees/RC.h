@@ -15,6 +15,7 @@
 #include <parlay/alloc.h>
 #include "cluster.h"
 #include "../examples/counting_sort.h"
+#include "utils.h"
 
 static const char PRINT_QUERY = 0;
 
@@ -32,18 +33,18 @@ struct edge_with_flag
     Returns an array of parents such that the parents of index V would be parents[V]
 */
 template <typename T>
-parlay::sequence<T> generate_tree_graph(T num_elements)
+parlay::sequence<T> generate_tree_graph(T num_elements, int seed=time(0))
 {
     assert(num_elements > 0);
 
     parlay::sequence<T> dummy_initial_parents = parlay::tabulate(num_elements, [&] (T v) {return (T) 0;});
 
-    std::mt19937 gen(std::random_device{}());
-    
+    parlay::random_generator gen(seed); //default seed is time(0)
+    std::uniform_real_distribution<double> dis(0, 1);    
 
     parlay::parallel_for(0, num_elements, [&] (T v) {
-        std::uniform_real_distribution<double> dis(0, 1);
-        auto random_val = dis(gen);
+        auto r = gen[v];
+        double random_val = dis(r);
 
         static const double anywhere_left_weight = 0.5;
         static const double immediate_left_weight = 10.0;
@@ -173,40 +174,6 @@ void degree_cap_add_edge(parlay::sequence<T> &parents, const T max_degree, parla
     return;
 }
 
-
-/**
- * Extracts a particular bit (counted from the right) from an element
-*/
-template <typename T>
-inline bool extract_bit(T number, int offset_from_right)
-{
-    return (number >> offset_from_right) & 1;
-}
-
-/*
-    Returns index of first different bit from the left
-    Sets the value of bit in the boolean bit
-    Sets the value of b
-    sizeof(T) must be less than 16 bytes
-*/
-template <typename T>
-inline char first_different_bit(const T a, const T b, bool* bit)
-{
-    T difference = a ^ b;
-    char num_bits = sizeof(T) * 8;
-    
-    for(char i = num_bits-1; i >= 0; i--)
-    {
-        bool inspected_bit = extract_bit(difference, i);
-        if(inspected_bit)
-        {
-            if(bit) *bit = extract_bit(b, i);
-            return i;
-        }
-    }
-
-    return -1;
-}
 
 /*
     returns a char with I_w and C_w(I_w) packed
