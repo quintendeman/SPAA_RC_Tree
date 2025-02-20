@@ -14,6 +14,7 @@
 #include "../examples/samplesort.h"
 #include "incMST.h"
 #include "utils.h"
+#include "random_trees.h"
 
 // **************************************************************
 // Driver

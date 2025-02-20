@@ -5,6 +5,7 @@
 
 #include "RC.h"
 #include "RCdynamic.h"
+#include "random_trees.h"
 #include <ctime>    // For time()
 
 

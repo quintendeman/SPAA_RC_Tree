@@ -1,6 +1,7 @@
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
 #include "../examples/kruskal.h"
+#include "random_trees.h"
 
 using vertex = long;
 using datatype = double;

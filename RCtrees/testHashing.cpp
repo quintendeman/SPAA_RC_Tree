@@ -7,7 +7,7 @@
 #include "ternarizer.h"
 #include "RC.h"
 #include "RCdynamic.h"
-
+#include "random_trees.h"
 
 using wedge = std::tuple<long,long,double>;
 
