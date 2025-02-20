@@ -9,6 +9,7 @@
 #include "cluster.h"
 #include "RC.h"
 #include <parlay/alloc.h>
+#include "RC_test.h"
 
 static const char PRINT_DYNAMIC = 0;
 
