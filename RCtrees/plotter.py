@@ -99,6 +99,9 @@ grouped_data = data.groupby(['ln', 'mean', 'dist', 'randomize'])
 # Create a figure for the static time plot (for static_gen_time vs num_threads)
 plt.figure(figsize=(10, 6))
 
+unique_graph_size = 0
+unique_mean = 0
+
 # Loop through each group
 for (ln, mean, dist, randomize), group in grouped_data:
     # Check if the configuration has multiple num_threads
@@ -108,12 +111,14 @@ for (ln, mean, dist, randomize), group in grouped_data:
         
         # Generate a unique color for each line
         color = np.random.rand(3,)  # Random RGB color
+
+        unique_graph_size = np.median(group['graph_size'])
         
         # Plot static_gen_time against num_threads
         plt.plot(group['num_threads'], group['static_gen_time'], label=f'ln:{ln} mean:{mean} dist:{dist} randomize:{randomize}', color=color)
 
 # Customize the static plot
-plt.title('Static Generation Time vs Number of Threads (Fixed Graph Size)')
+plt.title(f'Static Generation Time vs Number of Threads (Graph Size={unique_graph_size})')
 plt.xlabel('Number of Threads')
 plt.ylabel('Static Generation Time (s)')
 plt.grid(True)
@@ -140,6 +145,8 @@ grouped_data_dynamic = filtered_data_dynamic.groupby(['ln', 'mean', 'dist', 'ran
 # Create a figure for the dynamic time plot (for dynamic_gen_time vs num_threads)
 plt.figure(figsize=(10, 6))
 
+unique_BI_size = 0;
+
 # Loop through each group
 for (ln, mean, dist, randomize), group in grouped_data_dynamic:
     # Check if the configuration has multiple num_threads
@@ -149,12 +156,14 @@ for (ln, mean, dist, randomize), group in grouped_data_dynamic:
         
         # Generate a unique color for each line
         color = np.random.rand(3,)  # Random RGB color
+
+        unique_BI_size = np.median(group['graph_size']/group['mean'])
         
         # Plot dynamic_gen_time against num_threads
         plt.plot(group['num_threads'], group['dynamic_gen_time'], label=f'ln:{ln} mean:{mean} dist:{dist} randomize:{randomize}', color=color)
 
 # Customize the dynamic plot
-plt.title('Dynamic Generation Time vs Number of Threads (Median Graph Size/Mean)')
+plt.title(f'Dynamic Generation Time vs Number of Threads (batch isnert size = {unique_BI_size})')
 plt.xlabel('Number of Threads')
 plt.ylabel('Dynamic Generation Time (s)')
 plt.grid(True)
