@@ -9,17 +9,6 @@
 #include "../include/parlay/sequence.h"
 #include <atomic>
 
-  
-const char neighbour_type = 1;
-const char parent_type = 2;
-const char child_type = 4;
-const char edge_type = 8;
-const char added_type = 16;
-const char deleted_type = 32;
-
-
-
-
 const char* reset = "\033[0m";
 const char* black = "\033[30m";
 const char* red = "\033[31m";

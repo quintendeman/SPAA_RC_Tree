@@ -16,8 +16,8 @@
 #include "cluster.h"
 #include "../examples/counting_sort.h"
 #include "utils.h"
+#include "MIS.h"
 
-static const char PRINT_QUERY = 0;
 
 template <typename edgetype>
 struct edge_with_flag
@@ -426,120 +426,6 @@ void create_base_clusters(parlay::sequence<cluster<T,D>>& base_clusters, parlay:
 }
 
 /**
- * Make sure the base clusters are consistent i.e. that every neighbour of mine has me as their neighbour too
- */
-template <typename T, typename D>
-void check_consistency(parlay::sequence<node<T, D>*>& tree_nodes)
-{
-    parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
-        auto& node_ptr = tree_nodes[i];
-        if((node_ptr->state & live) == 0)
-        {
-            return;
-        }
-        if(node_ptr->state & (unary_cluster | binary_cluster | base_edge))
-        {
-            return;
-        }
-
-        for(auto& ptr : node_ptr->adjacents)
-        {
-            if(ptr == nullptr || !(ptr->state & (base_edge | binary_cluster)))
-                continue;
-            auto other_node_ptr = get_other_side(node_ptr, ptr);
-            if(get_other_side(other_node_ptr, ptr) != node_ptr)
-            {
-                node_ptr->cluster_ptr->print();
-                ptr->cluster_ptr->print();
-                other_node_ptr->cluster_ptr->print();
-                std::cout << "Base clusters inconsistent" << std::endl;
-                exit(1);
-            }
-        }
-    });
-
-    return;
-}
-
-template <typename T, typename D>
-void check_mis(parlay::sequence<node<T, D>*>& tree_nodes)
-{
-    parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
-        auto& node_ptr = tree_nodes[i];
-        for(auto& ptr : node_ptr->adjacents)
-        {
-            if(ptr == nullptr || !(ptr->state & (base_edge | binary_cluster)))
-                continue;
-            auto other_node_ptr = get_other_side(node_ptr, ptr);
-            if(other_node_ptr->cluster_ptr->state & IS_MIS_SET && node_ptr->cluster_ptr->state & IS_MIS_SET )
-            {
-                std::cout << red << "Neighbours are not MIS!" << reset << std::endl;
-                exit(1);
-            }
-        }
-    });
-
-    return;
-}
-
-template <typename T, typename D>
-void check_parents_children(parlay::sequence<cluster<T,D>>& clusters)
-{
-    parlay::parallel_for(0, clusters.size(), [&] (T i) {
-        auto cluster_ptr = &clusters[i];
-        if(cluster_ptr->parent != nullptr)
-        {
-            bool in_parent = false;
-            for(auto& par_child : cluster_ptr->parent.load()->children)
-            {
-                if(par_child == cluster_ptr)
-                    in_parent = true;
-            }
-            if(in_parent == false)
-            {
-                std::cout << red << "RC tree parents inconsistent!" << reset << std::endl;
-                cluster_ptr->print();
-                cluster_ptr->parent.load()->print();
-                exit(1);
-            }
-        }
-        for(auto& child : cluster_ptr->children)
-        {
-            if(child == nullptr)
-                continue;
-            if(child->parent != cluster_ptr)
-            {
-                std::cout << red << "RC tree children inconsistent!" << reset << std::endl;
-                cluster_ptr->print();
-                child->print();
-                exit(1);
-            }
-        }
-    });
-}
-
-template<typename T, typename D>
-void check_children_values(parlay::sequence<cluster<T,D>>& clusters)
-{
-    parlay::parallel_for(0, clusters.size(), [&] (T i) {
-        auto cluster_ptr = &clusters[i];
-        D value_from_children = 0.0;
-        for(auto& child : cluster_ptr->children)
-        {
-            if(child == nullptr)
-                continue;
-            value_from_children+=child->data;
-        }
-        if(value_from_children != cluster_ptr->data)
-        {
-            std::cout << red << "RC tree values inconsistent!" << reset << std::endl;
-            cluster_ptr->print();
-            exit(1);
-        }
-    });
-}
-
-/**
  * Make an exact copy of the current adjacency list, copying over everything (including the state), the only new thing will be the level.
  * When making a new round, pointers to edges will also get renewed, is that ideal? probably not but we don't have a choice do we 
  */
@@ -631,6 +517,52 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
         }
         tree_nodes[i] = tree_nodes[i]->next;
     });
+}
+
+
+template<typename T, typename D, typename lambdafunc>
+void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func)
+{
+
+    // std::cout << "I, " << contracted_node->cluster_ptr->index << " am accumulating" << std::endl;
+
+    contracted_node->cluster_ptr->data = defretval;
+    contracted_node->cluster_ptr->max_weight_edge = nullptr;
+    bool found = false;
+    for(auto& child : contracted_node->cluster_ptr->children)
+    {
+        if(child == nullptr)
+            continue;
+        bool valid_child = false;
+        if(child->adjacency.get_head()->state & base_edge)
+            valid_child = true;
+        else if (child->first_contracted_node->state & (binary_cluster | base_edge))
+            valid_child = true;
+        else if (child->first_contracted_node->next == nullptr)
+            valid_child = false;
+        else if (child->first_contracted_node->next->state & (binary_cluster | base_edge))
+            valid_child = true;
+        
+        
+        if(valid_child)
+        {
+            if(!found)
+            {
+                contracted_node->cluster_ptr->data = child->data;
+                contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
+                found = true;
+            }
+            else
+            {
+                if(child->data > contracted_node->cluster_ptr->data)
+                    contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
+                contracted_node->cluster_ptr->data = func(contracted_node->cluster_ptr->data, child->data);
+            
+            }
+        }
+    }
+
+    return;
 }
 
 

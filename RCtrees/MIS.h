@@ -1,3 +1,6 @@
+#ifndef MIS_H
+#define MIS_H
+#include "parlay/sequence.h"
 
 /*
     returns a char with I_w and C_w(I_w) packed
@@ -139,7 +142,7 @@ void set_MIS(parlay::sequence<node<T, D>*>& tree_nodes, bool use_tree_nodes = fa
         });
         
         parlay::random_generator gen;
-        std::uniform_int_distribution<T> dis(1, 1l << 60l); // range should be enough
+        std::uniform_int_distribution<T> dis(1, std::numeric_limits<T>::max()-1); //changed to max to account for variable types
         
 
         parlay::parallel_for(0, cluster_ptrs.size(), [&] (T v) {
@@ -218,3 +221,27 @@ void set_MIS(parlay::sequence<node<T, D>*>& tree_nodes, bool use_tree_nodes = fa
     }
 
 }
+
+
+template <typename T, typename D>
+void check_mis(parlay::sequence<node<T, D>*>& tree_nodes)
+{
+    parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
+        auto& node_ptr = tree_nodes[i];
+        for(auto& ptr : node_ptr->adjacents)
+        {
+            if(ptr == nullptr || !(ptr->state & (base_edge | binary_cluster)))
+                continue;
+            auto other_node_ptr = get_other_side(node_ptr, ptr);
+            if(other_node_ptr->cluster_ptr->state & IS_MIS_SET && node_ptr->cluster_ptr->state & IS_MIS_SET )
+            {
+                std::cout << red << "Neighbours are not MIS!" << reset << std::endl;
+                exit(1);
+            }
+        }
+    });
+
+    return;
+}
+
+#endif

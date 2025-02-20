@@ -5,9 +5,9 @@
 #include <fstream>
 #include <random>
 #include <cmath>
-#include "../include/parlay/primitives.h"
-#include "../include/parlay/sequence.h"
-#include "../include/parlay/internal/get_time.h"
+#include "parlay/primitives.h"
+#include "parlay/sequence.h"
+#include "parlay/internal/get_time.h"
 
 //RC tree funs
 #include "RC_test.h"
@@ -38,11 +38,11 @@ void get_root_RC(parlay::sequence<cluster<T,D>>& clusters, cluster<T,D>*& ans) {
 
 void get_RC_tree(parlay::sequence<cluster<int,int>>& clusters,  parlay::sequence<int>& parent_tree, bool extra_print=false) {
     parlay::sequence<parlay::sequence<int>> G;
-    G=convert_parents_to_graph(G,parent_tree,extra_print);
+    G=convert_parents_to_graph(G,parent_tree);
     if (extra_print) std::cout << "made graph" << std::endl;
     create_base_clusters(G, clusters, 3); //max deg=3; each vertex in the tree has maximum degree 3
     if (extra_print) std::cout << "made base clusters" << std::endl;
-    create_RC_tree(clusters, static_cast<int>(parent_tree.size()), 0, [] (int A, int B) {return A+B;}, false,extra_print); //randomized=false -- use the deterministic contraction method //defretval=0 -- default cluster val (ex -inf, inf, 0) //print=false -- don't print contraction sizes
+    create_RC_tree(clusters, static_cast<int>(parent_tree.size()), 0, [] (int A, int B) {return A+B;}, false); //randomized=false -- use the deterministic contraction method //defretval=0 -- default cluster val (ex -inf, inf, 0) //print=false -- don't print contraction sizes
     if (extra_print) std::cout << "made tree " << std::endl;
 }
 
@@ -314,7 +314,7 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
         if (extra_print) std::cout << "finished LCA" << std::endl;
         if (PRINT_T) std::cout << "finished LCA " << t2.next_time() << std::endl;
 
-        deleteRCtree(clusters,extra_print);
+        deleteRCtree(clusters);
 
 
     }

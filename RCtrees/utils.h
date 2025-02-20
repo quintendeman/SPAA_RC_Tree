@@ -3,6 +3,8 @@
 
 #ifndef UTILS_H
 #define UTILS_H
+#include<iostream>
+#include "parlay/sequence.h"
 
 static const char PRINT_QUERY = 0;
 const double default_epsilon = 0.001;

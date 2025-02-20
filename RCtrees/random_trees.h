@@ -617,7 +617,7 @@ parlay::sequence<T> generate_tree_graph(T num_elements, int seed=time(0))
     Converts the parents array into a symmetric graph
 */
 template <typename graph, typename T>
-graph convert_parents_to_graph(graph G, parlay::sequence<T> parents)
+graph convert_parents_to_graph(graph G, parlay::sequence<T>& parents)
 {
     parlay::sequence<T> vertices = parlay::tabulate(parents.size(), [&] (T v) {return v;});
 

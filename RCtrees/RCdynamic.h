@@ -339,50 +339,6 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
     return;
 }
 
-template<typename T, typename D, typename lambdafunc>
-void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func)
-{
-
-    // std::cout << "I, " << contracted_node->cluster_ptr->index << " am accumulating" << std::endl;
-
-    contracted_node->cluster_ptr->data = defretval;
-    contracted_node->cluster_ptr->max_weight_edge = nullptr;
-    bool found = false;
-    for(auto& child : contracted_node->cluster_ptr->children)
-    {
-        if(child == nullptr)
-            continue;
-        bool valid_child = false;
-        if(child->adjacency.get_head()->state & base_edge)
-            valid_child = true;
-        else if (child->first_contracted_node->state & (binary_cluster | base_edge))
-            valid_child = true;
-        else if (child->first_contracted_node->next == nullptr)
-            valid_child = false;
-        else if (child->first_contracted_node->next->state & (binary_cluster | base_edge))
-            valid_child = true;
-        
-        
-        if(valid_child)
-        {
-            if(!found)
-            {
-                contracted_node->cluster_ptr->data = child->data;
-                contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
-                found = true;
-            }
-            else
-            {
-                if(child->data > contracted_node->cluster_ptr->data)
-                    contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
-                contracted_node->cluster_ptr->data = func(contracted_node->cluster_ptr->data, child->data);
-            
-            }
-        }
-    }
-
-    return;
-}
 
 template<typename T, typename D>
 bool unParent(cluster<T,D>* cluster_ptr)
