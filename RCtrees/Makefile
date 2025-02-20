@@ -2,7 +2,7 @@
 CXX = g++
 CXXFLAGS = -O3 -std=c++17 -pthread -g -Werror -Wparentheses
 # CXXFLAGS = -O0 -flto -std=c++17 -pthread -g -Werror -Wparentheses
-INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/
+INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/ -I parhash_include/ -I LCA -I .
 LDFLAGS = -ljemalloc
 TARGET = RC.out
 SRC = RC.cpp
@@ -11,17 +11,39 @@ SRC = RC.cpp
 all: RC.out testMST.out  testHashing.out testTreeGen.out
 
 # Rule to build the target
-RC.out: RC.cpp RC.h cluster.h RCdynamic.h adjacency_linked_list.h incMST.h
+RC.out: RC.cpp RC.h cluster.h RCdynamic.h adjacency_linked_list.h incMST.h random_trees.h utils.h
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o RC.out RC.cpp
 
 testMST.out: testMST.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o testMST.out testMST.cpp
 
-testTreeGen.out: testTreeGen.cpp treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h 
+testTreeGen.out: testTreeGen.cpp treeGen.h RC.h cluster.h RCdynamic.h  adjacency_linked_list.h  random_trees.h utils.h
 	$(CXX)  $(CXXFLAGS) $(INCLUDES) -o testTreeGen.out testTreeGen.cpp
 
-testHashing.out: treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h testHashing.cpp ternarizer.h
+testHashing.out: treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h  random_trees.h utils.h testHashing.cpp ternarizer.h
 	$(CXX)  $(CXXFLAGS)  -o testHashing.out testHashing.cpp $(INCLUDES)
+
+
+
+RC_CREATE_DEPS = MIS.h RC.h RCdynamic.h RC_test.h RCdynamic.h
+RC_BASE_DEPS = cluster.h adjacency_linked_list.h 
+UTIL_DEPS = random_trees.h utils.h treeGen.h
+BASE_DEPS = $(RC_CREATE_DEPS) $(RC_BASE_DEPS) $(UTIL_DEPS)
+QUERY_DEPS = subtree_query.h path_query.h 
+MST_DEPS = incMST.h
+LCA_DEPS = LCA/VanillaLCA.h LCA/static_seqn_LCA.h LCA/static_par_LCA.h LCA/LCA.h LCA/fixedLCA.h
+
+# Default target
+
+splca.out : static_par_LCA.cpp $(LCA_DEPS) $(BASE_DEPS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o splca.out static_par_LCA.cpp
+
+sslca.out : static_seqn_LCA.cpp $(LCA_DEPS) $(BASE_DEPS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o sslca.out static_seqn_LCA.cpp
+
+#Linux case sensitive, LCA.cpp not lca.cpp
+lca.out : LCA.cpp $(LCA_DEPS) $(BASE_DEPS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o lca.out LCA.cpp
 
 
 # Clean up build files
