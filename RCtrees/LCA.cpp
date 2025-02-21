@@ -704,6 +704,11 @@ int main(int argc, char* argv[]) {
     else if (forest_ratio==-2) {
         mid_test_lca<int>(gen,pgen);
     }
+    else if (forest_ratio==-3) {
+        test_lca<short>(30000,100,10,203,gen,pgen,0,.2);
+
+
+    }
     else {
         test_lca<int>(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,forest_ratio,chain_ratio); //0 is forest ratio
 
