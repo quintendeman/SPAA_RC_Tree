@@ -1,4 +1,6 @@
-export PARLAY_NUM_THREADS=34
-echo $PARLAY_NUM_THREADS > outfile13.txt
-make lca.out >> outfile13.txt
-nohup ./lca.out -forr -1 -pseed 72 >> outfile14.txt 2> outfile14err.txt #redirect stderr to stdout? 
+export myfile=outfile17.txt
+export myerrorfile=outfile17err.txt
+export PARLAY_NUM_THREADS=33
+echo $PARLAY_NUM_THREADS > $myfile
+make lca.out >> $myfile
+nohup ./lca.out -forr -1 -pseed 74 >> $myfile 2> $myerrorfile  #redirect stderr to stdout? 
