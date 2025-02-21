@@ -27,7 +27,7 @@ testHashing.out: treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h  r
 
 RC_CREATE_DEPS = MIS.h RC.h RCdynamic.h RC_test.h RCdynamic.h
 RC_BASE_DEPS = cluster.h adjacency_linked_list.h 
-UTIL_DEPS = random_trees.h utils.h treeGen.h
+UTIL_DEPS = random_trees.h utils.h treeGen.h treePrimitives.h
 BASE_DEPS = $(RC_CREATE_DEPS) $(RC_BASE_DEPS) $(UTIL_DEPS)
 QUERY_DEPS = subtree_query.h path_query.h 
 MST_DEPS = incMST.h

@@ -15,8 +15,11 @@
 //need our LCA funs
 #include "LCA.h"
 #include "VanillaLCA.h"
-#include "random_trees.h"
 #include "LCA_test.h"
+
+//tree generation, functions
+#include "random_trees.h"
+#include "treePrimitives.h"
 
 //ternarizer and tree generator
 #include "ternarizer.h"
@@ -395,7 +398,7 @@ std::chrono::duration<double> get_single_runtime(parlay::random_generator& pgen,
 
     auto static_creation_end = std::chrono::high_resolution_clock::now();
     //TOD2* add assertion here that queries check out? 
-    handle_answers(queries,answers,k,parent_tree,clusters,0,0,0,0,"nofileprint"); 
+    //handle_answers(queries,answers,k,parent_tree,clusters,0,0,0,0,"nofileprint"); 
 
     return static_creation_end-static_creation_start;
 
@@ -435,7 +438,7 @@ void bench(parlay::random_generator& pgen) {
 
 void bench_threads(parlay::random_generator& pgen) {
     int tscale=6;
-    long n = 1'000'000;
+    long n = 200;//1'000'000;
     int k = 10'000;
     int trials_per=5;
 
@@ -498,6 +501,18 @@ void test_perm() {
     parlay::sequence<parlay::sequence<int>> child_tree(n,parlay::sequence<int>());
     partree_to_childtree(parents,child_tree);
     print_child_tree(child_tree,"child tree");
+}
+
+void test() {
+    int n = 10;
+    parlay::sequence<cluster<long, double>> clusters; 
+    double mean = 2;
+    double ln = 0.1;
+
+    parlay::sequence<long> parent_tree = tree_gen(n,clusters,mean,ln); //one tree for all testing
+
+    pseq(parent_tree,"parent tree");
+
 }
 
 int main(int argc, char* argv[]) {
@@ -580,6 +595,9 @@ int main(int argc, char* argv[]) {
     else if (forest_ratio==-5) {
         std::cout << "num_threads,graph_size,ln,mean,dist,time" << std::endl;
         bench_threads(pgen);
+    }
+    else if (forest_ratio==-6) {
+        test();
     }
     else {
         test_lca<int,int>(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,forest_ratio,chain_ratio); //0 is forest ratio
