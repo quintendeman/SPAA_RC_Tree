@@ -76,7 +76,7 @@ template<typename T>
 void print_parent_tree(parlay::sequence<T>& tree, std::string message) {
     std::cout << message << std::endl;
     for (int j = 0 ; j < tree.size(); j++) {
-         printf("(%d,%d) ", j , tree[j]);
+         printf("(%d,%d) ", j , static_cast<int>(tree[j]));
 
     }
     std::cout << std::endl;
@@ -213,7 +213,7 @@ parlay::sequence<T> generate_random_tree_par(T n, parlay::random_generator& pgen
     parlay::sequence<double> random_bits(2*n+1,-1);
 
     //if the 1st n nodes all had 2 children, we would have 2*n+1 node tree
-    parlay::sequence<T> extended = parlay::tabulate(2*n+1,[&] (T i) {return (i-1) >> 1; });
+    parlay::sequence<T> extended = parlay::tabulate(2*n+1,[&] (T i) {return static_cast<T>((i-1) >> 1); });
     extended[0]=0; //0 is root
     //pseq(extended,"printing extended");
     parlay::sequence<bool> packbools = parlay::tabulate(2*n+1,[&] (T i) {

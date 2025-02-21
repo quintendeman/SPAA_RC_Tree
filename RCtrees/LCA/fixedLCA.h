@@ -26,7 +26,7 @@ struct LCAhelper {
     parlay::sequence<T> common_boundaries;
     parlay::sequence<T> alt_parent_tree;
     parlay::sequence<parlay::sequence<T>> alt_child_tree;
-    parlay::sequence<int> head;
+    parlay::sequence<T> head;
     parlay::sequence<T> closest_boundary;
     size_t max_level;
     cluster<T,D>* root;
@@ -315,7 +315,7 @@ void static_preprocess(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>&
         exit(2201);
     }
     //create static LCA structure (note head only needs sn+1 space)
-    h.head = parlay::sequence<int>(h.sn+1);
+    h.head = parlay::sequence<T>(h.sn+1);
     h.augmented_vertices = parlay::sequence<LCAnode<T>>(h.sn);
 
     //give augmented vertices a (default) id. This id just used for printing.
@@ -324,7 +324,7 @@ void static_preprocess(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D>&
 
     });
 
-    preprocess_par(h.alt_parent_tree,h.alt_child_tree,alt_root,h.augmented_vertices,h.head);
+    preprocess_par<T>(h.alt_parent_tree,h.alt_child_tree,alt_root,h.augmented_vertices,h.head);
 
     // std::cout << "printing augment" << std::endl;
     // std::cout << "id,\t inl,\t preo,\t#ri0,\tlvl,\tascd,\t size" << std::endl;
@@ -348,7 +348,7 @@ void get_ancestor_bitset(parlay::sequence<cluster<T,D>>& clusters, LCAhelper<T,D
 
     parlay::sequence<T> stack;
 
-    int r = *index_map.Find(h.root->index);
+    T r = *index_map.Find(h.root->index);
     stack.push_back(r);
     //nullary is 0
     for (int iter = 0; iter < h.max_level+1; iter++) {
