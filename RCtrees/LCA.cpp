@@ -29,20 +29,6 @@
 const bool PRINT_B = false; //progress prints
 const bool PRINT_T = false; //timer prints
 
-//TOD2* is there a better way to do this?
-//Find the root of the RC tree, store in ans.
-//U -- cluster in this RC tree (needed so we know what tree we are looking at).
-//Takes O(log n) time (time in height of RC tree)
-template<typename T, typename D>
-void get_root_RC(parlay::sequence<cluster<T,D>>& clusters, cluster<T,D>*& ans) {
-    
-    ans=&clusters[0]; //just get a random cluster to start with //TODO change from 0? 
-
-    while (ans-> parent != nullptr)  {
-        ans = ans->parent;
-      
-    }
-}
 template<typename T, typename D>
 void get_RC_tree(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<T>& parent_tree, bool extra_print=false) {
     parlay::sequence<parlay::sequence<T>> G;
@@ -355,6 +341,11 @@ parlay::sequence<long> tree_gen(long graph_size, parlay::sequence<cluster<long, 
 
       auto retedges = TG.getAllEdges();
 
+      parlay::sequence<std::pair<long,long>> ret_edges_formatted = parlay::map(retedges,[&] (std::tuple<long,long,double>& edge) {return std::make_pair(std::get<0>(edge),std::get<1>(edge));});
+
+      auto initial_parent_tree = parentTree_from_treeGen(ret_edges_formatted,true);
+      pseq(initial_parent_tree,"initial par tree");
+
       // auto retedges = generate_high_degree_graphs(graph_size);
     
       ternarizer<long, double> TR(graph_size, 0);
@@ -373,8 +364,8 @@ parlay::sequence<long> tree_gen(long graph_size, parlay::sequence<cluster<long, 
 
       parlay::sequence<std::pair<long,long>> all_edges = parlay::map(ret_edge_modified,[&] (std::tuple<long,long,double>& edge) {return std::make_pair(std::get<0>(edge),std::get<1>(edge));});
 
-
-      return parentTree_from_treeGen(graph_size,all_edges);
+      
+      return parentTree_from_treeGen(all_edges,true);
 
 }
 
@@ -438,7 +429,7 @@ void bench(parlay::random_generator& pgen) {
 
 void bench_threads(parlay::random_generator& pgen) {
     int tscale=6;
-    long n = 200;//1'000'000;
+    long oldn = 200;//1'000'000;
     int k = 10'000;
     int trials_per=5;
 
@@ -450,7 +441,10 @@ void bench_threads(parlay::random_generator& pgen) {
 
     parlay::sequence<cluster<long, double>> clusters; 
 
-    parlay::sequence<long> parent_tree = tree_gen(n,clusters,mean,ln); //one tree for all testing
+    parlay::sequence<long> parent_tree = tree_gen(oldn,clusters,mean,ln); //one tree for all testing
+
+    long n = parent_tree.size(); //ternerized size
+
     std::uniform_int_distribution<long> dis(0,n-1);
 
     double total = 0;
@@ -504,7 +498,7 @@ void test_perm() {
 }
 
 void test() {
-    int n = 10;
+    int n = 5;
     parlay::sequence<cluster<long, double>> clusters; 
     double mean = 2;
     double ln = 0.1;
@@ -512,6 +506,8 @@ void test() {
     parlay::sequence<long> parent_tree = tree_gen(n,clusters,mean,ln); //one tree for all testing
 
     pseq(parent_tree,"parent tree");
+
+    deleteRCtree(clusters);
 
 }
 
