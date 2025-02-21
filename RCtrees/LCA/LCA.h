@@ -168,6 +168,11 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::t
     int nc = clusters.size(); //vertices + edges~
     int k = queries.size(); //batch size
 
+    if (nc > std::numeric_limits<T>::max()/2-10) {
+        std::cout << "too many elements requested for T type, aborting" << std::endl;
+        exit(10001);
+    }
+
     //find which nodes are involved in the calculations
     parlay::sequence<T> involved_nodes;
     parlay::sequence<T> roots; //stores roots, by RC tree index

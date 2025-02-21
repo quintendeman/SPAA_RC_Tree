@@ -272,10 +272,6 @@ void run_tree(int NUM_TRIALS, parlay::sequence<cluster<T,T>>& clusters, int k,  
 template<typename T>
 void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,parlay::random_generator& pgen, double forest_ratio, double chain_ratio, bool extra_print=false) {
 
-    if (n > std::numeric_limits<T>::max()/2-10) {
-        std::cout << "too many elements requested for T type, aborting" << std::endl;
-        exit(10001);
-    }
 
     if (extra_print) std::cout << "starting n " << n << std::endl;
    // extra_print=false; //temporary
@@ -536,7 +532,6 @@ void mid_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
 void short_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
     small_test_lca<short>(gen,pgen);
     test_lca<short>(7000,100,3,555,gen,pgen,.2,.25);
-    test_lca<short>(20000,100,10,1000,gen,pgen,.8,.1);
     test_lca<short>(16000,100,10,203,gen,pgen,0,.2);
     test_lca<short>(200,10,10,40'000,gen,pgen,.01,.4);
 
