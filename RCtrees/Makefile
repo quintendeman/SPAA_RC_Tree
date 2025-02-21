@@ -31,7 +31,7 @@ UTIL_DEPS = random_trees.h utils.h treeGen.h
 BASE_DEPS = $(RC_CREATE_DEPS) $(RC_BASE_DEPS) $(UTIL_DEPS)
 QUERY_DEPS = subtree_query.h path_query.h 
 MST_DEPS = incMST.h
-LCA_DEPS = LCA/VanillaLCA.h LCA/static_seqn_LCA.h LCA/static_par_LCA.h LCA/LCA.h LCA/fixedLCA.h
+LCA_DEPS = LCA/VanillaLCA.h LCA/static_seqn_LCA.h LCA/static_par_LCA.h LCA/LCA.h LCA/fixedLCA.h LCA/LCA_test.h
 
 # Default target
 
