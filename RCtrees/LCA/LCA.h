@@ -214,7 +214,7 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::t
         std::cout << std::endl;
     }
 
-    parlay::sequence<T> rangk = parlay::tabulate(k,[&] (T i) {return i;});
+    parlay::sequence<int> rangk = parlay::tabulate(k,[&] (int i) {return i;});
 
     if (PRINT_L) {
         std::cout << "printing index map for queries" << std::endl;
@@ -229,12 +229,12 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::t
 
 
     //find which queries all contain members in the same tree
-    auto answerable_query_indices = parlay::filter(rangk,[&] (T i) {
+    auto answerable_query_indices = parlay::filter(rangk,[&] (int i) {
         return root_ids[*index_map.Find(std::get<0>(queries[i]))] == root_ids[*index_map.Find(std::get<1>(queries[i]))] && root_ids[*index_map.Find(std::get<0>(queries[i]))] == root_ids[*index_map.Find(std::get<2>(queries[i]))];
     });
 
     //find which queries do not contain all members in same tree
-    auto unanswerable_query_indices = parlay::filter(rangk,[&] (T i) {
+    auto unanswerable_query_indices = parlay::filter(rangk,[&] (int i) {
          return root_ids[*index_map.Find(std::get<0>(queries[i]))] != root_ids[*index_map.Find(std::get<1>(queries[i]))] || root_ids[*index_map.Find(std::get<0>(queries[i]))] != root_ids[*index_map.Find(std::get<2>(queries[i]))];
     });
     if (PRINT_L) {
@@ -253,7 +253,7 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::t
 
     //creates sequence of key-sequence pairs of form
     //(ROOT, QUERY INDICES BELONGING TO THAT ROOT)
-    auto queries_by_tree = parlay::group_by_key(parlay::map(answerable_query_indices,[&] (T i) {
+    auto queries_by_tree = parlay::group_by_key(parlay::map(answerable_query_indices,[&] (int i) {
         return std::make_pair(root_ids[*index_map.Find(std::get<0>(queries[i]))],i);
     }));
     if (PRINT_L) {
@@ -275,7 +275,7 @@ void batchLCA(parlay::sequence<cluster<T,D>>& clusters,  parlay::sequence<std::t
     parlay::parallel_for(0,queries_by_tree.size(),[&] (size_t i) {
 
         //list of queries associated with root queries_by_tree[i].first
-        parlay::sequence<std::tuple<T,T,T>> query_list = parlay::map(queries_by_tree[i].second,[&] (T j) {return queries[j];});
+        parlay::sequence<std::tuple<T,T,T>> query_list = parlay::map(queries_by_tree[i].second,[&] (int j) {return queries[j];});
         parlay::sequence<cluster<T,D>*> answer_list;
 
         //run LCA on these queries
