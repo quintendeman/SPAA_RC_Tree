@@ -12,7 +12,7 @@
 #include "../examples/counting_sort.h"
 #include <parlay/random.h>
 #include "../examples/helper/graph_utils.h"
-
+#include "parlay/primitives.h"
 
 //note that we are NOT passing child_tree by reference, to get a new copy as the undirected graph
 template<typename T>
@@ -717,6 +717,25 @@ void degree_cap_add_edge(parlay::sequence<T> &parents, const T max_degree, parla
     
 
     return;
+}
+
+//given a list of edges that form a (unbounded degree) tree, convert to parent tree form
+//Sequential -- don't run often!
+template<typename T>
+parlay::sequence<T> parentTree_from_treeGen(int n, parlay::sequence<std::pair<T,T>>& edges) {
+    parlay::sequence<T> parent_tree(n,-1);
+    parlay::sequence<std::pair<T,T>> rev_edges = parlay::tabulate(edges.size(),[&] (size_t i) {return std::make_pair(edges[i].second,edges[i].first); } );
+    edges.append(rev_edges);
+    auto all_edges = parlay::remove_duplicates(edges);
+    auto edge_groups = parlay::group_by_key(all_edges);
+    parlay::sequence<parlay::sequence<long>> unrooted_tree(n,parlay::sequence<long>());
+    parlay::parallel_for(0,n,[&] (size_t i) {
+        unrooted_tree[edge_groups[i].first]=edge_groups[i].second;
+    });
+     
+    make_directed_tree(unrooted_tree,parent_tree,0l);
+    return parent_tree;
+
 }
 
 #endif

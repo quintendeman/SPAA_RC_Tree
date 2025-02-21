@@ -8,7 +8,6 @@
 #include "parlay/primitives.h"
 #include "parlay/sequence.h"
 #include "parlay/internal/get_time.h"
-
 //RC tree funs
 #include "RC_test.h"
 #include "RC.h"
@@ -17,6 +16,11 @@
 #include "LCA.h"
 #include "VanillaLCA.h"
 #include "random_trees.h"
+
+//ternarizer and tree generator
+#include "ternarizer.h"
+#include "RCdynamic.h"
+#include "treeGen.h"
 
 const bool PRINT_B = false; //progress prints
 const bool PRINT_T = false; //timer prints
@@ -45,8 +49,9 @@ void get_RC_tree(parlay::sequence<cluster<T,T>>& clusters,  parlay::sequence<T>&
     create_RC_tree(clusters, static_cast<T>(parent_tree.size()), static_cast<T>(0), [] (int A, int B) {return A+B;}, false); //randomized=false -- use the deterministic contraction method //defretval=0 -- default cluster val (ex -inf, inf, 0) //print=false -- don't print contraction sizes
     if (extra_print) std::cout << "made tree " << std::endl;
 }
-template<typename T>
 
+
+template<typename T>
 void error_print(parlay::sequence<cluster<T,T>*>& answers, parlay::sequence<T>& real_answers, int iter, int iter2, parlay::sequence<T>& parent_tree, int k, double forest_ratio, double chain_ratio, std::string error_file_prefix, parlay::sequence<std::tuple<T,T,T>>& queries, int i) {
     if (answers[i]==nullptr) {
         std::cout << "answers[i] is nullptr, real: " << real_answers[i] << std::endl;
@@ -633,6 +638,134 @@ void fail_test(std::mt19937& gen, parlay::random_generator& pgen) {
     //how would this line affect the next?? (and each parameter here matters*)
     test_lca<int>(9,10,3,20,gen,pgen,0,.3,true); 
 
+}
+
+using wedge = std::tuple<long,long,double>;
+
+parlay::sequence<long> tree_gen(long graph_size, parlay::sequence<cluster<long, double>>& clusters, double mean, double ln) {
+
+
+    const double min_weight = 0.0;
+    const double max_weight = 100.0f;
+    auto distribution = exponential; // either exponential, geometric, constant or linear
+
+    int II = 0;
+
+    // std::cout << "II " << II << std::endl;
+      TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true, 0);
+
+      TG.generateInitialEdges();
+
+      auto retedges = TG.getAllEdges();
+
+      // auto retedges = generate_high_degree_graphs(graph_size);
+    
+      ternarizer<long, double> TR(graph_size, 0);
+
+      auto ret_edge_modified = TR.add_edges(retedges);
+      
+      // TR.print_state();
+      TR.verify_simple_tree();
+
+      const long max_degree = 3;
+      double defretval = 0.0;
+
+      parlay::sequence<wedge> empty_edges_sequence;
+      create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
+      create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
+
+      parlay::sequence<std::pair<long,long>> all_edges = parlay::map(ret_edge_modified,[&] (std::tuple<long,long,double>& edge) {return std::make_pair(std::get<0>(edge),std::get<1>(edge));});
+
+
+      return parentTree_from_treeGen(graph_size,all_edges);
+
+}
+
+
+std::chrono::duration<double> get_single_runtime(parlay::random_generator& pgen,parlay::sequence<cluster<long, double>>& clusters, int k,std::uniform_int_distribution<long>& dis) {
+
+    dis(pgen);
+    parlay::sequence<std::tuple<long,long,long>> queries = parlay::tabulate(k,[&] (size_t i) {
+        auto r = pgen[i];
+        return std::make_tuple(dis(r),dis(r),dis(r));
+    });
+
+    //std::cout << "read queries " << myt.next_time() << std::endl;
+
+    //NOTE! answers size initialized here*
+    parlay::sequence<cluster<long,double>*> answers(k);
+
+    auto static_creation_start = std::chrono::high_resolution_clock::now(); //
+
+    batchLCA(clusters,queries,answers);
+
+    auto static_creation_end = std::chrono::high_resolution_clock::now();
+    //TOD2* add assertion here that queries check out? 
+    //handle_answers(queries,answers,k,parent_tree,clusters,iter,iter2,forest_ratio,chain_ratio,"nofileprint"); 
+
+    return static_creation_end-static_creation_start;
+
+}
+
+
+
+void bench(parlay::random_generator& pgen) {
+    long n = 1'000'000;
+    int kscale=10;
+    double mean = 20;
+    double ln = 0.1;
+
+
+    int trials_per=5;
+
+    parlay::sequence<int> kvals = parlay::tabulate(kscale,[&] (int i) {return 1 << i;});
+    parlay::sequence<cluster<long, double>> clusters; 
+
+    tree_gen(n,clusters,mean,ln); //one tree for all testing
+
+    std::uniform_int_distribution<long> dis(0,n-1);
+
+
+    for (int j = 0; j < kvals.size(); j++) {
+        for (int iter = 0; iter < trials_per; iter++) {
+            std::cout << kvals[j] << " " << get_single_runtime(pgen,clusters,kvals[j],dis).count() << std::endl;
+        }
+        std::cout << std::endl;
+    }
+    deleteRCtree(clusters);
+
+
+
+}
+
+
+void bench_threads(parlay::random_generator& pgen) {
+    int tscale=6;
+    long n = 1'000'000;
+    int k = 10'000;
+    int trials_per=5;
+
+    double mean = 20;
+    double ln = 0.1;
+    auto distribution = exponential; // either exponential, geometric, constant or linear
+
+    parlay::sequence<int> thread_counts = parlay::tabulate(tscale,[&] (int i) {return 1 << i;});
+
+    parlay::sequence<cluster<long, double>> clusters; 
+
+    tree_gen(n,clusters,mean,ln); //one tree for all testing
+    std::uniform_int_distribution<long> dis(0,n-1);
+
+    double total = 0;
+
+    for (int iter = 0; iter < trials_per; iter++) {
+        total += get_single_runtime(pgen,clusters,k,dis).count();
+        
+    }
+    double average = total/trials_per;
+    deleteRCtree(clusters);
+
+    std::cout << parlay::internal::init_num_workers() << "," << n << "," << ln << "," << mean << ", e, " << average << std::endl;
 
 }
 
@@ -699,9 +832,14 @@ int main(int argc, char* argv[]) {
     else if (forest_ratio==-2) {
         mid_test_lca<int>(gen,pgen);
     }
-    else if (forest_ratio==-3) {
-        test_lca<short>(200,10,10,40'000,gen,pgen,.01,.4);
+    
+    else if (forest_ratio==-4) {
+        bench(pgen);
 
+    }
+    else if (forest_ratio==-5) {
+        std::cout << "num_threads,graph_size,ln,mean,dist,time" << std::endl;
+        bench_threads(pgen);
     }
     else {
         test_lca<int>(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,forest_ratio,chain_ratio); //0 is forest ratio
