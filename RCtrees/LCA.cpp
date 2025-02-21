@@ -327,9 +327,9 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
 // //more extensive LCA test (lots of randomness)
 void grand_test_lca(std::mt19937& gen,parlay::random_generator& pgen, int iters) {
     std::uniform_int_distribution<int> disn(1,100000000);
-    std::exponential_distribution<> dis_tri(1000);
-    std::exponential_distribution<> dis_tree(100);
-    std::normal_distribution<> dis_k(10000,50000); //make sure to take abs value then add 1
+    std::uniform_int_distribution<int> dis_tri(1000);
+    std::uniform_int_distribution<int> dis_tree(100);
+    std::uniform_int_distribution<int> dis_k(10000,50000); 
     std::uniform_real_distribution<double> dis_forest(0,1);
     std::uniform_real_distribution<double> dis_chain(0,1);
 
@@ -337,7 +337,7 @@ void grand_test_lca(std::mt19937& gen,parlay::random_generator& pgen, int iters)
         int n = disn(gen);
         int trials = dis_tri(gen);
         int num_trees = dis_tree(gen);
-        int k = abs(dis_k(gen))+1;
+        int k = dis_k(gen);
         double forest_ratio = dis_forest(gen);
         double chain_ratio = dis_chain(gen);
 
@@ -347,7 +347,7 @@ void grand_test_lca(std::mt19937& gen,parlay::random_generator& pgen, int iters)
 
 }
 
-// //choose a VERY large forest to test on
+// //choose a VERY large tree to test on
 void large_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
     test_lca(500'000'000, 100, 2, 10000, gen, pgen, 0, 0.3);
 
@@ -523,8 +523,15 @@ void mid_test_lca(std::mt19937& gen, parlay::random_generator& pgen,parlay::inte
 
 void extensive_lca(std::mt19937& gen, parlay::random_generator& pgen,parlay::internal::timer& tim) {
     
+
     small_test_lca(gen, pgen); //test small #s (edge case)
     std::cout << "Small test done in " << tim.next_time() << std::endl;
+
+    grand_test_lca(gen,pgen,100); //just lots of random values
+    std::cout << "Grand test done in " << tim.next_time() << std::endl;
+
+    large_test_lca(gen,pgen);
+    std::cout << "Large test done in " << tim.next_time() << std::endl;
 
     isolated_test_lca(gen,pgen); //isolated vs connected
         std::cout << "Isolated test done in " << tim.next_time() << std::endl;
@@ -538,12 +545,6 @@ void extensive_lca(std::mt19937& gen, parlay::random_generator& pgen,parlay::int
     single_tree_lca(gen,pgen);
         std::cout << "Single tree done in " << tim.next_time() << std::endl;
 
-
-    grand_test_lca(gen,pgen,100); //just lots of random values
-    std::cout << "Grand test done in " << tim.next_time() << std::endl;
-
-    large_test_lca(gen,pgen);
-    std::cout << "Large test done in " << tim.next_time() << std::endl;
 
 
     chain_test_lca(gen,pgen); //vary balanced vs chain formation
