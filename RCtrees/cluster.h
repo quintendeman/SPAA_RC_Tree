@@ -152,8 +152,7 @@ public:
         return retnum;
     }
 
-    
-
+    //default color is the numerical value of the pointer
     unsigned long get_default_colour(void)
     {
         return reinterpret_cast<unsigned long>(this);
