@@ -429,9 +429,9 @@ void bench(parlay::random_generator& pgen) {
 
 void bench_threads(parlay::random_generator& pgen) {
     int tscale=6;
-    long oldn = 10'000'000;//1'000'000;
-    int k = 10'000;
-    int trials_per=100;
+    long oldn = 20'000'000;//1'000'000;
+    int k = 200'000;
+    int trials_per=10;
 
     double mean = 20;
     double ln = 0.1;
@@ -589,8 +589,10 @@ int main(int argc, char* argv[]) {
 
     }
     else if (forest_ratio==-5) {
+        tim.next_time();
         //std::cout << "num_threads,n,ternsize,ln,mean,dist,time" << std::endl;
         bench_threads(pgen);
+        std::cout << "total runtime of tests: " << tim.next_time() << std::endl;
     }
     else if (forest_ratio==-6) {
         test();
