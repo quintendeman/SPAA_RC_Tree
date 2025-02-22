@@ -345,9 +345,9 @@ parlay::sequence<T> generate_tree_graph(T num_elements)
 
         if (random_val <= anywhere_prob && v > 0)
         {
-            std::uniform_int_distribution<> disint(0, v-1);
+            std::uniform_int_distribution<T> disint(0, v-1);
 
-            dummy_initial_parents[v] = disint(gen);
+            dummy_initial_parents[v] = disint(r);
         }
         else if (random_val < root_prob)
         {

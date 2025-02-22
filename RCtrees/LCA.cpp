@@ -343,8 +343,8 @@ parlay::sequence<long> tree_gen(long graph_size, parlay::sequence<cluster<long, 
 
       parlay::sequence<std::pair<long,long>> ret_edges_formatted = parlay::map(retedges,[&] (std::tuple<long,long,double>& edge) {return std::make_pair(std::get<0>(edge),std::get<1>(edge));});
 
-      auto initial_parent_tree = parentTree_from_treeGen(ret_edges_formatted,true);
-      pseq(initial_parent_tree,"initial par tree");
+      auto initial_parent_tree = parentTree_from_treeGen(graph_size,ret_edges_formatted);
+      //pseq(initial_parent_tree,"initial par tree");
 
       // auto retedges = generate_high_degree_graphs(graph_size);
     
@@ -365,7 +365,7 @@ parlay::sequence<long> tree_gen(long graph_size, parlay::sequence<cluster<long, 
       parlay::sequence<std::pair<long,long>> all_edges = parlay::map(ret_edge_modified,[&] (std::tuple<long,long,double>& edge) {return std::make_pair(std::get<0>(edge),std::get<1>(edge));});
 
       
-      return parentTree_from_treeGen(all_edges,true);
+      return parentTree_from_treeGen(initial_parent_tree.size()+2*retedges.size(),all_edges);
 
 }
 
@@ -389,7 +389,7 @@ std::chrono::duration<double> get_single_runtime(parlay::random_generator& pgen,
 
     auto static_creation_end = std::chrono::high_resolution_clock::now();
     //TOD2* add assertion here that queries check out? 
-    //handle_answers(queries,answers,k,parent_tree,clusters,0,0,0,0,"nofileprint"); 
+    handle_answers(queries,answers,k,parent_tree,clusters,0,0,0,0,"nofileprint"); 
 
     return static_creation_end-static_creation_start;
 
@@ -429,9 +429,9 @@ void bench(parlay::random_generator& pgen) {
 
 void bench_threads(parlay::random_generator& pgen) {
     int tscale=6;
-    long oldn = 200;//1'000'000;
+    long oldn = 1'000'000;//1'000'000;
     int k = 10'000;
-    int trials_per=5;
+    int trials_per=100;
 
     double mean = 20;
     double ln = 0.1;
@@ -456,7 +456,7 @@ void bench_threads(parlay::random_generator& pgen) {
     double average = total/trials_per;
     deleteRCtree(clusters);
 
-    std::cout << parlay::internal::init_num_workers() << "," << n << "," << ln << "," << mean << ", e, " << average << std::endl;
+    std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << ln << "," << mean << ", e, " << average << std::endl;
 
 }
 
@@ -515,7 +515,7 @@ int main(int argc, char* argv[]) {
 
     parlay::internal::timer tim = parlay::internal::timer();
 
-    std::cout << "hello world!31" << std::endl;
+    //std::cout << "hello world!31" << std::endl;
 
     int n = 10; //defaults
     int NUM_TRIALS = 1;
@@ -531,16 +531,16 @@ int main(int argc, char* argv[]) {
 
     parse_input(argc,argv,n,NUM_TRIALS,seed,pseed,NUM_TREES,k,forest_ratio,chain_ratio,is_from_file,filename);
 
-    std::cout << "pseed: " << pseed << std::endl;
+    //std::cout << "pseed: " << pseed << std::endl;
 
     std::mt19937 gen(seed);
     parlay::random_generator pgen(pseed);
 
-    std::cout << "Batch size: " << k << std::endl;
-    std::cout << "for ratio: " << forest_ratio << std::endl;
-    std::cout << "chain ratio: " << chain_ratio << std::endl;
+    // std::cout << "Batch size: " << k << std::endl;
+    // std::cout << "for ratio: " << forest_ratio << std::endl;
+    // std::cout << "chain ratio: " << chain_ratio << std::endl;
 
-    std::cout << "about to start" << tim.next_time() << std::endl;
+    // std::cout << "about to start" << tim.next_time() << std::endl;
 
 
     if (is_from_file) {
@@ -589,7 +589,7 @@ int main(int argc, char* argv[]) {
 
     }
     else if (forest_ratio==-5) {
-        std::cout << "num_threads,graph_size,ln,mean,dist,time" << std::endl;
+        //std::cout << "num_threads,n,ternsize,ln,mean,dist,time" << std::endl;
         bench_threads(pgen);
     }
     else if (forest_ratio==-6) {

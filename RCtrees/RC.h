@@ -295,6 +295,7 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
     parlay::parallel_for(0, base_clusters.size(), [&] (const T i){
         auto& clstr = base_clusters[i];
         clstr.state = base_vertex | live;
+        clstr.data = defretval; //must reset base vertex clusters to default val as well as edge clusters
         
         const auto& v= i;
 

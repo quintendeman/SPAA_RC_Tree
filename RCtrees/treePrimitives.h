@@ -383,8 +383,12 @@ void degree_cap_add_edge(parlay::sequence<T> &parents, const T max_degree, parla
 
 //given a list of edges that form a (unbounded degree) tree, convert to parent tree form
 //Sequential -- don't run often!
+//TOD2* What data type for newsize? 
 template<typename T>
-parlay::sequence<T> parentTree_from_treeGen(parlay::sequence<std::pair<T,T>>& edges, bool extra_print=false) {
+parlay::sequence<T> parentTree_from_treeGen(long newsize, parlay::sequence<std::pair<T,T>>& edges, bool extra_print=false) {
+
+
+    //std::cout << "newsize: " << newsize << std::endl;
    
 
     if (extra_print) {
@@ -419,7 +423,7 @@ parlay::sequence<T> parentTree_from_treeGen(parlay::sequence<std::pair<T,T>>& ed
     //capture the range of ids that the (ternerized) edges have
     int edge_size = *parlay::max_element(parlay::map(edge_groups,[&] (auto i) {return i.first;}))+1;
 
-    parlay::sequence<parlay::sequence<long>> unrooted_tree(edge_size);
+    parlay::sequence<parlay::sequence<long>> unrooted_tree(newsize);
     parlay::parallel_for(0,edge_groups.size(),[&] (size_t i) {
         unrooted_tree[edge_groups[i].first]=parlay::tabulate(edge_groups[i].second.size(),[&] (size_t j) {return edge_groups[i].second[j];});
     });
