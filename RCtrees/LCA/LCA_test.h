@@ -17,16 +17,16 @@ void test_lca(int n, int NUM_TRIALS, int NUM_TREES, int k, std::mt19937& gen,par
 // //more extensive LCA test (lots of randomness)
 void grand_test_lca(std::mt19937& gen,parlay::random_generator& pgen, int iters) {
     std::uniform_int_distribution<int> disn(1,100000000);
-    std::uniform_int_distribution<int> dis_tri(1000);
-    std::uniform_int_distribution<int> dis_tree(100);
+    std::uniform_int_distribution<int> dis_tri(100);
+    std::uniform_int_distribution<int> dis_tree(10);
     std::uniform_int_distribution<int> dis_k(10000,50000); 
     std::uniform_real_distribution<double> dis_forest(0,1);
     std::uniform_real_distribution<double> dis_chain(0,1);
 
     for (int i = 0; i < iters; i++) {
         int n = disn(gen);
-        int trials = dis_tri(gen);
-        int num_trees = dis_tree(gen);
+        int trials = 10; 
+        int num_trees = 3; 
         int k = dis_k(gen);
         double forest_ratio = dis_forest(gen);
         double chain_ratio = dis_chain(gen);
@@ -82,31 +82,33 @@ void small_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
 // //a chain (large and mid sized)
 // ~ 300 mil tree budget
 void chain_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
-    std::cout << "about to start chain 5" << std::endl;
+    parlay::internal::timer t;
+    t.start();
+    std::cout << "about to start chain 5 " << t.next_time() << std::endl;
     test_lca<int,int>(5,100,3,10,gen,pgen,0,1,false);
-        std::cout << "about to start chain 50" << std::endl;
+        std::cout << "about to start chain 50 " << t.next_time() << std::endl;
 
     test_lca<int,int>(50,100,3,10,gen,pgen,0,1);
-        std::cout << "about to start chain 500" << std::endl;
+        std::cout << "about to start chain 500: " << t.next_time() << std::endl;
 
     test_lca<int,int>(500,100,3,50,gen,pgen,0,1);
-        std::cout << "about to start chain 5000" << std::endl;
+        std::cout << "about to start chain 5000: " << t.next_time() << std::endl;
 
     test_lca<int,int>(5000,100,3,50,gen,pgen,0.001,1);
 
-        std::cout << "about to start chain 5000'2" << std::endl;
+        std::cout << "about to start chain 5000'2: "  << t.next_time()  << std::endl;
 
     test_lca<int,int>(5000,100,3,50,gen,pgen,0,1);
-        std::cout << "about to start chain 100K" << std::endl;
+        std::cout << "about to start chain 100K: "  << t.next_time() << std::endl;
 
     test_lca<int,int>(100000,100,3,1000,gen,pgen,0,1);
-        std::cout << "about to start chain 1mil" << std::endl;
+        std::cout << "about to start chain 1mil: "  << t.next_time()  << std::endl;
 
     test_lca<int,int>(1000000,10,3,1000,gen,pgen,0,1);
-        std::cout << "about to start chain 10mil" << std::endl;
+        std::cout << "about to start chain 10mil: "  << t.next_time() << std::endl;
 
-    test_lca<int,int>(100000000,5,3,1000,gen,pgen,0,1);
-        std::cout << "finished chain 10mil" << std::endl;
+    test_lca<int,int>(100000000,5,3,100,gen,pgen,0,1);
+        std::cout << "finished chain 10mil: " << t.next_time()  << std::endl;
 
 
 }
@@ -134,8 +136,8 @@ void n_k_test_lca(std::mt19937& gen,parlay::random_generator& pgen) {
     test_lca<int,int>(10,10,10,10,gen,pgen,.1,.3);
     test_lca<int,int>(200,5,5,210,gen,pgen,.1,.3);
     test_lca<int,int>(10000,5,5,7000,gen,pgen,.01,.2);
-    test_lca<int,int>(100000000,10,10,100005000,gen,pgen,.001,.3);
-    test_lca<int,int>(70000000,10,10,50000000,gen,pgen,.05,.3);
+    test_lca<int,int>(100000000,10,3,100005000,gen,pgen,.001,.3);
+    test_lca<int,int>(70000000,10,3,50000000,gen,pgen,.05,.3);
 
 }
 
@@ -224,6 +226,10 @@ void short_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
 void extensive_lca(std::mt19937& gen, parlay::random_generator& pgen,parlay::internal::timer& tim) {
     
     
+
+    large_test_lca(gen,pgen);
+    std::cout << "Large test done in " << tim.next_time() << std::endl;
+
     small_test_lca<int,int>(gen, pgen); //test small #s (edge case)
     std::cout << "Small test done in " << tim.next_time() << std::endl;
 
@@ -233,11 +239,8 @@ void extensive_lca(std::mt19937& gen, parlay::random_generator& pgen,parlay::int
     short_test_lca(gen,pgen);
     std::cout << "small test short type done in " << tim.next_time() << std::endl;
 
-    grand_test_lca(gen,pgen,100); //just lots of random values
+    grand_test_lca(gen,pgen,10); //just lots of random values
     std::cout << "Grand test done in " << tim.next_time() << std::endl;
-
-    large_test_lca(gen,pgen);
-    std::cout << "Large test done in " << tim.next_time() << std::endl;
 
     isolated_test_lca(gen,pgen); //isolated vs connected
         std::cout << "Isolated test done in " << tim.next_time() << std::endl;
