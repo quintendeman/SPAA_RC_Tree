@@ -429,7 +429,7 @@ void bench(parlay::random_generator& pgen) {
 
 void bench_threads(parlay::random_generator& pgen) {
     int tscale=6;
-    long oldn = 1'000'000;//1'000'000;
+    long oldn = 10'000'000;//1'000'000;
     int k = 10'000;
     int trials_per=100;
 
