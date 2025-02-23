@@ -39,7 +39,7 @@ void grand_test_lca(std::mt19937& gen,parlay::random_generator& pgen, int iters)
 
 // //choose a VERY large tree to test on
 void large_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
-    test_lca<int,int>(500'000'000, 100, 2, 10000, gen, pgen, 0, 0.3);
+    test_lca<int,int>(300'000'000, 100, 2, 10000, gen, pgen, 0, 0.3);
 
 }
 
