@@ -49,6 +49,7 @@ class TreeGen
         */
         TreeGen(T num_vertices, D min_weight = 0.0, D max_weight = 1.0, double l = 0.95f, double mean = 1000.0f, distribution dist = uniform, bool randomize_map = true, long seed = 15213)
         {
+            assert(mean <= num_vertices); //otherwise subgraph assertion fails later
             assert(num_vertices > 0);
             assert(l > 0.0f && l < 1.0f); 
             assert(mean > 1.0f);

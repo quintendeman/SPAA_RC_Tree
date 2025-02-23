@@ -398,65 +398,68 @@ std::chrono::duration<double> get_single_runtime(parlay::random_generator& pgen,
 
 
 void bench(parlay::random_generator& pgen) {
-    long n = 1'000'000;
-    // int kscale=10;
-    // double mean = 20;
-    // double ln = 0.1;
+    long oldn = 10'000'000;
+    int kscale=20;
+    double mean = 20;
+    double ln = 0.1;
+    long k = -1;
 
 
-    // int trials_per=5;
+    int trials_per=10;
 
-    // parlay::sequence<int> kvals = parlay::tabulate(kscale,[&] (int i) {return 1 << i;});
-    // parlay::sequence<cluster<long, double>> clusters; 
+    parlay::sequence<int> kvals = parlay::tabulate(kscale,[&] (int i) {return 1 << i;});
+    parlay::sequence<cluster<long, double>> clusters; 
 
-    // parlay::sequence<long> parent_tree = tree_gen(n,clusters,mean,ln); //one tree for all testing
+    parlay::sequence<long> parent_tree = tree_gen(oldn,clusters,mean,ln); //one tree for all testing
+    long n = parent_tree.size();
 
-    // std::uniform_int_distribution<long> dis(0,n-1);
+    std::uniform_int_distribution<long> dis(0,n-1);
 
+    double total=0;
+    for (int j = 0; j < kvals.size(); j++) {
+        total=0;
+        k=kvals[j];
+        for (int iter = 0; iter < trials_per; iter++) {
+            total += get_single_runtime(pgen,clusters,k,dis,parent_tree).count();
+        }
+        double average = total/trials_per;
 
-    // for (int j = 0; j < kvals.size(); j++) {
-    //     for (int iter = 0; iter < trials_per; iter++) {
-    //         std::cout << kvals[j] << " " << get_single_runtime(pgen,clusters,kvals[j],dis,parent_tree).count() << std::endl;
-    //     }
-    //     std::cout << std::endl;
-    // }
-    // deleteRCtree(clusters);
+        std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << ", e, " << average << std::endl;
+    }
+   
+
+    deleteRCtree(clusters);
 
 
 
 }
 
 
-void bench_threads(parlay::random_generator& pgen) {
-    int tscale=6;
-    long oldn = 20'000'000;//1'000'000;
-    int k = 200'000;
-    int trials_per=10;
+//pass in n,k via input parms
+void bench_threads(parlay::random_generator& pgen, long oldn, long k, int NUM_TRIALS) {
 
     double mean = 20;
     double ln = 0.1;
     auto distribution = exponential; // either exponential, geometric, constant or linear
 
-    parlay::sequence<int> thread_counts = parlay::tabulate(tscale,[&] (int i) {return 1 << i;});
-
     parlay::sequence<cluster<long, double>> clusters; 
 
     parlay::sequence<long> parent_tree = tree_gen(oldn,clusters,mean,ln); //one tree for all testing
-
+    //pseq(parent_tree,"parent tree");
     long n = parent_tree.size(); //ternerized size
 
     std::uniform_int_distribution<long> dis(0,n-1);
 
     double total = 0;
 
-    for (int iter = 0; iter < trials_per; iter++) {
+    for (int iter = 0; iter < NUM_TRIALS; iter++) {
         total += get_single_runtime(pgen,clusters,k,dis,parent_tree).count();
         
     }
-    double average = total/trials_per;
+    double average = total/NUM_TRIALS;
     deleteRCtree(clusters);
 
-    std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << ln << "," << mean << ", e, " << average << std::endl;
+    std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << ", e, " << average << std::endl;
 
 }
 
@@ -589,10 +592,10 @@ int main(int argc, char* argv[]) {
 
     }
     else if (forest_ratio==-5) {
-        tim.next_time();
+        //tim.next_time();
         //std::cout << "num_threads,n,ternsize,ln,mean,dist,time" << std::endl;
-        bench_threads(pgen);
-        std::cout << "total runtime of tests: " << tim.next_time() << std::endl;
+        bench_threads(pgen,n,k,NUM_TRIALS);
+        //std::cout << "total runtime of tests: " << tim.next_time() << std::endl;
     }
     else if (forest_ratio==-6) {
         test();
