@@ -2,12 +2,7 @@
 #include "../include/parlay/primitives.h"
 #include <cmath>
 
-<<<<<<< HEAD
-static const int max_edges = 1 << 30; // an ungodly high number
-// static const int max_edges = 3; 
-=======
 static const int max_edges = 1 << 30;
->>>>>>> b39592b1e99bc243a3d0fcc167fb0e7874a2454e
 
 enum distribution {
         constant,
