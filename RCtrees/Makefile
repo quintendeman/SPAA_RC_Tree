@@ -1,6 +1,6 @@
 # Variables
 CXX = g++
-CXXFLAGS = -O0 -std=c++17 -pthread -g -Werror -Wparentheses -flto
+CXXFLAGS = -O3 -std=c++17 -pthread -g -Werror -Wparentheses -flto
 # CXXFLAGS = -O0 -flto -std=c++17 -pthread -g -Werror -Wparentheses
 INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/ -I parhash_include/ -I LCA -I .
 LDFLAGS = -ljemalloc
