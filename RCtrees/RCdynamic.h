@@ -9,6 +9,7 @@
 #include "cluster.h"
 #include "RC.h"
 #include <parlay/alloc.h>
+#include "RC_test.h"
 
 static const char PRINT_DYNAMIC = 0;
 
@@ -339,57 +340,22 @@ void create_decompressed_affected(parlay::sequence<node<T,D>*>& affected_nodes)
     return;
 }
 
-template<typename T, typename D, typename lambdafunc>
-void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func)
-{
-
-    // std::cout << "I, " << contracted_node->cluster_ptr->index << " am accumulating" << std::endl;
-
-    contracted_node->cluster_ptr->data = defretval;
-    contracted_node->cluster_ptr->max_weight_edge = nullptr;
-    bool found = false;
-    for(auto& child : contracted_node->cluster_ptr->children)
-    {
-        if(child == nullptr)
-            continue;
-        bool valid_child = false;
-        if(child->adjacency.get_head()->state & base_edge)
-            valid_child = true;
-        else if (child->first_contracted_node->state & (binary_cluster | base_edge))
-            valid_child = true;
-        else if (child->first_contracted_node->next == nullptr)
-            valid_child = false;
-        else if (child->first_contracted_node->next->state & (binary_cluster | base_edge))
-            valid_child = true;
-        
-        
-        if(valid_child)
-        {
-            if(!found)
-            {
-                contracted_node->cluster_ptr->data = child->data;
-                contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
-                found = true;
-            }
-            else
-            {
-                if(child->data > contracted_node->cluster_ptr->data)
-                    contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
-                contracted_node->cluster_ptr->data = func(contracted_node->cluster_ptr->data, child->data);
-            
-            }
-        }
-    }
-
-    return;
-}
 
 template<typename T, typename D>
 bool unParent(cluster<T,D>* cluster_ptr)
 {
-    if(cluster_ptr->parent == nullptr)
+    // if(cluster_ptr->parent == nullptr)
+    //     return false;
+    cluster<T,D>* expected = cluster_ptr->parent.load();
+    cluster<T,D>* old_parent_value = expected;
+    if(expected == nullptr)
         return false;
-    for(auto& parents_child : cluster_ptr->parent->children)
+    cluster<T,D>* new_value = nullptr;
+    bool success = cluster_ptr->parent.compare_exchange_strong(expected, new_value);
+    if(!success)
+        return false;
+
+    for(auto& parents_child : expected->children)
         if(parents_child == cluster_ptr)
         {
             parents_child = nullptr;
@@ -410,13 +376,13 @@ void recursive_unParent(cluster<T,D>* cluster_ptr)
         bool retval = unParent(old_cluster_ptr);
         if(retval == false)
             break;
+        // old_cluster_ptr->parent = nullptr;
     }
 }
 
 template<typename T, typename D>
 void remove_affection_back(node<T,D>* node_ptr)
 {
-    
     do
     {
         node_ptr->state &= (~affected);
@@ -425,7 +391,7 @@ void remove_affection_back(node<T,D>* node_ptr)
 }
 
 template<typename T, typename D, typename lambdafunc>
-void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, D>>& add_edges, parlay::sequence<cluster<T, D>>& clusters, D defretval, lambdafunc func)
+void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, D>>& add_edges, parlay::sequence<cluster<T, D>>& clusters, D defretval, lambdafunc func, bool randomized = false)
 {
     using cluster_allocator = parlay::type_allocator<cluster<T,D>>;
 
@@ -444,13 +410,13 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             // std::cout << v << " -- " << w << " added" << std::endl;
         }
         parlay::sequence<node<T,D>*> ret_seq = {clusters[v].adjacency.get_head(), clusters[w].adjacency.get_head()};
-        if(ret_seq[0] == nullptr || ret_seq[1] == nullptr) // TODO remove
-        {
-            std::cout << red << "This should never happen, nullptr on head?" << reset << std::endl;
-            exit(1);
-        }
-        ret_seq[0]->tiebreak() = i*2;
-        ret_seq[1]->tiebreak() = i*2 +1;
+        // if(ret_seq[0] == nullptr || ret_seq[1] == nullptr) // TODO remove
+        // {
+        //     std::cout << red << "This should never happen, nullptr on head?" << reset << std::endl;
+        //     exit(1);
+        // }
+        ret_seq[0]->cluster_ptr->tiebreak = i*2;
+        ret_seq[1]->cluster_ptr->tiebreak = i*2 +1;
         return ret_seq;
     }));
 
@@ -475,7 +441,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
     }
 
     parlay::parallel_for(0, tree_nodes.size(), [&] (T i){
-        if(tree_nodes[i]->tiebreak() != i)
+        if(tree_nodes[i]->cluster_ptr->tiebreak != i)
             tree_nodes[i] = nullptr;
     });
 
@@ -573,7 +539,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
                 }
                 if(edge_node == nullptr)
                 {
-                    auto newEdgeClstrPtr = cluster_allocator::alloc();
+                    auto newEdgeClstrPtr = cluster_allocator::create();
                     newEdgeClstrPtr->add_empty_level(base_edge, 0);
                     newEdgeClstrPtr->data = std::get<2>(edge.E);
                     newEdgeClstrPtr->index = -1;
@@ -719,12 +685,12 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             return node_ptr->get_num_neighbours_live() <= 2;
         });
 
-        set_MIS(update_eligible_set, true);
+        set_MIS(update_eligible_set, true, randomized);
         mis_set = parlay::filter(update_eligible_set, [] (auto node_ptr){
             return node_ptr->cluster_ptr->state & IS_MIS_SET;
         });
 
-        if(clusters.size() <= 100)
+        if(clusters.size() <= 100 && PRINT_DYNAMIC)
         {
             printTree(clusters, count+2);
         }
@@ -761,12 +727,12 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
         frontier = new_frontier;
 
         parlay::parallel_for(0, frontier.size(), [&] (T i){
-            if(frontier[i]->next == nullptr) // TODO remove
-            {
-                std::cout << "Should never happen!" << std::endl;
-                std::cout << "frontier[i] = " << frontier[i]->index() << std::endl;
-                exit(1);
-            }
+            // if(frontier[i]->next == nullptr) // TODO remove
+            // {
+            //     std::cout << "Should never happen!" << std::endl;
+            //     std::cout << "frontier[i] = " << frontier[i]->index() << std::endl;
+            //     exit(1);
+            // }
             frontier[i] = frontier[i]->next;
         });
 
@@ -806,7 +772,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
 
     // std::cout << "[dynamic] exited" << std::endl;
 
-    check_parents_children(clusters); // todo remove
+    // check_parents_children(clusters); // todo remove
 
     if(count == max_count)
     {

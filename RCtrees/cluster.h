@@ -9,17 +9,6 @@
 #include "../include/parlay/sequence.h"
 #include <atomic>
 
-  
-const char neighbour_type = 1;
-const char parent_type = 2;
-const char child_type = 4;
-const char edge_type = 8;
-const char added_type = 16;
-const char deleted_type = 32;
-
-
-
-
 const char* reset = "\033[0m";
 const char* black = "\033[30m";
 const char* red = "\033[31m";
@@ -67,9 +56,9 @@ public:
     T index;
     adjacency_list<T,D> adjacency;
     std::atomic<T> counter;
-    T tiebreak;
-    T& colour = tiebreak;
-    cluster<T,D>* parent = nullptr;
+    std::atomic<T> tiebreak;
+    std::atomic<T>& colour = tiebreak; // does this work
+    std::atomic<cluster<T,D>*> parent = nullptr; // TODO convert to atomic and modify RCdynamic.h too to prevent obscure scenario of extra work (but should still be n)
     std::array<cluster<T,D>*, max_neighbours> children;
     node<T,D>* first_contracted_node = nullptr;
     D data;
@@ -80,12 +69,16 @@ public:
     std::array<std::atomic<bool>, max_neighbours> CGEntryValid;
     T vertex_count = 0;
 
+    // subtree stuff
+    std::array<D, max_neighbours> partial_sums;
+    std::array<std::atomic<char>, max_neighbours> partial_sum_complete;
+
 
     // short finalize_time = 0; // TODO remove
     // short asked_to_increment = 0; // TODO remove
     int state;
 
-    cluster(void) : counter(0)
+    cluster(void) : counter(0), colour(tiebreak)
     {
         for(short i = 0; i < max_neighbours; i++)
             this->children[i] = nullptr;
@@ -159,8 +152,7 @@ public:
         return retnum;
     }
 
-    
-
+    //default color is the numerical value of the pointer
     unsigned long get_default_colour(void)
     {
         return reinterpret_cast<unsigned long>(this);
@@ -344,8 +336,8 @@ public:
         std::cout << bright_green << this->data << " " << reset;
         std::cout << bright_magenta << this->counter << " " << reset;
         std::cout << bright_yellow;
-        if(this->parent)
-            std::cout << this->parent->index << " ";
+        if(this->parent.load())
+            std::cout << this->parent.load()->index << " ";
         else
             std::cout << "nl ";
         std::cout << reset;

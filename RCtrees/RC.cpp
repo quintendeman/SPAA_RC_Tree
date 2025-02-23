@@ -13,7 +13,8 @@
 #include "RCdynamic.h"
 #include "../examples/samplesort.h"
 #include "incMST.h"
-
+#include "utils.h"
+#include "random_trees.h"
 
 // **************************************************************
 // Driver
@@ -25,12 +26,6 @@ using graph = parlay::sequence<parlay::sequence<vertex> >;
 using datatype = double;
 
 const vertex max_degree = 3;
-
-const double espilon = 0.001;
-
-static bool isNearlyEqual(double a, double b, double epsilon = espilon) {
-    return std::abs(a - b) < epsilon;
-}
 
 
 // This wipes out all existing weights, replacing them with random ones
@@ -105,7 +100,7 @@ int main(int argc, char* argv[]) {
 
     srand(time(NULL));
 
-    const vertex max_rand_size = 100000000l;
+    const vertex max_rand_size =10000000l; //100000000l;
     // vertex graph_size = rand() % max_rand_size; 
     vertex graph_size = 1; 
     for(unsigned short i = 0; i < 3; i++) // random but leaning more towards higher values

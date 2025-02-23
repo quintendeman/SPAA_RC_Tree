@@ -15,8 +15,9 @@
 #include <parlay/alloc.h>
 #include "cluster.h"
 #include "../examples/counting_sort.h"
+#include "utils.h"
+#include "MIS.h"
 
-static const char PRINT_QUERY = 0;
 
 template <typename edgetype>
 struct edge_with_flag
@@ -25,318 +26,71 @@ struct edge_with_flag
     bool valid = true;
 };
 
-/*
-    Generate a simple, single rooted graph with each node having two children
-    Then, randomly, change the parent of each node with a certain probability such that it picks something on the left of it
 
-    Returns an array of parents such that the parents of index V would be parents[V]
-*/
-template <typename T>
-parlay::sequence<T> generate_tree_graph(T num_elements)
+template<typename T, typename D>
+inline bool isNullary(const cluster<T,D>* cluster_ptr)
 {
-    assert(num_elements > 0);
-
-    parlay::sequence<T> dummy_initial_parents = parlay::tabulate(num_elements, [&] (T v) {return (T) 0;});
-
-    std::mt19937 gen(std::random_device{}());
-    
-
-    parlay::parallel_for(0, num_elements, [&] (T v) {
-        std::uniform_real_distribution<double> dis(0, 1);
-        auto random_val = dis(gen);
-
-        static const double anywhere_left_weight = 0.5;
-        static const double immediate_left_weight = 10.0;
-        static const double root_weight = 0.01; /* warning, does not represet probability of a null cluster as degree capping may create more forests */
-
-        static const double anywhere_prob = (anywhere_left_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
-        static const double root_prob = anywhere_prob + (root_weight/(anywhere_left_weight+immediate_left_weight+root_weight));
-
-        if (random_val <= anywhere_prob && v > 0)
-        {
-            std::uniform_int_distribution<> disint(0, v-1);
-
-            dummy_initial_parents[v] = disint(gen);
-        }
-        else if (random_val < root_prob)
-        {
-            dummy_initial_parents[v] = v;
-        }
-        else
-            dummy_initial_parents[v] = v == 0 ? 0 : v - 1;
-    });  
-    
-    return dummy_initial_parents;
-}
-
-/*
-    Converts the parents array into a symmetric graph
-*/
-template <typename graph, typename T>
-graph convert_parents_to_graph(graph G, parlay::sequence<T> parents)
-{
-    parlay::sequence<T> vertices = parlay::tabulate(parents.size(), [&] (T v) {return v;});
-
-    G = parlay::map(vertices, [&] (T v) {
-        if(parents[v] == v) // root
-        {
-            parlay::sequence<T> empty;
-            return empty;
-        }
-        parlay::sequence<T> temp = parlay::tabulate(1, [&] (T i) {return i;});
-        temp[0] = parents[v];
-        return temp;
-    });
-
-    G = graph_utils<T>::symmetrize(G);
-
-    return G;
-}
-
-/**
- * Ensures that the degree is capped for the parents vector
- * i.e. not too many nodes have the same parent
- * Uses locking! Fortunately, we don't care about the performance for the graph generation too much
-*/
-template <typename T>
-parlay::sequence<T> degree_cap_parents(parlay::sequence<T> &parents, const T max_degree)
-{
-    parlay::sequence<std::atomic<T>> counts = parlay::tabulate(parents.size(), [] (size_t) {
-       return std::atomic<T>(0); // Initialize each element with the value 0
-    });
-
-
-    parlay::parallel_for(0, parents.size(), [&] (T v) {
-        if(v == parents[v])
-            return;
-        T parent_count = counts[parents[v]].fetch_add(1);
-        if(parent_count < (max_degree - 1))
-        {
-            return;
-        }
-        else
-            parents[v] = v;
-    });
-
-    return parlay::tabulate(parents.size(), [&] (T i) {
-        return counts[i].load();
-    });
-
+    if(!cluster_ptr)
+        return false;
+    if(cluster_ptr->first_contracted_node == nullptr)
+        return false;
+    if(cluster_ptr->first_contracted_node->next == nullptr)
+        return false;
+    return cluster_ptr->first_contracted_node->next->state & nullary_cluster;
 }
 
 template<typename T, typename D>
-void degree_cap_add_edge(parlay::sequence<T> &parents, const T max_degree, parlay::sequence<std::tuple<T, T, D> >& tuples)
+inline bool isUnary(const cluster<T,D>* cluster_ptr)
 {
-    parlay::sequence<std::atomic<T>> counts = parlay::tabulate(parents.size(), [] (size_t) {
-       return std::atomic<T>(0); // Initialize each element with the value 0
-    });
+    if(!cluster_ptr)
+        return false;
+    if(cluster_ptr->first_contracted_node == nullptr)
+        return false;
+    if(cluster_ptr->first_contracted_node->next == nullptr)
+        return false;
+    return cluster_ptr->first_contracted_node->next->state & unary_cluster;
+}
 
-    std::vector<std::mutex> mutexes(counts.size());
+template<typename T, typename D>
+inline bool isBinary(const cluster<T,D>* cluster_ptr)
+{
+    if(!cluster_ptr)
+        return false;
+    if(cluster_ptr->first_contracted_node == nullptr)
+        return false;
+    if(cluster_ptr->first_contracted_node->next == nullptr)
+        return false;
+    return cluster_ptr->first_contracted_node->next->state & binary_cluster;
+}
 
-    parlay::parallel_for(0, counts.size(), [&] (T chld) {
-        if(parents[chld] != chld)
-        {
-            counts[parents[chld]].fetch_add(1);
-        }
-    });
+template<typename T, typename D>
+inline bool isBinaryOrEdge(const cluster<T,D>* cluster_ptr) {
+    if (!cluster_ptr) 
+        return false;
+    if(cluster_ptr->first_contracted_node == nullptr)
+        return false;
+    if(cluster_ptr->first_contracted_node->next == nullptr)
+        return false;
+    return cluster_ptr->first_contracted_node->next->state & (binary_cluster | base_edge);
+}
 
-    tuples = parlay::filter(tuples, [&] (auto tple) {
-        auto& child = std::get<0>(tple);
-        auto& parent = std::get<1>(tple);
-        if(child == parent)
+template<typename T, typename D>
+bool isLeaf(const cluster<T,D>* cluster_ptr)
+{
+    if(!cluster_ptr)
+        return false;
+    if(cluster_ptr->first_contracted_node == nullptr)
+        return false;
+    if(cluster_ptr->first_contracted_node->next == nullptr)
+        return false;
+    for(auto& child : cluster_ptr->children)
+    {
+        if(child != nullptr && !(child->state & base_edge))
             return false;
-        bool ret_val = false;
-
-        mutexes[parent].lock();
-        mutexes[child].lock();
-        if(counts[child] < max_neighbours)
-        {
-            if(counts[parent] < max_neighbours - 2)
-            {
-                counts[parent]++;
-                parents[child] = parent;
-                ret_val = true;
-            }
-            else if(counts[parent] == max_neighbours - 1 && parents[parent] == parent)
-            {
-                counts[parent]++;
-                parents[child] = parent;
-                ret_val = true;        
-            }
-        }
-        mutexes[parent].unlock();
-        mutexes[child].unlock();
-        return ret_val;
-    });
-    
-
-    return;
-}
-
-
-/**
- * Extracts a particular bit (counted from the right) from an element
-*/
-template <typename T>
-inline bool extract_bit(T number, int offset_from_right)
-{
-    return (number >> offset_from_right) & 1;
-}
-
-/*
-    Returns index of first different bit from the left
-    Sets the value of bit in the boolean bit
-    Sets the value of b
-    sizeof(T) must be less than 16 bytes
-*/
-template <typename T>
-inline char first_different_bit(const T a, const T b, bool* bit)
-{
-    T difference = a ^ b;
-    char num_bits = sizeof(T) * 8;
-    
-    for(char i = num_bits-1; i >= 0; i--)
-    {
-        bool inspected_bit = extract_bit(difference, i);
-        if(inspected_bit)
-        {
-            if(bit) *bit = extract_bit(b, i);
-            return i;
-        }
     }
-
-    return -1;
+    return true;
 }
 
-/*
-    returns a char with I_w and C_w(I_w) packed
-    I_w is the index of the first different bit
-    C_w is the value in neighbour w of this bit
-    Also sets the different bit index in the char ptr different_bit_index
-
-    Also, technically I waste the left-most bit in each char
-*/
-
-template <typename T>
-static unsigned char get_single_colour_contribution(const T vcolour, const T wcolour, char* different_bit_index = NULL)
-{
-    bool wbit = false;
-    char different_bit = first_different_bit(vcolour, wcolour, &wbit);
-    char final_returned_character = (different_bit << 1) | wbit;
-    if(different_bit_index) *different_bit_index = different_bit;
-    return final_returned_character;
-}
-
-// /*
-//     Given a set of cluster ptrs, colours them.
-//     The clusters must have an initial valid colouring stored in their temp_colour folder
-//     The clusters should be for "vertices" s.t. one hop from each vertex is a cluster representing an edge
-//     and two hops away is a vertex representing a neighbouring node
-// */
-template<typename T, typename D>
-void colour_nodes(parlay::sequence<node<T,D>*> tree_nodes)
-{
-    static const T local_maximum_colour = (T) 0;
-    static const T local_minimum_colour = (T) 1;    
-
-    parlay::parallel_for(0, tree_nodes.size(), [&] (T I) {
-        auto& cluster_ptr = tree_nodes[I]->cluster_ptr;
-        unsigned long local_maximum = cluster_ptr->get_default_colour();
-        unsigned long local_minimum = local_maximum;
-        unsigned long my_colour = local_maximum;
-
-        auto& node_ptr = tree_nodes[I];
-
-        for(auto& edge_ptr : node_ptr->adjacents)
-        {
-            if(edge_ptr == nullptr || !(edge_ptr->state & (binary_cluster | base_edge)))
-                continue;
-            cluster<T,D>* other_ptr = get_other_side(node_ptr, edge_ptr)->cluster_ptr;
-            unsigned long compared_colour = other_ptr->get_default_colour();
-            if(compared_colour > local_maximum)
-                local_maximum = compared_colour;
-            if(compared_colour < local_minimum)
-                local_minimum = compared_colour;   
-            
-        }
-        if(local_maximum == my_colour) // This node is a local maximum, give it a unique colour
-        {
-            cluster_ptr->colour = local_maximum_colour;
-        }
-        else if(local_minimum == my_colour)
-        {
-            cluster_ptr->colour = local_minimum_colour;
-        }
-        else
-        {
-            cluster_ptr->colour = 2 + (get_single_colour_contribution(my_colour, local_maximum) / 2); // adding 2 and removing indicator bit
-        }
-    });
-    return;
-}
-
-// /*
-//     sets a boolean flag in the clusters indicating that they're part of MIS
-//     also may change the boolean flag of some other clusters, only consider the clusters in this
-//     These clusters must have a maximum degree of 2
-// */
-template<typename T, typename D>
-void set_MIS(parlay::sequence<node<T, D>*>& tree_nodes, bool use_tree_nodes = false)
-{
-    auto cluster_ptrs = parlay::tabulate(tree_nodes.size(), [&] (T i) {
-        return tree_nodes[i]->cluster_ptr;
-    });
-    colour_nodes(tree_nodes);
-
-    parlay::parallel_for(0, cluster_ptrs.size(), [&] (T v) {
-        cluster_ptrs[v]->state &= (~IS_MIS_SET);
-        if(use_tree_nodes)
-            cluster_ptrs[v]->set_neighbour_mis(false, tree_nodes[v]);
-        else
-            cluster_ptrs[v]->set_neighbour_mis(false);
-    });
-
-    auto colours = parlay::tabulate(cluster_ptrs.size(), [&] (T v) {
-        return cluster_ptrs[v]->colour;
-    });
-
-    auto vertices = parlay::tabulate(cluster_ptrs.size(), [] (T v) {
-        return v;
-    });
-
-    auto result = vertices;
-
-    parlay::sequence<unsigned long> offsets = counting_sort(vertices.begin(), vertices.end(), result.begin(), colours.begin(), 8 * sizeof(unsigned long));
-
-
-    for(uint i = 0; i < offsets.size(); i++)
-    {
-        T start_index;
-        if (i == 0)
-            start_index = 0;
-        else
-            start_index = offsets[i-1];
-        T end_index = offsets[i];
-
-        parlay::parallel_for(start_index, end_index, [&] (T i) {
-            T v = result[i];
-            if(use_tree_nodes)
-            {
-                if(cluster_ptrs[v]->get_neighbour_mis(tree_nodes[v]) == true)
-                {
-                    cluster_ptrs[v]->state &= (~IS_MIS_SET);
-                    return;
-                } 
-            }
-            else if(cluster_ptrs[v]->get_neighbour_mis() == true)
-            {
-                cluster_ptrs[v]->state &= (~IS_MIS_SET);
-                return;
-            }
-            cluster_ptrs[v]->state |= IS_MIS_SET;
-        });
-    }
-}
 
 template<typename T, typename D>
 void finalize(node<T,D>* contracted_node)
@@ -352,14 +106,13 @@ void finalize(node<T,D>* contracted_node)
     return;
 }
 
-
 /**
  * MUST have at most 2 neighbours
  */
 template<typename T, typename D>
 void contract(node<T,D>* node_ptr, bool affect = false)
 {
-    
+    node_ptr->cluster_ptr->colour = static_cast<T>(0);
     if(node_ptr->get_num_neighbours_live() == 0)
     {
         node_ptr->state &= (~(unary_cluster | binary_cluster | nullary_cluster));
@@ -531,7 +284,8 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
         cluster<T,D> base_cluster;
         return base_cluster;
     });
-    // TODO merge with above!
+    // TODO merge with above! 
+    // Don't! it crashes the program :)
     parlay::parallel_for(0, base_clusters.size(), [&] (T i){
         base_clusters[i].index = i;
         base_clusters[i].add_empty_level(live, 0);
@@ -541,6 +295,7 @@ void create_base_clusters(parlay::sequence<parlay::sequence<T>> &G, parlay::sequ
     parlay::parallel_for(0, base_clusters.size(), [&] (const T i){
         auto& clstr = base_clusters[i];
         clstr.state = base_vertex | live;
+        clstr.data = defretval; //must reset base vertex clusters to default val as well as edge clusters
         
         const auto& v= i;
 
@@ -737,120 +492,6 @@ void create_base_clusters(parlay::sequence<cluster<T,D>>& base_clusters, parlay:
 }
 
 /**
- * Make sure the base clusters are consistent i.e. that every neighbour of mine has me as their neighbour too
- */
-template <typename T, typename D>
-void check_consistency(parlay::sequence<node<T, D>*>& tree_nodes)
-{
-    parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
-        auto& node_ptr = tree_nodes[i];
-        if((node_ptr->state & live) == 0)
-        {
-            return;
-        }
-        if(node_ptr->state & (unary_cluster | binary_cluster | base_edge))
-        {
-            return;
-        }
-
-        for(auto& ptr : node_ptr->adjacents)
-        {
-            if(ptr == nullptr || !(ptr->state & (base_edge | binary_cluster)))
-                continue;
-            auto other_node_ptr = get_other_side(node_ptr, ptr);
-            if(get_other_side(other_node_ptr, ptr) != node_ptr)
-            {
-                node_ptr->cluster_ptr->print();
-                ptr->cluster_ptr->print();
-                other_node_ptr->cluster_ptr->print();
-                std::cout << "Base clusters inconsistent" << std::endl;
-                exit(1);
-            }
-        }
-    });
-
-    return;
-}
-
-template <typename T, typename D>
-void check_mis(parlay::sequence<node<T, D>*>& tree_nodes)
-{
-    parlay::parallel_for(0, tree_nodes.size(), [&] (T i) {
-        auto& node_ptr = tree_nodes[i];
-        for(auto& ptr : node_ptr->adjacents)
-        {
-            if(ptr == nullptr || !(ptr->state & (base_edge | binary_cluster)))
-                continue;
-            auto other_node_ptr = get_other_side(node_ptr, ptr);
-            if(other_node_ptr->cluster_ptr->state & IS_MIS_SET && node_ptr->cluster_ptr->state & IS_MIS_SET )
-            {
-                std::cout << red << "Neighbours are not MIS!" << reset << std::endl;
-                exit(1);
-            }
-        }
-    });
-
-    return;
-}
-
-template <typename T, typename D>
-void check_parents_children(parlay::sequence<cluster<T,D>>& clusters)
-{
-    parlay::parallel_for(0, clusters.size(), [&] (T i) {
-        auto cluster_ptr = &clusters[i];
-        if(cluster_ptr->parent != nullptr)
-        {
-            bool in_parent = false;
-            for(auto& par_child : cluster_ptr->parent->children)
-            {
-                if(par_child == cluster_ptr)
-                    in_parent = true;
-            }
-            if(in_parent == false)
-            {
-                std::cout << red << "RC tree parents inconsistent!" << reset << std::endl;
-                cluster_ptr->print();
-                cluster_ptr->parent->print();
-                exit(1);
-            }
-        }
-        for(auto& child : cluster_ptr->children)
-        {
-            if(child == nullptr)
-                continue;
-            if(child->parent != cluster_ptr)
-            {
-                std::cout << red << "RC tree children inconsistent!" << reset << std::endl;
-                cluster_ptr->print();
-                child->print();
-                exit(1);
-            }
-        }
-    });
-}
-
-template<typename T, typename D>
-void check_children_values(parlay::sequence<cluster<T,D>>& clusters)
-{
-    parlay::parallel_for(0, clusters.size(), [&] (T i) {
-        auto cluster_ptr = &clusters[i];
-        D value_from_children = 0.0;
-        for(auto& child : cluster_ptr->children)
-        {
-            if(child == nullptr)
-                continue;
-            value_from_children+=child->data;
-        }
-        if(value_from_children != cluster_ptr->data)
-        {
-            std::cout << red << "RC tree values inconsistent!" << reset << std::endl;
-            cluster_ptr->print();
-            exit(1);
-        }
-    });
-}
-
-/**
  * Make an exact copy of the current adjacency list, copying over everything (including the state), the only new thing will be the level.
  * When making a new round, pointers to edges will also get renewed, is that ideal? probably not but we don't have a choice do we 
  */
@@ -945,6 +586,52 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
 }
 
 
+template<typename T, typename D, typename lambdafunc>
+void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func)
+{
+
+    // std::cout << "I, " << contracted_node->cluster_ptr->index << " am accumulating" << std::endl;
+
+    contracted_node->cluster_ptr->data = defretval;
+    contracted_node->cluster_ptr->max_weight_edge = nullptr;
+    bool found = false;
+    for(auto& child : contracted_node->cluster_ptr->children)
+    {
+        if(child == nullptr)
+            continue;
+        bool valid_child = false;
+        if(child->adjacency.get_head()->state & base_edge)
+            valid_child = true;
+        else if (child->first_contracted_node->state & (binary_cluster | base_edge))
+            valid_child = true;
+        else if (child->first_contracted_node->next == nullptr)
+            valid_child = false;
+        else if (child->first_contracted_node->next->state & (binary_cluster | base_edge))
+            valid_child = true;
+        
+        
+        if(valid_child)
+        {
+            if(!found)
+            {
+                contracted_node->cluster_ptr->data = child->data;
+                contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
+                found = true;
+            }
+            else
+            {
+                if(child->data > contracted_node->cluster_ptr->data)
+                    contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
+                contracted_node->cluster_ptr->data = func(contracted_node->cluster_ptr->data, child->data);
+            
+            }
+        }
+    }
+
+    return;
+}
+
+
 /**
  * The main workhorse, populates the set base_clusters with internal_clusters
  * As base_vertices aren't useful, it replaces them in place
@@ -977,19 +664,19 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defre
     auto count = 0;
     do
     {
-        check_consistency(tree_nodes); // TODO remove
+        // check_consistency(tree_nodes); // TODO remove
         // break;
         auto eligible = parlay::filter(tree_nodes, [] (auto node_ptr){
             return node_ptr->get_num_neighbours_live() <= 2;
         });
 
         
-        set_MIS(eligible);
+        set_MIS(eligible, false, randomized);
         auto candidates = parlay::filter(eligible, [] (auto node_ptr){
             return node_ptr->cluster_ptr->state & IS_MIS_SET;
         });
 
-        check_mis(candidates); // TODO remove
+        // check_mis(candidates); // TODO remove
 
         
         parlay::parallel_for(0, candidates.size(), [&] (T i){
@@ -1013,6 +700,8 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defre
         // std::cout << "[" << count  << "]: " << bold << tree_nodes.size() << reset << std::endl;
         count++;
     }while(tree_nodes.size() > 0 && count < 100);
+
+    assert(count < 100 && "Did your tree go into an infinite loop?");
 
 }
 
@@ -1059,11 +748,11 @@ void batchModifyEdgeWeights(const parlay::sequence<std::tuple<T, T, D>>& edges, 
         D data = std::get<2>(edges[i]);
 
         auto edge_ptr = get_edge(v, w, clusters);
-        if(edge_ptr == nullptr) // TODO REMOVE
-        {
-            std::cout << red << "Got a nullptr" << reset << std::endl;
-            exit(1);
-        }
+        // if(edge_ptr == nullptr) // TODO REMOVE
+        // {
+        //     std::cout << red << "Got a nullptr" << reset << std::endl;
+        //     exit(1);
+        // }
         edge_ptr->cluster_ptr->data = data;
 
         auto ret_ptr = edge_ptr->cluster_ptr;
@@ -1186,335 +875,6 @@ void printTree(parlay::sequence<cluster<T, D>> &base_clusters, unsigned char lev
     {
         base_clusters[i].print(level);
     }   
-}
-
-template <typename T, typename D, typename assocfunc>
-D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc func)
-{
-    if(v == w)
-        return defretval;
-
-    bool use_v = false;
-
-    cluster<T,D>* prev_boundary_v_l = nullptr;
-    cluster<T,D>* prev_boundary_v_r = nullptr;
-    D prev_val_till_v_l = defretval;
-    D prev_val_till_v_r = defretval;
-    
-    cluster<T,D>* prev_boundary_w_l = nullptr;
-    cluster<T,D>* prev_boundary_w_r = nullptr;
-    D prev_val_till_w_l = defretval;
-    D prev_val_till_w_r = defretval;
-
-
-    while(true)
-    {
-        // Ascend using the lower-height cluster. If either has to ascend above root, they are not connected.
-        if(v == nullptr && w == nullptr && prev_boundary_v_l == nullptr && prev_boundary_v_r == nullptr)
-            return defretval;   
-        else if(v == w)
-            break;
-        else if (v == nullptr && w != nullptr)
-            use_v = false;
-        else if (w == nullptr && v != nullptr)
-            use_v = true;
-        else if(v->get_height() < w->get_height())
-            use_v = true;
-        else
-            use_v = false;
-        
-        if(use_v)
-        {
-            cluster<T,D>* &v_cluster = v;
-
-            D lval_print,rval_print = defretval; // TODO remove
-
-            // We are at the start probably can add a bunch of nullptr checks too TODO
-            if (prev_val_till_v_l == defretval && prev_val_till_v_r == defretval) 
-            {
-                v_cluster->find_boundary_vertices(prev_boundary_v_l, prev_val_till_v_l, prev_boundary_v_r, prev_val_till_v_r, defretval);
-                lval_print = prev_val_till_v_l;
-                rval_print = prev_val_till_v_r;
-            } 
-            else 
-            {
-                D lval;
-                D rval;
-                cluster<T,D>* l;
-                cluster<T,D>* r;
-
-                v_cluster->find_boundary_vertices(l, lval, r, rval, defretval);
-
-                // Covers both unary to unary and unary to binary case
-                if (prev_boundary_v_l == v && prev_boundary_v_r == v) 
-                {
-                    lval_print = prev_val_till_w_l;
-                    rval_print = prev_val_till_w_r;
-                    
-                    if(l != r) // ascending into unary
-                    {
-                        prev_val_till_v_l = func(prev_val_till_v_l, lval);
-                        prev_val_till_v_r = func(prev_val_till_v_r, rval);
-                        
-                    }
-                    else
-                    {
-                        auto v_node_ptr = v_cluster->first_contracted_node;
-                        for(auto& ptr : v_node_ptr->adjacents)
-                        {
-                            if(ptr != nullptr && ptr->state & (binary_cluster | base_edge))
-                            {
-                                prev_val_till_v_l = func(prev_val_till_v_l, ptr->cluster_ptr->data);
-                                prev_val_till_v_r = func(prev_val_till_v_r, ptr->cluster_ptr->data);
-
-                            }
-                        }
-                    }
-                    prev_boundary_v_l = l;
-                    prev_boundary_v_r = r;
-                }
-                // Covers binary ascending to unary/nullary
-                else if (l == r) 
-                {
-                    if(prev_boundary_v_r == v)
-                    {
-                        prev_val_till_v_r = prev_val_till_v_l;
-                    }
-                    else
-                        prev_val_till_v_l = prev_val_till_v_r;
-
-                    prev_boundary_v_l = prev_boundary_v_r = l;
-                }
-                // Binary to binary
-                else 
-                {
-                    if (prev_boundary_v_l == l) 
-                    {
-                        prev_boundary_v_r = r;
-                        prev_val_till_v_r = func(prev_val_till_v_r, rval);
-                    } 
-                    else if (prev_boundary_v_r == l) 
-                    {
-                        std::swap(prev_boundary_v_r, prev_boundary_v_l);
-                        std::swap(prev_val_till_v_l, prev_val_till_v_r);
-                        
-                        prev_boundary_v_r = r;
-                        prev_val_till_v_r = func(prev_val_till_v_r, rval);
-                    
-                    } 
-                    else if (prev_boundary_v_l == r) 
-                    {
-                        std::swap(r, l);
-                        std::swap(rval, lval);    
-                        
-                        prev_boundary_v_r = r;
-                        prev_val_till_v_r = func(prev_val_till_v_r, rval);
-                    } 
-                    else // prev_boundary_v_r == r 
-                    {     
-                        prev_boundary_v_l = l;
-                        prev_val_till_v_l = func(prev_val_till_v_l, lval);
-                    }
-                }
-                lval_print = lval;
-                rval_print = rval;
-            }
-            // std::cout << bright_magenta << v->index << "[" << (short) v->get_height() << "]" << " ";
-            // std::cout << prev_boundary_v_l->index << "(" << prev_val_till_v_l << ") " << prev_boundary_v_r->index << "(" << prev_val_till_v_r << ") ";
-            // std::cout << "lval,rval=" << lval_print << "," << rval_print << " ";
-            // auto& for_printing = v;
-            // if(for_printing->adjacency.get_tail()->state & unary_cluster)
-            //     std::cout << " unary ";
-            // else if (for_printing->adjacency.get_tail()->state & binary_cluster)
-            //     std::cout << " binary ";
-            // else
-            //     std::cout << " nullary ";
-            // std::cout << reset << std::endl;
-            v = v->get_parent();
-        }
-        else
-        {
-            cluster<T,D>* &w_cluster = w;
-            D lval_print,rval_print = defretval;
-
-            // We are at the start
-            if (prev_val_till_w_l == defretval && prev_val_till_w_r == defretval) 
-            {
-                w_cluster->find_boundary_vertices(prev_boundary_w_l, prev_val_till_w_l, prev_boundary_w_r, prev_val_till_w_r, defretval);
-                lval_print = prev_val_till_w_l;
-                rval_print = prev_val_till_w_r;
-            } 
-            else 
-            {
-                D lval, rval;
-                cluster<T,D>* l;
-                cluster<T,D>* r;
-                w_cluster->find_boundary_vertices(l, lval, r, rval, defretval);
-
-                // Covers both unary to unary and unary to binary case
-                if (prev_boundary_w_l == w && prev_boundary_w_r == w) 
-                {
-
-                    if(l != r)
-                    {
-                        prev_val_till_w_l = func(prev_val_till_w_l, lval);
-                        prev_val_till_w_r = func(prev_val_till_w_r, rval);
-                    }
-                    else
-                    {
-                        auto w_node_ptr = w_cluster->first_contracted_node;
-                        for(auto& ptr : w_node_ptr->adjacents)
-                        {
-                            if(ptr != nullptr && ptr->state & (binary_cluster | base_edge))
-                            {
-                                prev_val_till_w_l = func(prev_val_till_w_l, ptr->cluster_ptr->data);
-                                prev_val_till_w_r = func(prev_val_till_w_r, ptr->cluster_ptr->data);
-
-                            }
-                        }
-                    }
-                    prev_boundary_w_l = l;
-                    prev_boundary_w_r = r;
-                }
-                // Covers binary ascending to unary/nullary
-                else if (l == r) 
-                {
-                    if(prev_boundary_w_r == w)
-                    {
-                        prev_val_till_w_r = prev_val_till_w_l;
-                    }
-                    else
-                        prev_val_till_w_l = prev_val_till_w_r;
-
-                    prev_boundary_w_l = prev_boundary_w_r = l;
-                }
-                // Binary
-                else 
-                {
-                    if (prev_boundary_w_l == l) 
-                    {
-                        prev_boundary_w_r = r;
-                        prev_val_till_w_r = func(prev_val_till_w_r, rval);
-                    } 
-                    else if (prev_boundary_w_r == l) 
-                    {
-                        
-                        std::swap(prev_boundary_w_l, prev_boundary_w_r);
-                        std::swap(prev_val_till_w_l, prev_val_till_w_r);
-
-                        prev_boundary_w_r = r;
-                        prev_val_till_w_r = func(prev_val_till_w_r, rval);
-
-                    } 
-                    else if (prev_boundary_w_l == r) 
-                    {
-                        std::swap(l, r);
-                        std::swap(lval, rval);
-
-                        prev_boundary_w_r = r;
-                        prev_val_till_w_r = func(prev_val_till_w_r, rval);
-                    } 
-                    else // prev_boundary_w_r == r 
-                    { 
-                        prev_boundary_w_l = l;
-                        prev_val_till_w_l = func(prev_val_till_w_l, lval);
-                    }
-                }
-                lval_print = lval;
-                rval_print = rval;
-            }
-            // std::cout << bright_green << w->index << "[" << (short) w->get_height() << "]" << " ";
-            // std::cout << prev_boundary_w_l->index << "(" << prev_val_till_w_l << ") " << prev_boundary_w_r->index << "(" << prev_val_till_w_r << ") ";
-            // std::cout << "lval,rval=" << lval_print << "," << rval_print << " ";
-            // auto& for_printing = w;
-            // if(for_printing->adjacency.get_tail()->state & unary_cluster)
-            //     std::cout << " unary ";
-            // else if (for_printing->adjacency.get_tail()->state & binary_cluster)
-            //     std::cout << " binary ";
-            // else
-            //     std::cout << " nullary ";
-            // std::cout << reset << std::endl;
-            w = w->get_parent();
-        }
-        
-    }
-    // std::cout << std::endl;
-
-    if(prev_boundary_v_l == nullptr && prev_boundary_w_l == nullptr)
-    {
-        return defretval;
-    }
-    if(prev_boundary_v_l == nullptr)
-    {
-        if(w == prev_boundary_w_r)
-            return prev_val_till_w_r;
-        else
-            return prev_val_till_w_l;   
-    }
-    if(prev_boundary_w_l == nullptr)
-    {
-        if(v == prev_boundary_v_l)
-            return prev_val_till_v_l;
-        else
-            return prev_val_till_v_r;
-    }
-    
-    D v_contrib, w_contrib;
-    
-    if(v == prev_boundary_v_l)
-        v_contrib = prev_val_till_v_l;
-    else
-        v_contrib = prev_val_till_v_r;
-
-    if(w == prev_boundary_w_l)
-        w_contrib = prev_val_till_w_l;
-    else
-        w_contrib = prev_val_till_w_r;
-
-    return func(v_contrib, w_contrib);
-
-}
-
-template<typename T, typename D>
-void testPathQueryValid(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<T>& parents, parlay::sequence<D>& weights, parlay::sequence<T>& random_perm_map)
-{
-    parlay::parallel_for(0, 1000, [&] (T i) {
-        T start_index = rand() % clusters.size();
-        T index = start_index;
-        T end_index;
-        // doing sum!
-        D manual_result = 0.0;
-        while(parents[index] != index)
-        {
-            manual_result = manual_result + weights[index];
-            index = parents[index];
-        }
-        end_index = index;
-
-        D pathQueryResult = PathQuery(&clusters[random_perm_map[start_index]], &clusters[random_perm_map[end_index]], (D) 0.0, [] (D a, D b) {return a + b;});
-
-        auto almost_equal = [] (D A, D B) -> bool {
-        const double tolerance = 0.001;
-            if(A == B)
-                return true;
-            if(A > B)
-                if((A-B) < tolerance)
-                    return true;
-            if(B > A)
-                if((B-A) < tolerance)
-                    return true;
-            return false;
-        };
-
-        if(!almost_equal(pathQueryResult, manual_result))
-        {
-            std::cout << "Path query from " << start_index << " to " << end_index << " invalid! " << std::endl;
-            std::cout << pathQueryResult << " != " << manual_result << std::endl;
-            assert("RC Path query and manual path query should be same" && false);
-        }
-       
-    });
-
 }
 
 

@@ -5,6 +5,9 @@
 
 #include "RC.h"
 #include "RCdynamic.h"
+#include "random_trees.h"
+#include "path_query.h"
+
 #include <ctime>    // For time()
 
 
@@ -32,9 +35,8 @@ int main(int argc, char* argv[])
         }
     }
     else
-        graph_size = 100000000 + (rand() % 400000000l);    
-        
-    
+        graph_size = 1000000 + (rand() % 4000000l); //reduced graph size to fit in laptop 
+
 
 
     double min_weight = 0.0;
@@ -49,7 +51,7 @@ int main(int argc, char* argv[])
     {
         std::cout << "Testing graph " << I+1 << std::endl;
 
-        TreeGen<vertex, double> TG(graph_size, min_weight, max_weight, 0.9, 20, uniform);
+        TreeGen<vertex, double> TG(graph_size, min_weight, max_weight, 0.9, 5, uniform);
 
         TG.generateInitialEdges();
 
@@ -125,7 +127,7 @@ int main(int argc, char* argv[])
 
         std::cout << TG.interconnects.size() << " number of dynamic edges " << std::endl;
 
-        for(unsigned int i = 0; i < 0; i++)
+        for(unsigned int i = 0; i < 20; i++)
         {
             std::cout << "testing batchinsert " << i+1 << std::endl;
             double del_prob = (rand() % 100);
@@ -153,14 +155,10 @@ int main(int argc, char* argv[])
                 return A + B;
             });
 
-            testPathQueryValid(clusters, TG.parents, TG.weights, TG.random_perm_map);
+            testPathQueryValid(clusters, TG.parents, TG.weights, TG.random_perm_map, graph_size);
         }
 
         deleteRCtree(clusters);
-
-        parlay::internal::memory_clear();
-        parlay::type_allocator<cluster<long,double>>::finish();
-        parlay::type_allocator<node<long,double>>::finish();
 
         
 

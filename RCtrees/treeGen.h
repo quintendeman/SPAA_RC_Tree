@@ -2,8 +2,12 @@
 #include "../include/parlay/primitives.h"
 #include <cmath>
 
+<<<<<<< HEAD
 static const int max_edges = 1 << 30; // an ungodly high number
 // static const int max_edges = 3; 
+=======
+static const int max_edges = 1 << 30;
+>>>>>>> b39592b1e99bc243a3d0fcc167fb0e7874a2454e
 
 enum distribution {
         constant,
@@ -34,9 +38,10 @@ class TreeGen
         double mean;
         double min_weight;
         double max_weight;
+        long seed = 15213;
 
         parlay::sequence<subgraph> subgraphs;
-        parlay::sequence<std::atomic<short>> counts;
+        // parlay::sequence<std::atomic<short>> counts;
         parlay::sequence<T> parents;
         parlay::sequence<interGraphConnect> interconnects;
         parlay::sequence<D> weights;
@@ -47,8 +52,9 @@ class TreeGen
         /*
             
         */
-        TreeGen(T num_vertices, D min_weight = 0.0, D max_weight = 1.0, double l = 0.95f, double mean = 1000.0f, distribution dist = uniform )
+        TreeGen(T num_vertices, D min_weight = 0.0, D max_weight = 1.0, double l = 0.95f, double mean = 1000.0f, distribution dist = uniform, bool randomize_map = true, long seed = 15213)
         {
+            assert(mean <= num_vertices); //otherwise subgraph assertion fails later
             assert(num_vertices > 0);
             assert(l > 0.0f && l < 1.0f); 
             assert(mean > 1.0f);
@@ -62,7 +68,11 @@ class TreeGen
             this->lg = lg;
             this->mean = mean;
             this->num_vertices = num_vertices;
-            this->random_perm_map = parlay::random_permutation(num_vertices);
+            this->seed = seed;
+            if(randomize_map)
+                this->random_perm_map = parlay::random_permutation(num_vertices);
+            else
+                this->random_perm_map = parlay::tabulate(num_vertices, [] (T i) {return i;});
         }
 
 
@@ -74,7 +84,7 @@ class TreeGen
                 return;
             }
             
-            parlay::random_generator gen(15213);
+            parlay::random_generator gen(seed++);
             std::uniform_real_distribution<double> dis_ur(0, 1);
 
             parlay::parallel_for(sg.first, sg.second, [&] (T index) {
@@ -95,27 +105,27 @@ class TreeGen
                     return;
                 }
                 // try to increment myself
-                std::atomic<short>& my_count = counts[index];
-                std::atomic<short>& parent_count = counts[random_parent];
+                // std::atomic<short>& my_count = counts[index];
+                // std::atomic<short>& parent_count = counts[random_parent];
 
                 // std::cout << "sgtrying " << index << " -- " << random_parent << std::endl;
 
-                short old_count = my_count.fetch_add(1);
-                if(old_count >= max_edges) // failure
-                {
-                    my_count.fetch_add(-1);
-                    parents[index] = index;
-                    return;
-                }
+                // short old_count = my_count.fetch_add(1);
+                // if(old_count >= max_edges) // failure
+                // {
+                    // my_count.fetch_add(-1);
+                    // parents[index] = index;
+                    // return;
+                // }
                 // try to increment parent
-                short old_parent_count = parent_count.fetch_add(1);
-                if(old_parent_count >= max_edges)
-                {
-                    parent_count.fetch_add(-1);
-                    my_count.fetch_add(-1);
-                    parents[index] = index;
-                    return;
-                }
+                // short old_parent_count = parent_count.fetch_add(1);
+                // if(old_parent_count >= max_edges)
+                // {
+                    // parent_count.fetch_add(-1);
+                    // my_count.fetch_add(-1);
+                    // parents[index] = index;
+                    // return;
+                // }
                 // can add intergraph edge!
 
                 parents[index] = random_parent;
@@ -127,27 +137,27 @@ class TreeGen
 
         void verifyParents()
         {
-            parlay::sequence<std::atomic<short>> actual_counts = parlay::sequence<std::atomic<short>>(this->num_vertices);
+            // parlay::sequence<std::atomic<short>> actual_counts = parlay::sequence<std::atomic<short>>(this->num_vertices);
 
-            parlay::parallel_for(0, this->parents.size(), [&] (T i) {
-                if(parents[i] != i)
-                {
-                    actual_counts[i].fetch_add(1);
-                    actual_counts[parents[i]].fetch_add(1);
-                }
-            });
+            // parlay::parallel_for(0, this->parents.size(), [&] (T i) {
+            //     if(parents[i] != i)
+            //     {
+            //         actual_counts[i].fetch_add(1);
+            //         actual_counts[parents[i]].fetch_add(1);
+            //     }
+            // });
 
-            parlay::parallel_for(0, this->parents.size(), [&] (T i) {
-                if(this->counts[i] != actual_counts[i])
-                    std::cout << "[" << i << "] does not match " << this->counts[i] << " vs " << actual_counts[i] << std::endl;
-                assert(this->counts[i] == actual_counts[i]);
-                assert(this->counts[i] <= max_edges);
-            });
+            // parlay::parallel_for(0, this->parents.size(), [&] (T i) {
+            //     if(this->counts[i] != actual_counts[i])
+            //         std::cout << "[" << i << "] does not match " << this->counts[i] << " vs " << actual_counts[i] << std::endl;
+            //     assert(this->counts[i] == actual_counts[i]);
+            //     assert(this->counts[i] <= max_edges);
+            // });
         }
 
         void generateInterconnects()
         {
-            parlay::random_generator gen(rand());
+            parlay::random_generator gen(seed++);
             std::uniform_real_distribution<double> dis_ur(0, 1);
             
             interconnects = parlay::tabulate(this->subgraphs.size(), [&] (T i) {
@@ -187,20 +197,20 @@ class TreeGen
                 // std::cout << "Trying " << my_index << "/" << counts[my_index] << " -- " << parent_index << "/" << counts[parent_index] << std::endl;
 
                 // attempt to connect child and parent
-                short old_value = counts[my_index].fetch_add(1);
-                if(old_value >= max_edges)
-                {
-                    counts[my_index].fetch_add(-1);
-                    return defretIGC;
-                }
+                // short old_value = counts[my_index].fetch_add(1);
+                // if(old_value >= max_edges)
+                // {
+                    // counts[my_index].fetch_add(-1);
+                    // return defretIGC;
+                // }
 
-                short old_parent_value = counts[parent_index].fetch_add(1);
-                if(old_parent_value >= max_edges)
-                {
-                    counts[parent_index].fetch_add(-1);
-                    counts[my_index].fetch_add(-1);
-                    return defretIGC;
-                }
+                // short old_parent_value = counts[parent_index].fetch_add(1);
+                // if(old_parent_value >= max_edges)
+                // {
+                    // counts[parent_index].fetch_add(-1);
+                    // counts[my_index].fetch_add(-1);
+                    // return defretIGC;
+                // }
                 
                 parents[my_index] = parent_index;
 
@@ -222,7 +232,7 @@ class TreeGen
 
         parlay::sequence<std::pair<T,T>> generateDeleteEdges(double prob = 1.0) // probability of
         {
-            parlay::random_generator gen(rand());
+            parlay::random_generator gen(seed++);
             std::uniform_real_distribution<double> dis_ur(0, 1);
 
             assert(prob <= 1.0 && prob >= 0.0);
@@ -241,8 +251,8 @@ class TreeGen
                 else
                 {
                     edge_live = false;
-                    counts[std::get<0>(std::get<2>(ICG))].fetch_add(-1);
-                    counts[std::get<1>(std::get<2>(ICG))].fetch_add(-1);
+                    // counts[std::get<0>(std::get<2>(ICG))].fetch_add(-1);
+                    // counts[std::get<1>(std::get<2>(ICG))].fetch_add(-1);
                     parents[std::get<0>(std::get<2>(ICG))] = std::get<0>(std::get<2>(ICG));
                     // return std::pair<T,T>(std::get<0>(std::get<2>(ICG)), std::get<1>(std::get<2>(ICG)));
                     return std::pair<T,T>(random_perm_map[std::get<0>(std::get<2>(ICG))], random_perm_map[std::get<1>(std::get<2>(ICG))]);
@@ -259,7 +269,7 @@ class TreeGen
         {
 
             edgelist retedgelist;
-            parlay::random_generator gen(rand());
+            parlay::random_generator gen(seed++);
             std::uniform_real_distribution<double> dis_ur(0, 1);
 
             assert(prob <= 1.0 && prob >= 0.0);
@@ -297,29 +307,29 @@ class TreeGen
                 assert(random_parent_index != my_index);
 
                 // Can I accept new counts
-                short old_my_val = counts[my_index].fetch_add(1);
+                // short old_my_val = counts[my_index].fetch_add(1);
                 // std::cout << "Just incremented " << my_index << " counts from " << old_my_val << std::endl;
-                if(old_my_val >= max_edges)
-                {
-                    counts[my_index].fetch_add(-1);
-                    // std::cout << "Just decremented " << my_index << " counts" << std::endl;
+                // if(old_my_val >= max_edges)
+                // {
+                //     counts[my_index].fetch_add(-1);
+                //     // std::cout << "Just decremented " << my_index << " counts" << std::endl;
                 
-                    return edge(i, i, (D) i); // invalid edge to yourself
-                }
+                //     return edge(i, i, (D) i); // invalid edge to yourself
+                // }
 
-                short old_parent_val = counts[random_parent_index].fetch_add(1);
+                // short old_parent_val = counts[random_parent_index].fetch_add(1);
                 // std::cout << "Justt incremented " << random_parent_index << " counts" << std::endl;
                 
-                if(old_parent_val >= max_edges)
-                {
-                    counts[random_parent_index].fetch_add(-1);
-                    // std::cout << "Justt decremented " << random_parent_index << " counts" << std::endl;
+                // if(old_parent_val >= max_edges)
+                // {
+                //     counts[random_parent_index].fetch_add(-1);
+                //     // std::cout << "Justt decremented " << random_parent_index << " counts" << std::endl;
                 
-                    counts[my_index].fetch_add(-1);
-                    // std::cout << "Justt decremented " << my_index << " counts" << std::endl;
+                //     counts[my_index].fetch_add(-1);
+                //     // std::cout << "Justt decremented " << my_index << " counts" << std::endl;
                 
-                    return edge(i, i, (D) i);
-                }
+                //     return edge(i, i, (D) i);
+                // }
 
                 parent_index = random_parent_index;
 
@@ -362,11 +372,11 @@ class TreeGen
             }
             else if(dist == uniform)
             {
-                parlay::random_generator gen(rand());
+                parlay::random_generator gen(seed++);
                 std::uniform_int_distribution<T> dis(1, (T)(this->mean * 2));
 
 
-                sizes = parlay::tabulate((T)(num_vertices*1.1/(mean)), [&] (T i) {
+                sizes = parlay::tabulate((T)(num_vertices/(mean)), [&] (T i) {
                     auto r = gen[i];
                     return dis(r);
                     // return (T) (i % 3);
@@ -375,11 +385,11 @@ class TreeGen
             }
             else if(dist == geometric)
             {
-                parlay::random_generator gen(rand()); 
+                parlay::random_generator gen(seed++); 
                 std::geometric_distribution<T> dis(1/mean);
                 // std::geometric_distribution<T> dis(0.01);
 
-                sizes = parlay::tabulate((T)(num_vertices*1.2/(mean)), [&] (T i) {
+                sizes = parlay::tabulate((T)(num_vertices/(mean)), [&] (T i) {
                     auto r = gen[i];
                     T retval = dis(r);
                     return retval > 0 ? retval : 1;
@@ -389,12 +399,11 @@ class TreeGen
             }
             else if(dist == exponential)
             {
-                std::cout << "Going exponential" << std::endl;
-                parlay::random_generator gen(15213); // CMU's postal code
+                parlay::random_generator gen(seed++); // CMU's postal code
                 std::exponential_distribution<double> dis(1/mean);
                 // std::geometric_distribution<T> dis(0.01);
 
-                sizes = parlay::tabulate((T)(num_vertices*1.2/(mean)), [&] (T i) {
+                sizes = parlay::tabulate((T)(num_vertices/(mean)), [&] (T i) {
                     auto r = gen[i];
                     double retval = dis(r);
                     T retT = ceil(retval);
@@ -403,7 +412,7 @@ class TreeGen
                 });
                 total_size = parlay::reduce(sizes);
             }
-            std::cout << "Total subgraphs: " << sizes.size() << std::endl;
+            
 
             auto retpair = parlay::scan(sizes);
             auto& cumul_sizes = retpair.first;
@@ -418,12 +427,13 @@ class TreeGen
             
             if(total_size < this->num_vertices)
             {
-                std::cout << "Undersampled, last subgraph is  " <<  (this->num_vertices) - total_size << " in size" << std::endl;
+                // std::cout << "Undersampled, last subgraph is  " <<  (this->num_vertices) - total_size << " in size" << std::endl;
                 sizes.push_back((this->num_vertices) - total_size); 
                 actual_total_size+=(this->num_vertices) - total_size;
             }
             else
             {
+                // std::cout << "Oversampled, last subgraph goes till " <<  total_size << " in size" << std::endl;
                 if(sizes.size() == 1) // there is only one subgraph
                 {
                     sizes[0]-= total_size-this->num_vertices;
@@ -432,10 +442,17 @@ class TreeGen
                 {
 
                     auto indices = parlay::tabulate(cumul_sizes.size(), [] (T i) {return i;});
-                    auto location = parlay::find_if(indices, [&] (T i) {return cumul_sizes[i] > this->num_vertices;});
-                    std::cout << "Num vertices " << this->num_vertices << std::endl;
-                    std::cout << "Last cumul " << cumul_sizes[cumul_sizes.size()-1] << std::endl;
-                
+                    // std::cout << "Num vertices " << this->num_vertices << std::endl;
+                    // std::cout << "Last cumul " << cumul_sizes[cumul_sizes.size()-1] << std::endl;
+
+                    T& last_cumul = cumul_sizes[cumul_sizes.size()-1];
+                    if(last_cumul < this->num_vertices)
+                    {
+                        last_cumul+= (this->num_vertices - last_cumul);
+                    }
+
+                    auto location = parlay::find_if(indices, [&] (T i) {return cumul_sizes[i] >= this->num_vertices;});
+
                     assert(location != indices.end());
                     T index_which_exceeds = *location;
                     
@@ -452,6 +469,8 @@ class TreeGen
                 }
             }
 
+            // std::cout << "Total subgraphs: " << cumul_sizes.size() << std::endl;
+
             this->subgraphs= parlay::tabulate(cumul_sizes.size(), [&] (T i) {
                 if(i == (cumul_sizes.size() - 1))
                     return subgraph(cumul_sizes[i], this->num_vertices);
@@ -467,7 +486,7 @@ class TreeGen
             });
             assert(subgraphs[subgraphs.size()-1].second == this->num_vertices);
             
-            this->counts = parlay::sequence<std::atomic<short>>(this->num_vertices);
+            // this->counts = parlay::sequence<std::atomic<short>>(this->num_vertices);
             this->parents = parlay::sequence<T>(this->num_vertices);
             this->weights = parlay::sequence<D>(this->num_vertices);
 
