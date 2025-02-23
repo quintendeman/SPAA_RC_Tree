@@ -330,7 +330,7 @@ parlay::sequence<long> tree_gen(long graph_size, parlay::sequence<cluster<long, 
 
     const double min_weight = 0.0;
     const double max_weight = 100.0f;
-    auto distribution = exponential; // either exponential, geometric, constant or linear
+    auto distribution = exponential; // either exponential, geometric, constant or uniform
 
     int II = 0;
 

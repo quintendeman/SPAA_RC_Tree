@@ -2,7 +2,7 @@
 #include "../include/parlay/primitives.h"
 #include <cmath>
 
-static const int max_edges = 1 << 30;
+
 
 enum distribution {
         constant,
@@ -156,15 +156,25 @@ class TreeGen
             std::uniform_real_distribution<double> dis_ur(0, 1);
             
             interconnects = parlay::tabulate(this->subgraphs.size(), [&] (T i) {
-                std::uniform_int_distribution<T> dis(0, i);
+                if(i == 0)
+                {
+                    edge default_retedge = edge(i, i, (D) i); // if i == i, invalid edge which will get filtered out
+                    interGraphConnect defretIGC = interGraphConnect(this->subgraphs[i], this->subgraphs[i], default_retedge, false); // invalid
+                    return defretIGC;
+                }
+                    
+                std::uniform_int_distribution<T> dis(0, std::numeric_limits<T>::max());
                 auto r = gen[i];
                 T parent_subgraph_index = dis(r);
+                parent_subgraph_index = parent_subgraph_index % i; // 0 to i - 1 now hopefully
                 
                 double random_val = dis_ur(r);
                 
                 edge default_retedge = edge(i, i, (D) i); // if i == i, invalid edge which will get filtered out
                 interGraphConnect defretIGC = interGraphConnect(this->subgraphs[i], this->subgraphs[i], default_retedge, false); // invalid
                 
+                
+
                 if(random_val <= this->lg)
                 {
                     parent_subgraph_index = i - 1;
@@ -172,7 +182,7 @@ class TreeGen
                         return defretIGC;
                 }
                 
-                if(parent_subgraph_index == i)
+                if(parent_subgraph_index == i || parent_subgraph_index < 0)
                 {
                     return defretIGC;
                 }
@@ -181,6 +191,9 @@ class TreeGen
                 subgraph& parent_subgraph = this->subgraphs[parent_subgraph_index];
                 
                 T my_index = my_subgraph.first;
+
+                assert(parent_subgraph.second - 1 >= parent_subgraph.first);
+                assert(parent_subgraph.first >= 0);
 
                 std::uniform_int_distribution<T> dis_parent(parent_subgraph.first, parent_subgraph.second - 1);
                 
@@ -475,10 +488,21 @@ class TreeGen
             // for(auto& pr : this->subgraphs)
             //     std::cout << pr.first << " " << pr.second << std::endl;
             
-            parlay::parallel_for(0, subgraphs.size(), [&] (T i) { // TODO
+            parlay::parallel_for(0, subgraphs.size(), [&] (T i) { // I am fine with leaving asserts in code not being measured
                 auto& sg = this->subgraphs[i];
                 assert(sg.first != sg.second);
             });
+            if(this->subgraphs.size() == 0)
+            {
+                this->subgraphs.push_back(subgraph(0,0));
+            }
+
+            if(subgraphs.size() == 1) // only one entry
+            {
+                auto& sg = this->subgraphs[0];
+                sg.first = 0;
+                sg.second = this->num_vertices;
+            }
             assert(subgraphs[subgraphs.size()-1].second == this->num_vertices);
             
             // this->counts = parlay::sequence<std::atomic<short>>(this->num_vertices);

@@ -391,7 +391,7 @@ void remove_affection_back(node<T,D>* node_ptr)
 }
 
 template<typename T, typename D, typename lambdafunc>
-void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, D>>& add_edges, parlay::sequence<cluster<T, D>>& clusters, D defretval, lambdafunc func, bool randomized = false)
+void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, const parlay::sequence<std::tuple<T, T, D>>& add_edges, parlay::sequence<cluster<T, D>>& clusters, D defretval, lambdafunc func, bool randomized = false, const bool do_path_query = true)
 {
     using cluster_allocator = parlay::type_allocator<cluster<T,D>>;
 
@@ -712,7 +712,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
             }
             contract(mis_set[i]->next, true);
             remove_affection_back(mis_set[i]->next);
-            accumulate(mis_set[i], defretval, func);
+            accumulate(mis_set[i], defretval, func, do_path_query);
         });
 
         if(PRINT_DYNAMIC || false) // TODO yknow

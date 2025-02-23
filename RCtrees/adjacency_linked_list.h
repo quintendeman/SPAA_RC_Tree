@@ -24,6 +24,8 @@ const int update_eligible = 8192;
 const int one_sided = 8192 * 2;
 const int is_marked = 8192 * 4;
 const int is_marked_endpoint = 8192 * 8;
+const int subtree_query_marked = 8192 * 16;
+
 
 const int max_neighbours = 3;
 

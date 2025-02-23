@@ -286,6 +286,7 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
 
 }
 
+// assumes you are using "+" as the assocfunc
 template<typename T, typename D>
 void testPathQueryValid(parlay::sequence<cluster<T,D>>& clusters, parlay::sequence<T>& parents, parlay::sequence<D>& weights, parlay::sequence<T>& random_perm_map, long base_size)
 {

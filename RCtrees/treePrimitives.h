@@ -430,8 +430,8 @@ parlay::sequence<T> parentTree_from_treeGen(long newsize, parlay::sequence<std::
     if (extra_print) {
         std::cout << "printing unrooted tree" << std::endl;
         for (int i = 0; i < unrooted_tree.size(); i++) {
-        
-            pseq(unrooted_tree[i],"neighbors of " +std::to_string(i));
+            // I am commenting since this seemed to be giving an error but its hopyfully nothing since this is just a print
+            // pseq(unrooted_tree[i],"neighbors of " +std::to_string(i));
         }
     }
 

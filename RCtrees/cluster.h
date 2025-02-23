@@ -348,6 +348,11 @@ public:
             std::cout << "nl/-";
         std::cout << " ";
 
+        std::cout << red;
+        for(short i = 0; i < max_neighbours; i++)
+            std::cout << this->partial_sums[i] << "/" << (int) this->partial_sum_complete[i] << " ";
+        
+
         std::cout << bold << blue << "[ ";
         for(auto& child : this->children)
         {
