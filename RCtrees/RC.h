@@ -587,14 +587,13 @@ void recreate_last_levels(parlay::sequence<node<T,D>*>& tree_nodes)
 
 
 template<typename T, typename D, typename lambdafunc>
-void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func)
+void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func, const bool do_path_query = true)
 {
-
-    // std::cout << "I, " << contracted_node->cluster_ptr->index << " am accumulating" << std::endl;
 
     contracted_node->cluster_ptr->data = defretval;
     contracted_node->cluster_ptr->max_weight_edge = nullptr;
     bool found = false;
+    bool found_valid_edge = false;
     for(auto& child : contracted_node->cluster_ptr->children)
     {
         if(child == nullptr)
@@ -609,21 +608,49 @@ void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func)
         else if (child->first_contracted_node->next->state & (binary_cluster | base_edge))
             valid_child = true;
         
-        
-        if(valid_child)
+        if(do_path_query)
         {
+            if(valid_child)
+            {
+                if(!found)
+                {
+                    contracted_node->cluster_ptr->data = child->data;
+                    contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
+                    found = true;
+                }
+                else
+                {
+                    if(child->data > contracted_node->cluster_ptr->data)
+                        contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
+                    contracted_node->cluster_ptr->data = func(contracted_node->cluster_ptr->data, child->data);
+                
+                }
+            }
+        }
+        else
+        {
+            if(valid_child)
+            {
+                if(!found_valid_edge)
+                {
+                    contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
+                    found_valid_edge = true;
+                }
+                else
+                {
+                    if(child->data > contracted_node->cluster_ptr->data)
+                        contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
+                }
+            }
+
             if(!found)
             {
                 contracted_node->cluster_ptr->data = child->data;
-                contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
                 found = true;
             }
             else
             {
-                if(child->data > contracted_node->cluster_ptr->data)
-                    contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
                 contracted_node->cluster_ptr->data = func(contracted_node->cluster_ptr->data, child->data);
-            
             }
         }
     }
@@ -648,7 +675,7 @@ void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func)
 */
 
 template <typename T, typename D, typename lambdafunc>
-void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defretval, lambdafunc assocfunc, bool randomized = false)
+void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defretval, lambdafunc assocfunc, bool randomized = false, bool do_path_query = true)
 {
 
 
@@ -682,7 +709,7 @@ void create_RC_tree(parlay::sequence<cluster<T,D> > &base_clusters, T n, D defre
         parlay::parallel_for(0, candidates.size(), [&] (T i){
             candidates[i]->cluster_ptr->first_contracted_node = candidates[i]->prev;
             contract(candidates[i]);
-            accumulate(candidates[i], defretval, assocfunc);
+            accumulate(candidates[i], defretval, assocfunc, do_path_query);
         });
 
         

@@ -1,6 +1,6 @@
 # Variables
 CXX = g++
-CXXFLAGS = -O3 -std=c++17 -pthread -g -Werror -Wparentheses
+CXXFLAGS = -O0 -std=c++17 -pthread -g -Werror -Wparentheses -flto
 # CXXFLAGS = -O0 -flto -std=c++17 -pthread -g -Werror -Wparentheses
 INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/ -I parhash_include/ -I LCA -I .
 LDFLAGS = -ljemalloc
@@ -8,7 +8,7 @@ TARGET = RC.out
 SRC = RC.cpp
 
 # Default target
-all: RC.out testMST.out  testHashing.out testTreeGen.out
+all: RC.out testMST.out  testHashing.out testTreeGen.out testBatchedSubtree.out
 
 # Rule to build the target
 RC.out: RC.cpp RC.h cluster.h RCdynamic.h adjacency_linked_list.h incMST.h random_trees.h utils.h
@@ -23,6 +23,8 @@ testTreeGen.out: testTreeGen.cpp treeGen.h RC.h cluster.h RCdynamic.h  adjacency
 testHashing.out: treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h  random_trees.h utils.h testHashing.cpp ternarizer.h
 	$(CXX)  $(CXXFLAGS)  -o testHashing.out testHashing.cpp $(INCLUDES)
 
+testBatchedSubtree.out: treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h  random_trees.h utils.h testBatchedSubtree.cpp ternarizer.h subtree_query.h
+	$(CXX)  $(CXXFLAGS)  -o testBatchedSubtree.out testBatchedSubtree.cpp $(INCLUDES)
 
 
 RC_CREATE_DEPS = MIS.h RC.h RCdynamic.h RC_test.h RCdynamic.h

@@ -1,9 +1,13 @@
+#ifndef TERNARIZER_H
+#define TERNARIZER_H
+
 #include <parlay/primitives.h>
 #include <parlay/hash_table.h>
 #include <iostream>
 #include <sstream>
 
 #include <cmath>
+
 
 
 const double load_factor = 4.0f; // load factor for the hash table
@@ -684,6 +688,15 @@ class ternarizer{
             return std::make_pair(add_edges, all_delete_edges);
         }
 
+        std::pair<T,T> translate_edge(T v, T w) 
+        {
+            auto& my_node = this->find_tern_node_ptr_in_HT(v, w);
+            if(my_node.v == v)
+                return std::pair<T,T>(my_node.dummy_index, my_node.outgoing_edgeindices[1]);
+            else
+                return std::pair<T,T>(my_node.outgoing_edgeindices[1], my_node.dummy_index);
+        }
+
         void verify_simple_tree(void)
         {
             // do my neighbours have me too?
@@ -742,3 +755,6 @@ class ternarizer{
         }
 
 };
+
+
+#endif
