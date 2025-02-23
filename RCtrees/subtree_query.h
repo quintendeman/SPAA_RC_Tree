@@ -369,8 +369,8 @@ parlay::sequence<cluster<T,D>*> get_roots(ds& clusters)
         T old_val = curr->counter.fetch_add(1);
         if(old_val)
             return ret_null;
-        for(auto& val : curr->partial_sum_complete)
-            val = 0;
+        // for(auto& val : curr->partial_sum_complete)
+        //     val = 0;
         if(curr->parent == nullptr)
             return curr;
         curr = curr->parent;
@@ -548,19 +548,22 @@ D use_cached_query(cluster<T,D>* root, cluster<T,D>* dir_giver, D identity, asso
 template<typename T, typename D, typename assocfunc>
 void build_partial_sums(cluster<T,D>* root, D identity, assocfunc func) // top-down
 {
+    root->counter = 0; // reset counter
     parlay::parallel_for(0, max_neighbours, [&] (T i) {
-        root->counter = 0; // reset counter
         if(root->children[i] == nullptr)
             return;
-        if(root->partial_sum_complete[i] != 1) // it has either been done before it isn't necessary
-            return; // not functionally needed but speedup I guess
-        char expected = 1;
-        char desired = 2;
-        if (!root->partial_sum_complete[i].compare_exchange_strong(expected, desired)) // If not zero, return
-        {
-            // someone did this before me
+        if(root->children[i]->counter == 0)
             return;
-        }
+        // if(root->partial_sum_complete[i] != 1) // it has either been done before it isn't necessary
+        //     return; // not functionally needed but speedup I guess
+        // char expected = 1;
+        // char desired = 2;
+        // if (!root->partial_sum_complete[i].compare_exchange_strong(expected, desired)) // If not zero, return
+        // {
+        //     // someone did this before me
+        //     return;
+        // }
+
         root->partial_sums[i] = use_cached_query(root, root->children[i], identity, func);
 
         build_partial_sums(root->children[i], identity, func);
@@ -721,13 +724,13 @@ parlay::sequence<D> batched_subtree_query_helper(ds& indices, parlay::sequence<c
 
     auto roots = get_roots<T,D>(cluster_ptrs);
 
-    parlay::parallel_for(0, indices.size(), [&] (T i) {
-        const auto& index_pair = indices[i];
-        cluster<T,D>* root = &clusters[index_pair.first];
-        cluster<T,D>* dir_giver = &clusters[index_pair.second];
-        mark_entryway(root, dir_giver);
-        return;
-    });
+    // parlay::parallel_for(0, indices.size(), [&] (T i) {
+    //     const auto& index_pair = indices[i];
+    //     cluster<T,D>* root = &clusters[index_pair.first];
+    //     cluster<T,D>* dir_giver = &clusters[index_pair.second];
+    //     mark_entryway(root, dir_giver);
+    //     return;
+    // });
 
     std::cout << "There are " << roots.size() << " unique roots " << std::endl;
 
