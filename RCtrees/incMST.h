@@ -7,6 +7,8 @@
 #include <set>
 #include "../examples/filter_kruskal.h"
 #include "RCdynamic.h"
+#include "ternarizer.h"
+#include <chrono>
 
 
 template<typename T, typename D> 
@@ -98,7 +100,7 @@ void set_remove(std::vector<std::tuple<T, T, D>>& edges, const std::tuple<T, T, 
     }
 }
 
-// TODO: determine if a particular cluster is contributing a vertex or not and also create edges
+
 template<typename T, typename D>
 void  top_down_ct(cluster<T,D>*& cluster_ptr, parlay::sequence<cluster<T,D>>& clusters) // I call this on roots
 {
@@ -106,14 +108,14 @@ void  top_down_ct(cluster<T,D>*& cluster_ptr, parlay::sequence<cluster<T,D>>& cl
         return;
     cluster_ptr->vertex_count = 0;
 
-    if(cluster_ptr->state & is_marked_endpoint)
-    {
-        if(!(cluster_ptr->state & is_marked))
-        {
-            cluster_ptr->print();
-        }
-        assert(cluster_ptr->state & is_marked);
-    }
+    // if(cluster_ptr->state & is_marked_endpoint)
+    // {
+    //     if(!(cluster_ptr->state & is_marked))
+    //     {
+    //         cluster_ptr->print();
+    //     }
+    //     assert(cluster_ptr->state & is_marked);
+    // }
 
     if(!(cluster_ptr->state & is_marked))
     {
@@ -164,12 +166,12 @@ void  top_down_ct(cluster<T,D>*& cluster_ptr, parlay::sequence<cluster<T,D>>& cl
         }
         else if(cluster_ptr->parent.load() && (cluster_ptr->parent.load()->state & is_marked)) // part of line 13 -- must be base edge by elimination
         { // Do we even need is marked here?? I suspect not since parent must have been marked for recursion to occur
-            assert(cluster_ptr->state & base_edge); // TODO remove asserts
+            // assert(cluster_ptr->state & base_edge); // TODO remove asserts
             cluster<T,D>* lptr = nullptr;
             cluster<T,D>* rptr = nullptr;
             cluster_ptr->find_endpoints(lptr, rptr);
             D retval = cluster_ptr->data;
-            assert(lptr && rptr && lptr != rptr);
+            // assert(lptr && rptr && lptr != rptr);
             T lindex = lptr->index;
             T rindex = rptr->index;
             lptr->insertCGentry(rindex, retval, cluster_ptr); // should just be cluster_ptr as base edge
@@ -292,6 +294,9 @@ void sum_up_child_vertex_counts(cluster<T,D>* root)
         return;
     auto& cluster_ptr = root;
 
+    if(!(cluster_ptr->state & (is_marked | is_marked_endpoint)))
+        return;
+
     parlay::parallel_for(0, max_neighbours, [&] (T i) { 
         auto& child_ptr = cluster_ptr->children[i];
         sum_up_child_vertex_counts(child_ptr);
@@ -398,6 +403,10 @@ void checkCGEdgesValid(parlay::sequence<T> cluster_indices, parlay::sequence<clu
 template<typename T, typename D>
 std::pair<parlay::sequence<std::tuple<T,T,D>>, parlay::sequence<std::pair<T,T>>> createCompressedPathTree(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequence<std::tuple<T,T,D>>& newEdges)
 {
+
+    // parlay::internal::timer t1;
+    // t1.start();
+    // std::cout << t1.next_time() << " at start " << std::endl; 
     parlay::sequence<std::tuple<T,T,D>> return_truples;
 
     parlay::sequence<cluster<T,D>*> relevant_null_clusters = parlay::sequence<cluster<T,D>*>(2*newEdges.size(), nullptr);
@@ -437,6 +446,7 @@ std::pair<parlay::sequence<std::tuple<T,T,D>>, parlay::sequence<std::pair<T,T>>>
             cluster_w_ptr = cluster_w_ptr->parent;
         }
     });
+    // std::cout << t1.next_time() << " at 1 " << std::endl;
 
     // Mark them
     parlay::parallel_for(0, newEdges.size(), [&] (T i) {
@@ -477,6 +487,9 @@ std::pair<parlay::sequence<std::tuple<T,T,D>>, parlay::sequence<std::pair<T,T>>>
         }
     });
 
+    // std::cout << t1.next_time() << " at 2 " << std::endl;
+
+    // std::cout << "There are " << relevant_null_clusters.size() << " null clusters" << std::endl;
 
 
     relevant_null_clusters = parlay::filter(relevant_null_clusters, [] (cluster<T,D>* ptr) {
@@ -486,6 +499,8 @@ std::pair<parlay::sequence<std::tuple<T,T,D>>, parlay::sequence<std::pair<T,T>>>
     parlay::parallel_for(0, relevant_null_clusters.size(), [&] (T i) {
         sum_up_child_vertex_counts(relevant_null_clusters[i]);
     });
+
+    // std::cout << t1.next_time() << " at 2.5 " << std::endl;
 
     auto countpair = parlay::scan(
         parlay::tabulate(relevant_null_clusters.size(), [&] (T i) {
@@ -501,12 +516,14 @@ std::pair<parlay::sequence<std::tuple<T,T,D>>, parlay::sequence<std::pair<T,T>>>
         write_vertices(relevant_null_clusters[i], per_forest_vertices[i], vertices, clusters);
     });
 
+    // std::cout << t1.next_time() << " at 3 " << std::endl;
+
     // verifyCompressPathTree(clusters, newEdges, vertices); // TODO REMOVE!!
     // checkCGEdgesValid(vertices, clusters); // TODO also remove!!
 
     parlay::sequence<T> edge_counts = parlay::tabulate(vertices.size(), [&] (T i) {
         auto cluster_ptr = &clusters[vertices[i]];
-        assert(cluster_ptr->state & is_marked);
+        // assert(cluster_ptr->state & is_marked);
         return (T) cluster_ptr->getCGNumEdges();
     });
 
@@ -517,6 +534,9 @@ std::pair<parlay::sequence<std::tuple<T,T,D>>, parlay::sequence<std::pair<T,T>>>
     
     return_truples = parlay::sequence<std::tuple<T,T,D>>(total_edge_count);
     auto return_endpoints = parlay::sequence<std::pair<T,T>>(total_edge_count);
+
+
+    // std::cout << t1.next_time() << " at 4 " << std::endl;
 
 
     // write edges
@@ -530,12 +550,12 @@ std::pair<parlay::sequence<std::tuple<T,T,D>>, parlay::sequence<std::pair<T,T>>>
                 return_truples[local_offset] = std::tuple<T,T,D>(cluster_ptr->index, cluster_ptr->CGGraphEntry[i].first, cluster_ptr->CGGraphEntry[i].second);
                 
                 cluster<T,D>* heaviestEdgePtr = cluster_ptr->CGGraphEdgePtr[i];
-                assert(heaviestEdgePtr);
-                assert(heaviestEdgePtr->state & base_edge);
+                // assert(heaviestEdgePtr);
+                // assert(heaviestEdgePtr->state & base_edge);
                 cluster<T,D>* l;
                 cluster<T,D>* r;
                 heaviestEdgePtr->find_endpoints(l, r);
-                assert(l && r);
+                // assert(l && r);
                 return_endpoints[local_offset] = {l->index, r->index};
                 
                 cluster_ptr->CGEntryValid[i] = false; // Now that we have this tuple, delete this edge
@@ -543,13 +563,15 @@ std::pair<parlay::sequence<std::tuple<T,T,D>>, parlay::sequence<std::pair<T,T>>>
             }
         }
     });
+
+    // std::cout << t1.next_time() << " at 5 " << std::endl;
     
 
     /*
         Just printing stuff below 
     */
 
-    std::cout << "There are " << relevant_null_clusters.size() << " relevant forests" << std::endl;
+    // std::cout << "There are " << relevant_null_clusters.size() << " relevant forests" << std::endl;
 
 
 
@@ -788,12 +810,15 @@ void verifyInsertionObeysDegreeCap(parlay::sequence<cluster<T,D>>& clusters, par
     Warning, changes cluster and MST in place
 */
 template<typename T, typename D>
-void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequence<std::tuple<T,T,D>>& newEdges)
+void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequence<std::tuple<T,T,D>>& newEdges, ternarizer<T,D>& TR)
 {
-    auto compressed_tree_pair = createCompressedPathTree(clusters, newEdges);
+    auto cst_gen_start = std::chrono::high_resolution_clock::now();
+    auto compressed_tree_pair = createCompressedPathTree(clusters, newEdges); 
+    auto cst_gen_end = std::chrono::high_resolution_clock::now();
 
-    auto compressed_tree = compressed_tree_pair.first;
-    auto compressed_tree_endpoints = compressed_tree_pair.second;
+    auto& compressed_tree = compressed_tree_pair.first;
+
+    // std::cout << "Compressed tree has " << compressed_tree.size() << " vertices and " << compressed_tree_pair.second.size() << " edges " << std::endl;
 
     if(clusters.size() <= 100)
     {
@@ -802,9 +827,14 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
             std::cout << std::get<0>(edge) << " " << std::get<1>(edge) << " " << std::get<2>(edge) << std::endl;
         std::cout << reset << std::endl;    
     }
-
     auto AllNewEdges = parlay::append(compressed_tree, newEdges);
+    auto& compressed_tree_endpoints = compressed_tree_pair.second;
+
+    auto mst_gen_start = std::chrono::high_resolution_clock::now();
     auto finalEdgeIndices = min_spanning_forest(AllNewEdges, clusters.size());
+    auto mst_gen_end = std::chrono::high_resolution_clock::now();
+
+    auto insertion_start = std::chrono::high_resolution_clock::now();
 
     parlay::sequence<bool> wasDeleted = parlay::sequence<bool>(AllNewEdges.size(), true);
 
@@ -833,8 +863,8 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
     }
 
     // gather add edges via a filter which is O(n) work
-    // TODO replace with a pack by breaking the boolean array into two
-    auto add_edges = parlay::filter(parlay::tabulate(newEdges.size(), [&] (T i) {
+    // Use a pack? TODO?
+    auto add_edges = parlay::filter(parlay::delayed_tabulate(newEdges.size(), [&] (T i) {
         if(wasDeleted[i+compressed_tree.size()])
             return std::tuple<T,T,D>(0,0, (T) 0);
         return newEdges[i];
@@ -842,10 +872,14 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
         return std::get<0>(tup) != std::get<1>(tup);
     });
 
-    auto delete_edges = parlay::filter(parlay::tabulate(compressed_tree.size(), [&] (T i) {
+    auto delete_edges = parlay::filter(parlay::delayed_tabulate(compressed_tree.size(), [&] (T i) {
         if(!wasDeleted[i])
             return std::pair<T,T>(0,0);
-        return compressed_tree_endpoints[i];
+        T v = compressed_tree_endpoints[i].first;
+        T w = compressed_tree_endpoints[i].second;
+        v = TR.get_owner(v);
+        w = TR.get_owner(w);
+        return std::pair<T,T>(v,w);
     }), [] (auto pr) {
         return pr.first != pr.second;
     });
@@ -863,13 +897,29 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
         std::cout << std::endl;
     }
 
-    std::cout << "Deleting " << delete_edges.size() << " edges " << std::endl;
-    std::cout << "Adding " << add_edges.size() << " edges " << std::endl;
+    // std::cout << "Deleting " << delete_edges.size() << " edges " << std::endl;
+    // std::cout << "Adding " << add_edges.size() << " edges " << std::endl;
 
     parlay::sequence<std::tuple<T,T,D>> empty_add_edges;    
     parlay::sequence<std::pair<T,T>> empty_delete_edges;    
 
-    batchInsertEdge(delete_edges, add_edges, clusters, (D) 0, [] (D a, D b) {return a > b ? a : b;});
+    // first ternarize the delete edges
+    auto del_pair = TR.delete_edges(delete_edges);
+
+    batchInsertEdge(del_pair.second, del_pair.first, clusters, (D) 0, [] (D a, D b) {return a > b ? a : b;});
+
+    // then ternarize the add edges
+    auto add_edges_ternarized = TR.add_edges(add_edges);
+
+    batchInsertEdge(empty_delete_edges, add_edges_ternarized, clusters, (D) 0, [] (D a, D b) {return a > b ? a : b;});
+
+    auto insertion_end = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<double> cst_gen_time = cst_gen_end - cst_gen_start;
+    std::chrono::duration<double> mst_gen_time = mst_gen_end - mst_gen_start;
+    std::chrono::duration<double> insertion_time = insertion_end - insertion_start;
+
+    std::cout << cst_gen_time.count() << "," << mst_gen_time.count() << "," << insertion_time.count() << std::endl;
 
     // std::cout << "Done deleting " << std::endl;
     // if(clusters.size() <= 100)

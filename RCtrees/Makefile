@@ -1,6 +1,6 @@
 # Variables
 CXX = g++
-CXXFLAGS = -O0 -std=c++17 -pthread -g -Werror -Wparentheses -flto
+CXXFLAGS = -O3 -std=c++17 -pthread -g -Werror -Wparentheses -flto
 # CXXFLAGS = -O0 -flto -std=c++17 -pthread -g -Werror -Wparentheses
 INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/ -I parhash_include/ -I LCA -I .
 LDFLAGS = -ljemalloc
@@ -8,13 +8,13 @@ TARGET = RC.out
 SRC = RC.cpp
 
 # Default target
-all: RC.out testMST.out  testHashing.out testTreeGen.out testBatchedSubtree.out
+all: RC.out testMST.out  testHashing.out testTreeGen.out testBatchedSubtree.out testPathQueries.out
 
 # Rule to build the target
 RC.out: RC.cpp RC.h cluster.h RCdynamic.h adjacency_linked_list.h incMST.h random_trees.h utils.h
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o RC.out RC.cpp
 
-testMST.out: testMST.cpp
+testMST.out: testMST.cpp ternarizer.h treeGen.h incMST.h
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o testMST.out testMST.cpp
 
 testTreeGen.out: testTreeGen.cpp treeGen.h RC.h cluster.h RCdynamic.h  adjacency_linked_list.h  random_trees.h utils.h
@@ -26,6 +26,8 @@ testHashing.out: treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h  r
 testBatchedSubtree.out: treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h  random_trees.h utils.h testBatchedSubtree.cpp ternarizer.h subtree_query.h
 	$(CXX)  $(CXXFLAGS)  -o testBatchedSubtree.out testBatchedSubtree.cpp $(INCLUDES)
 
+testPathQueries.out: testPathQueries.cpp treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h  random_trees.h utils.h ternarizer.h 
+	$(CXX)  $(CXXFLAGS)  -o testPathQueries.out testPathQueries.cpp $(INCLUDES)
 
 RC_CREATE_DEPS = MIS.h RC.h RCdynamic.h RC_test.h RCdynamic.h
 RC_BASE_DEPS = cluster.h adjacency_linked_list.h 
@@ -47,8 +49,7 @@ sslca.out : static_seqn_LCA.cpp $(LCA_DEPS) $(BASE_DEPS)
 lca.out : LCA.cpp $(LCA_DEPS) $(BASE_DEPS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o lca.out LCA.cpp
 
-testHashing.out: testHashing.cpp treeGen.h
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o testHashing.out testHashing.cpp
+
 
 # Clean up build files
 clean:

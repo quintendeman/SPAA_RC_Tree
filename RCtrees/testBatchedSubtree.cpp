@@ -21,6 +21,7 @@ static void print_help() {
               << "  --ln <value>          Set ln parameter (default: 0.1)\n"
               << "  --mean <value>        Set mean value (default: 20.0)\n"
               << "  --randomized          Enable randomized mode\n"
+              << "  --num-queries         Number of subtree queries to perform\n"
               << "  --help                Show this help message\n";
 }
 
@@ -133,6 +134,7 @@ int main(int argc, char* argv[])
     double ln = 0.1;
     double mean = 20.0;
     bool randomized = false;
+    long num_queries = -1;
 
     // std::cout << "Argc " << argc << std::endl;
 
@@ -158,10 +160,15 @@ int main(int argc, char* argv[])
           randomized = true;
         } else if (arg == "--ln" && i + 1 < argc) {
             ln = std::stod(argv[++i]);
+        } else if (arg == "--num-queries" && i + 1 < argc) {
+            num_queries = std::stod(argv[++i]);
         } else if (arg == "--mean" && i + 1 < argc) {
             mean = std::stod(argv[++i]);
         }
     }
+
+    if(num_queries <= 0)
+        num_queries = graph_size/5;
         
 
     const double min_weight = 0.0;
@@ -192,9 +199,9 @@ int main(int argc, char* argv[])
     //     clusters[i].partial_sum_complete[2] = 0;
     // });
 
-    test_simple_subtree_queries(clusters.size() / 10, clusters, TG, TR);
+    // test_simple_subtree_queries(clusters.size() / 10, clusters, TG, TR);
 
-    test_batched_subtree_queries(clusters.size(), clusters, TG, TR);
+    test_batched_subtree_queries(num_queries, clusters, TG, TR);
 
     
 

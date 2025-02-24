@@ -1,6 +1,6 @@
 
 template <typename T, typename D, typename assocfunc>
-D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc func)
+D PathQueryHelper( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc func)
 {
     if(v == w)
         return defretval;
@@ -284,6 +284,12 @@ D PathQuery( cluster<T, D>* v,  cluster<T, D>* w, const D& defretval, assocfunc 
 
     return func(v_contrib, w_contrib);
 
+}
+
+template<typename T, typename D, typename assocfunc>
+D pathQuery(T v, T w, parlay::sequence<cluster<T,D>>& clusters, const D& identity, assocfunc func)
+{
+    return PathQueryHelper(&clusters[v], &clusters[w], identity, func);
 }
 
 // assumes you are using "+" as the assocfunc
