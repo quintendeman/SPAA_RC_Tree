@@ -309,7 +309,7 @@ void testPathQueryValid(parlay::sequence<cluster<T,D>>& clusters, parlay::sequen
         }
         end_index = index;
 
-        D pathQueryResult = PathQuery(&clusters[random_perm_map[start_index]], &clusters[random_perm_map[end_index]], (D) 0.0, [] (D a, D b) {return a + b;});
+        D pathQueryResult = pathQuery(random_perm_map[start_index], random_perm_map[end_index], clusters, (D) 0.0, [] (D a, D b) {return a + b;});
 
         auto almost_equal = [] (D A, D B) -> bool {
         const double tolerance = 0.001;
