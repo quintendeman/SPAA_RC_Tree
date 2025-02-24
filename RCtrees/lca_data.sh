@@ -1,7 +1,11 @@
+date
+
 NUM_THREADS=(1 2 4 6 8 12 16 20 24 28 32)
 TRIES=(1 1 1) #note, perhaps increase to more tries
 make lca.out
 touch output_lca.csv
+
+date
 
 LD_PRELOAD=$jemellocpath PARLAY_NUM_THREADS=32 ./lca.out -forr -4 >> output_lca.csv
 
@@ -19,3 +23,5 @@ for PNT in "${REV_ORDER[@]}"; do
 done
 
 LD_PRELOAD=$jemellocpath PARLAY_NUM_THREADS=32 ./lca.out -forr -4 >> output_lca.csv
+
+date
