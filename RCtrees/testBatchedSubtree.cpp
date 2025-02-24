@@ -114,14 +114,6 @@ void test_batched_subtree_queries(const long& num_queries, parlay::sequence<clus
         }
     });
 
-    // for(long i = 0; i < TG.parents.size(); i++)
-    // {
-    //     std::cout << i << "->" << TG.parents[i] << std::endl;
-    // }
-    // for(long i = 0; i < TG.subgraphs.size(); i++)
-    // {
-    //     std::cout << TG.subgraphs[i].first << " -- " << TG.subgraphs[i].second << std::endl;
-    // }
     std::cout << std::endl;
 
 }
@@ -175,7 +167,7 @@ int main(int argc, char* argv[])
     const double max_weight = 100.0f;
 
     // std::cout << "II " << II << std::endl;
-    TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, false, 0);
+    TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true, 0);
 
     TG.generateInitialEdges();
 

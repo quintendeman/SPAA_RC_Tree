@@ -49,8 +49,6 @@ sslca.out : static_seqn_LCA.cpp $(LCA_DEPS) $(BASE_DEPS)
 lca.out : LCA.cpp $(LCA_DEPS) $(BASE_DEPS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o lca.out LCA.cpp
 
-
-
 # Clean up build files
 clean:
 	rm -f *.out

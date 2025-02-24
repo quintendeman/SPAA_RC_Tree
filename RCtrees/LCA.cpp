@@ -370,7 +370,42 @@ parlay::sequence<long> tree_gen(long graph_size, parlay::sequence<cluster<long, 
 }
 
 
-std::chrono::duration<double> get_single_runtime(parlay::random_generator& pgen,parlay::sequence<cluster<long, double>>& clusters, int k,std::uniform_int_distribution<long>& dis,parlay::sequence<long>& parent_tree) {
+void tree_gen_void(long graph_size, parlay::sequence<cluster<long, double>>& clusters, double mean, double ln) {
+
+    const double min_weight = 0.0;
+    const double max_weight = 100.0f;
+    auto distribution = exponential; // either exponential, geometric, constant or uniform
+
+    int II = 0;
+
+    // std::cout << "II " << II << std::endl;
+      TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true, 0);
+
+      TG.generateInitialEdges();
+
+      auto retedges = TG.getAllEdges();
+
+      parlay::sequence<std::pair<long,long>> ret_edges_formatted = parlay::map(retedges,[&] (std::tuple<long,long,double>& edge) {return std::make_pair(std::get<0>(edge),std::get<1>(edge));});
+
+    
+      ternarizer<long, double> TR(graph_size, 0);
+
+      auto ret_edge_modified = TR.add_edges(retedges);
+      
+      // TR.print_state();
+      TR.verify_simple_tree();
+
+      const long max_degree = 3;
+      double defretval = 0.0;
+
+      parlay::sequence<wedge> empty_edges_sequence;
+      create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
+      create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
+
+}
+
+
+std::chrono::duration<double> get_single_runtime(parlay::random_generator& pgen,parlay::sequence<cluster<long, double>>& clusters, int k,std::uniform_int_distribution<long>& dis,parlay::sequence<long>& parent_tree,bool extra_testing=false) {
 
     dis(pgen);
     parlay::sequence<std::tuple<long,long,long>> queries = parlay::tabulate(k,[&] (size_t i) {
@@ -388,8 +423,8 @@ std::chrono::duration<double> get_single_runtime(parlay::random_generator& pgen,
     batchLCA(clusters,queries,answers);
 
     auto static_creation_end = std::chrono::high_resolution_clock::now();
-    //TOD2* add assertion here that queries check out? 
-    handle_answers(queries,answers,k,parent_tree,clusters,0,0,0,0,"nofileprint"); 
+    //TOD2* add assertion here that queries check out -> within handle_answers
+    if (extra_testing) handle_answers(queries,answers,k,parent_tree,clusters,0,0,0,0,"nofileprint"); 
 
     return static_creation_end-static_creation_start;
 
@@ -398,8 +433,8 @@ std::chrono::duration<double> get_single_runtime(parlay::random_generator& pgen,
 
 
 void bench(parlay::random_generator& pgen) {
-    long oldn = 10'000'000;
-    int kscale=20;
+    long oldn = 30'000'000;
+    int kscale=22;
     double mean = 20;
     double ln = 0.1;
     long k = -1;
@@ -410,8 +445,9 @@ void bench(parlay::random_generator& pgen) {
     parlay::sequence<int> kvals = parlay::tabulate(kscale,[&] (int i) {return 1 << i;});
     parlay::sequence<cluster<long, double>> clusters; 
 
-    parlay::sequence<long> parent_tree = tree_gen(oldn,clusters,mean,ln); //one tree for all testing
-    long n = parent_tree.size();
+    parlay::sequence<long> parent_tree(1,1);
+    tree_gen_void(oldn,clusters,mean,ln); //one tree for all testing
+    long n = -1;
 
     std::uniform_int_distribution<long> dis(0,n-1);
 
@@ -420,7 +456,7 @@ void bench(parlay::random_generator& pgen) {
         total=0;
         k=kvals[j];
         for (int iter = 0; iter < trials_per; iter++) {
-            total += get_single_runtime(pgen,clusters,k,dis,parent_tree).count();
+            total += get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
         }
         double average = total/trials_per;
 
@@ -444,16 +480,17 @@ void bench_threads(parlay::random_generator& pgen, long oldn, long k, int NUM_TR
 
     parlay::sequence<cluster<long, double>> clusters; 
 
-    parlay::sequence<long> parent_tree = tree_gen(oldn,clusters,mean,ln); //one tree for all testing
+    parlay::sequence<long> parent_tree(1,1);
+    tree_gen_void(oldn,clusters,mean,ln); //one tree for all testing
     //pseq(parent_tree,"parent tree");
-    long n = parent_tree.size(); //ternerized size
+    long n = -1; //ternerized size
 
     std::uniform_int_distribution<long> dis(0,n-1);
 
     double total = 0;
 
     for (int iter = 0; iter < NUM_TRIALS; iter++) {
-        total += get_single_runtime(pgen,clusters,k,dis,parent_tree).count();
+        total += get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
         
     }
     double average = total/NUM_TRIALS;
