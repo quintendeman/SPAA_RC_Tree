@@ -15,6 +15,8 @@
 #include "incMST.h"
 #include "utils.h"
 #include "random_trees.h"
+#include "treeGen.h"
+#include "ternarizer.h"
 
 // **************************************************************
 // Driver
@@ -51,58 +53,33 @@ void insert_random_weights(const parlay::sequence<vertex>& parents, parlay::sequ
     return;
 }
 
-// Warning, tree properties not preserved but degree preserved (hopefully)
-parlay::sequence<std::tuple<vertex,vertex,double>> generate_random_edges(const parlay::sequence<vertex>& parents, bool do_just_one = false)
+
+parlay::sequence<std::tuple<vertex,vertex,double>> generate_random_edges(const parlay::sequence<vertex>& parents, const parlay::sequence<vertex>& map, long num_gens = 1)
 {
-    parlay::sequence<std::tuple<vertex,vertex,double>> new_edges;
-    std::random_device rd;                         // Seed generator
-    std::mt19937 gen(rd());                        // Standard Mersenne Twister engine seeded with rd()
-    std::uniform_int_distribution<vertex> dist(0, parents.size() * 100);   
+    parlay::random_generator gen(0);
+    std::uniform_int_distribution<long> dis(0, parents.size()-1);
+    std::uniform_real_distribution<double> dis_ur(0.0f, 1.0f);
 
-    parlay::sequence<std::atomic<unsigned char>> counts = parlay::sequence<std::atomic<unsigned char>>(parents.size());
-    
-    parlay::parallel_for(0, counts.size(), [&] (vertex i) {
-        counts[i] = 0;
-    });
+    return std::move(parlay::filter(parlay::delayed_tabulate(num_gens, [&] (long i) {
+        auto r = gen[i];
+        long random_value = dis(r);
+        long child = map[random_value];
+        long parent = map[parents[random_value]];
+        double random_weight = dis_ur(r);
+        return std::tuple<long, long, double>(child, parent, random_weight);
+    }), [] (auto tpl){return std::get<0>(tpl) != std::get<1>(tpl);}));
 
-    parlay::parallel_for(0, counts.size(), [&] (vertex i) {
-        if(parents[i] != i)
-        {
-            counts[parents[i]].fetch_add(1);
-            counts[i].fetch_add(1);
-        }
-    });
-
-
-    int num_samples = 3 + (rand() % 100);
-    new_edges = parlay::tabulate(parents.size() / num_samples, [&] (vertex i) {
-        auto my_index = i * num_samples;
-        auto parent_index = my_index - num_samples/2;
-        if(parent_index < 0 || my_index >= parents.size() || parent_index == my_index || counts[my_index] == max_neighbours || counts[parent_index] == max_neighbours)
-            return std::tuple<vertex,vertex,double>(0, 0, 0);
-        return std::tuple<vertex, vertex, double> (my_index, parent_index, (double)dist(gen));
-    });
-    new_edges = parlay::filter(new_edges, [&] (auto& edge) {
-        return std::get<0>(edge) != std::get<1>(edge);
-    });
-    parlay::sequence<std::tuple<vertex,vertex,double>> ret_edges;
-    if(new_edges.size() && do_just_one)
-    {
-        ret_edges.push_back(new_edges[0]);
-        ret_edges.push_back(new_edges[new_edges.size()-1]);
-        return ret_edges;
-    }
-    return new_edges;
 }
 
 int main(int argc, char* argv[]) {
-    auto usage = "Usage: RC [--graph-size <graph-size>] [-n <graph-size>] [--num-queries <num-queries>] [--print-creation] [--do-height <true|false>] [--randomized <true|false>] [--do-just-one]";
+    auto usage = "Usage: testMST.out [--graph-size <graph-size>] [-n <graph-size>] [--num-additions <extra edges added>]\nPrints compressed tree creation time, MST time, insertion time";
 
     srand(time(NULL));
 
     const vertex max_rand_size =10000000l; //100000000l;
     // vertex graph_size = rand() % max_rand_size; 
     vertex graph_size = 1; 
+    vertex num_additions = 1;
     for(unsigned short i = 0; i < 3; i++) // random but leaning more towards higher values
     {
         vertex tg = rand() % max_rand_size;
@@ -110,12 +87,7 @@ int main(int argc, char* argv[]) {
             graph_size = tg;
     }
     
-    if((graph_size % 2) == 1)
-        graph_size++;
-    vertex num_queries = 100; // Default value
-    bool print_creation = false;
-    bool randomized = false; // Default value
-    bool do_just_one = false;
+   
 
     // Parse command line arguments
     for (int i = 1; i < argc; ++i) {
@@ -124,16 +96,8 @@ int main(int argc, char* argv[]) {
             graph_size = std::stol(argv[++i]);
         } else if (arg == "-n" && i + 1 < argc) {
             graph_size = std::stol(argv[++i]);
-        } else if (arg == "--num-queries" && i + 1 < argc) {
-            num_queries = std::stol(argv[++i]);
-        } else if (arg == "--print-creation") {
-            print_creation = true;
-        } else if (arg == "--do-just-one") {
-            do_just_one = true;
-        } 
-        else if (arg == "--randomized" && i + 1 < argc) {
-            std::string value = argv[++i];
-            randomized = (value == "true");
+        } else if (arg == "--num-additions" && i + 1 < argc) {
+            num_additions = std::stol(argv[++i]);
         } else if (i == 1 && arg.find_first_not_of("0123456789") == std::string::npos) {
             // Handle the case where a single number is provided as graph_size
             graph_size = std::stol(arg);
@@ -148,63 +112,32 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    if (num_queries > graph_size)
-        num_queries = graph_size;
+    // std::cout << "Working with a graph of size " << graph_size << std::endl; 
 
-    if (graph_size < 10)
-        graph_size = 10;
+    TreeGen<long, double> TG(graph_size, 0.0f, 1.0f, 0.1, 20.0, exponential, true, 0);
 
-    std::cout << "Working with a graph of size " << graph_size << std::endl; 
+    TG.generateInitialEdges();
 
-    auto parents = generate_tree_graph(graph_size);
-    degree_cap_parents(parents, max_degree);
-    graph G;
-    G = convert_parents_to_graph(G, parents);
+    auto retedges = TG.getAllEdges();
 
+    ternarizer<long, double> TR(graph_size, 0.0f);
+
+    auto ternerized_initial_edges = TR.add_edges(retedges);
+    
     parlay::sequence<cluster<vertex, datatype>> clusters;
 
-    // Measure creation time
-    auto start_creation = std::chrono::high_resolution_clock::now();
-    create_base_clusters(G, clusters, max_degree);
-    // create_RC_tree(clusters, graph_size, randomized);
+    // // Measure creation time
+    // auto start_creation = std::chrono::high_resolution_clock::now();
+    create_base_clusters(clusters, ternerized_initial_edges, static_cast<long>(3), graph_size*extra_tern_node_factor);
+    create_RC_tree(clusters, graph_size*extra_tern_node_factor, static_cast<double>(0.0f), [] (double A, double B) {return A+B;}, false);
 
-    double defretval = 0.0;
-    create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;}, randomized);
+    auto random_add_edges = generate_random_edges(TG.parents, TG.random_perm_map, num_additions);
 
-    auto end_creation = std::chrono::high_resolution_clock::now();
-
-    insert_random_weights(parents, clusters);
-
-    checkEdgePtrValid(clusters);
-
-    auto new_edges_as_truples = generate_random_edges(parents, do_just_one);
-
-    if(graph_size <= 100)
-    {
-        std::cout << green << "Old edges: " << std::endl;
-        for(auto& edge : convertClustersToTruples(clusters))
-            std::cout << std::get<0>(edge) << " " << std::get<1>(edge) << " " << std::get<2>(edge) << std::endl;
-        std::cout << reset << std::endl;
-    }
-
-    if(graph_size <= 100 || do_just_one)
-    {
-        std::cout << blue << "New edges: " << std::endl;
-        for(auto& edge: new_edges_as_truples)
-            std::cout << std::get<0>(edge) << " " << std::get<1>(edge) << " " << std::get<2>(edge) << std::endl;
-        std::cout << reset << std::endl;
-    }
-
-    // parlay::sequence<vertex> edge_counts = parlay::sequence<vertex>(clusters.size(), 0); // scratch space to be allocated once
-    // parlay::sequence<vertex> vertex_counts = parlay::sequence<vertex>(clusters.size(), 0);
-
-    std::cout << "There are " << new_edges_as_truples.size() << " new edges " << std::endl;
-
-    incrementMST(clusters, new_edges_as_truples);
-
-    std::chrono::duration<double> creation_time = end_creation - start_creation;
+    // std::cout << "Adding " << random_add_edges.size() << " new edges " << std::endl;
     
-    
+    incrementMST(clusters, random_add_edges, TR);
+
+     
     if(graph_size <= 100)
         printTree(clusters);
 
@@ -213,11 +146,6 @@ int main(int argc, char* argv[]) {
 
     deleteRCtree(clusters);
 
-    if (print_creation) {
-        std::cout << graph_size << "," << std::setprecision(6) << creation_time.count() << std::endl;
-    } else {
-        std::cout << "Creation time: " << std::setprecision(6) << creation_time.count() << " seconds" << std::endl;
-    }
 
     return 0;
 }

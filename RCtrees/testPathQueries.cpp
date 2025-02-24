@@ -10,11 +10,11 @@
 #include "../include/parlay/primitives.h"
 #include "../include/parlay/sequence.h"
 #include "../include/parlay/internal/get_time.h"
-#include "RCdynamic.h"
 #include "../examples/samplesort.h"
-#include "incMST.h"
+#include "RCdynamic.h"
 #include "utils.h"
 #include "random_trees.h"
+#include "path_query.h"
 #include "treeGen.h"
 #include "ternarizer.h"
 
@@ -29,32 +29,32 @@ using datatype = double;
 
 const vertex max_degree = 3;
 
-parlay::sequence<std::tuple<vertex,vertex,double>> generate_random_edges(const parlay::sequence<vertex>& parents, const parlay::sequence<vertex>& map, long num_gens = 1)
+parlay::sequence<std::pair<vertex,vertex>> generate_random_pairs(const parlay::sequence<vertex>& parents, const parlay::sequence<vertex>& map, long num_gens = 1)
 {
     parlay::random_generator gen(0);
     std::uniform_int_distribution<long> dis(0, parents.size()-1);
-    std::uniform_real_distribution<double> dis_ur(0.0f, 1.0f);
+
 
     return std::move(parlay::filter(parlay::delayed_tabulate(num_gens, [&] (long i) {
         auto r = gen[i];
         long random_value = dis(r);
-        long child = map[random_value];
-        long parent = map[parents[random_value]];
-        double random_weight = dis_ur(r);
-        return std::tuple<long, long, double>(child, parent, random_weight);
-    }), [] (auto tpl){return std::get<0>(tpl) != std::get<1>(tpl);}));
+        long child = random_value;
+        long parent = map[random_value];
+
+        return std::pair<long, long>(child, parent);
+    }), [] (auto pr){return std::get<0>(pr) != std::get<1>(pr);}));
 
 }
 
 int main(int argc, char* argv[]) {
-    auto usage = "Usage: testMST.out [--graph-size <graph-size>] [-n <graph-size>] [--num-additions <extra edges added>]\nPrints compressed tree creation time, MST time, insertion time";
+    auto usage = "Usage: testMST.out [--graph-size <graph-size>] [-n <graph-size>] [--num-queries <number of path queries to perform>]\nPrints compressed tree creation time, MST time, insertion time";
 
     srand(time(NULL));
 
     const vertex max_rand_size =10000000l; //100000000l;
     // vertex graph_size = rand() % max_rand_size; 
     vertex graph_size = 1; 
-    vertex num_additions = 1;
+    vertex num_queries = 1;
     for(unsigned short i = 0; i < 3; i++) // random but leaning more towards higher values
     {
         vertex tg = rand() % max_rand_size;
@@ -71,8 +71,8 @@ int main(int argc, char* argv[]) {
             graph_size = std::stol(argv[++i]);
         } else if (arg == "-n" && i + 1 < argc) {
             graph_size = std::stol(argv[++i]);
-        } else if (arg == "--num-additions" && i + 1 < argc) {
-            num_additions = std::stol(argv[++i]);
+        } else if (arg == "--num-queries" && i + 1 < argc) {
+            num_queries = std::stol(argv[++i]);
         } else if (i == 1 && arg.find_first_not_of("0123456789") == std::string::npos) {
             // Handle the case where a single number is provided as graph_size
             graph_size = std::stol(arg);
@@ -106,12 +106,22 @@ int main(int argc, char* argv[]) {
     create_base_clusters(clusters, ternerized_initial_edges, static_cast<long>(3), graph_size*extra_tern_node_factor);
     create_RC_tree(clusters, graph_size*extra_tern_node_factor, static_cast<double>(0.0f), [] (double A, double B) {return A+B;}, false);
 
-    auto random_add_edges = generate_random_edges(TG.parents, TG.random_perm_map, num_additions);
+    auto random_pairs = generate_random_pairs(TG.parents, TG.random_perm_map, num_queries);
 
     // std::cout << "Adding " << random_add_edges.size() << " new edges " << std::endl;
     
-    incrementMST(clusters, random_add_edges, TR);
+    parlay::internal::timer t1;
 
+    t1.start();
+
+    auto results = parlay::tabulate(random_pairs.size(), [&] (long i) {
+        auto& rp = random_pairs[i]; 
+        const double identity = 0.0f;
+        return pathQuery(rp.first, rp.second, clusters, identity, [] (double A, double B) {return A+B;});
+    });
+
+    std::cout << t1.next_time() << std::endl;
+    
      
     if(graph_size <= 100)
         printTree(clusters);

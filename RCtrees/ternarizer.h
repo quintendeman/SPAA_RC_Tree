@@ -174,6 +174,11 @@ class ternarizer{
             return;
         }
 
+        auto get_owner(T v)
+        {
+            return this->simplified_tree[v].v;
+        }
+
         auto group_by_first(parlay::sequence<wedge> wedge_list)
         {
             auto keyed_sequence = parlay::delayed_tabulate(wedge_list.size(), [wedge_list] (T i) {
