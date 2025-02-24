@@ -370,7 +370,7 @@ parlay::sequence<long> tree_gen(long graph_size, parlay::sequence<cluster<long, 
 }
 
 
-void tree_gen_void(long graph_size, parlay::sequence<cluster<long, double>>& clusters, double mean, double ln) {
+long tree_gen_size(long graph_size, parlay::sequence<cluster<long, double>>& clusters, double mean, double ln) {
 
     const double min_weight = 0.0;
     const double max_weight = 100.0f;
@@ -384,8 +384,6 @@ void tree_gen_void(long graph_size, parlay::sequence<cluster<long, double>>& clu
       TG.generateInitialEdges();
 
       auto retedges = TG.getAllEdges();
-
-      parlay::sequence<std::pair<long,long>> ret_edges_formatted = parlay::map(retedges,[&] (std::tuple<long,long,double>& edge) {return std::make_pair(std::get<0>(edge),std::get<1>(edge));});
 
     
       ternarizer<long, double> TR(graph_size, 0);
@@ -401,6 +399,8 @@ void tree_gen_void(long graph_size, parlay::sequence<cluster<long, double>>& clu
       parlay::sequence<wedge> empty_edges_sequence;
       create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
       create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
+
+      return graph_size + 2*retedges.size();
 
 }
 
@@ -446,8 +446,8 @@ void bench(parlay::random_generator& pgen) {
     parlay::sequence<cluster<long, double>> clusters; 
 
     parlay::sequence<long> parent_tree(1,1);
-    tree_gen_void(oldn,clusters,mean,ln); //one tree for all testing
-    long n = -1;
+    //one tree for all testing
+    long n = tree_gen_size(oldn,clusters,mean,ln);
 
     std::uniform_int_distribution<long> dis(0,n-1);
 
@@ -481,9 +481,10 @@ void bench_threads(parlay::random_generator& pgen, long oldn, long k, int NUM_TR
     parlay::sequence<cluster<long, double>> clusters; 
 
     parlay::sequence<long> parent_tree(1,1);
-    tree_gen_void(oldn,clusters,mean,ln); //one tree for all testing
-    //pseq(parent_tree,"parent tree");
-    long n = -1; //ternerized size
+    //one tree for all testing
+    //n is ternerized size
+    long n = tree_gen_size(oldn,clusters,mean,ln); 
+   
 
     std::uniform_int_distribution<long> dis(0,n-1);
 
