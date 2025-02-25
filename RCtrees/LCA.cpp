@@ -432,17 +432,13 @@ std::chrono::duration<double> get_single_runtime(parlay::random_generator& pgen,
 
 
 
-void bench(parlay::random_generator& pgen) {
-    long oldn = 30'000'000;
-    int kscale=22;
+void bench(parlay::random_generator& pgen,long oldn, long max_k, int trials_per) {
+    int kscale=30;
     double mean = 20;
     double ln = 0.1;
     long k = -1;
 
-
-    int trials_per=10;
-
-    parlay::sequence<int> kvals = parlay::tabulate(kscale,[&] (int i) {return 1 << i;});
+    parlay::sequence<long> kvals = parlay::filter(parlay::tabulate(kscale,[&] (long i) {return static_cast<long>(1) << i;}),[&] (long kcand) {return kcand <= max_k;}); 
     parlay::sequence<cluster<long, double>> clusters; 
 
     parlay::sequence<long> parent_tree(1,1);
@@ -626,7 +622,7 @@ int main(int argc, char* argv[]) {
     }
     
     else if (forest_ratio==-4) {
-        bench(pgen);
+        bench(pgen,n,k,NUM_TRIALS);
 
     }
     else if (forest_ratio==-5) {
