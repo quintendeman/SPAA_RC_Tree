@@ -432,10 +432,9 @@ std::chrono::duration<double> get_single_runtime(parlay::random_generator& pgen,
 
 
 
-void bench(parlay::random_generator& pgen,long oldn, long max_k, int trials_per) {
+void bench(parlay::random_generator& pgen,long oldn, long max_k, int trials_per, double mean, double ln) {
     int kscale=30;
-    double mean = 20;
-    double ln = 0.1;
+   
     long k = -1;
 
     parlay::sequence<long> kvals = parlay::filter(parlay::tabulate(kscale,[&] (long i) {return static_cast<long>(1) << i;}),[&] (long kcand) {return kcand <= max_k;}); 
@@ -468,10 +467,9 @@ void bench(parlay::random_generator& pgen,long oldn, long max_k, int trials_per)
 
 
 //pass in n,k via input parms
-void bench_threads(parlay::random_generator& pgen, long oldn, long k, int NUM_TRIALS) {
+void bench_threads(parlay::random_generator& pgen, long oldn, long k, int NUM_TRIALS, double mean, double ln) {
 
-    double mean = 20;
-    double ln = 0.1;
+  
     auto distribution = exponential; // either exponential, geometric, constant or linear
 
     parlay::sequence<cluster<long, double>> clusters; 
@@ -563,10 +561,12 @@ int main(int argc, char* argv[]) {
     double forest_ratio = 5.0/n;//1.41 / n; //ratio scales with n to not disconnect too much
     double chain_ratio = .3;
     bool is_from_file = false;
+    double mean=8;
+    double ln=.1;
     std::string filename = "";
 
 
-    parse_input(argc,argv,n,NUM_TRIALS,seed,pseed,NUM_TREES,k,forest_ratio,chain_ratio,is_from_file,filename);
+    parse_input(argc,argv,n,NUM_TRIALS,seed,pseed,NUM_TREES,k,forest_ratio,chain_ratio,is_from_file,filename,mean,ln);
 
     //std::cout << "pseed: " << pseed << std::endl;
 
@@ -622,13 +622,13 @@ int main(int argc, char* argv[]) {
     }
     
     else if (forest_ratio==-4) {
-        bench(pgen,n,k,NUM_TRIALS);
+        bench(pgen,n,k,NUM_TRIALS,mean,ln);
 
     }
     else if (forest_ratio==-5) {
         //tim.next_time();
         //std::cout << "num_threads,n,ternsize,ln,mean,dist,time" << std::endl;
-        bench_threads(pgen,n,k,NUM_TRIALS);
+        bench_threads(pgen,n,k,NUM_TRIALS,mean,ln);
         //std::cout << "total runtime of tests: " << tim.next_time() << std::endl;
     }
     else if (forest_ratio==-6) {
