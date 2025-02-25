@@ -2,7 +2,8 @@
 #bash lca_data.sh
 date
 
-NUM_THREADS=(1 2 4 6 8 12 16 20 24 28 32)
+#NUM_THREADS=(1 2 4 6 8 12 16 20 24 28 32) #could change to (1 2 4 8 16 32) if desired; the extra thread #s add some smoothness
+NUM_THREADS=(1 2 4 8 16 32)
 
 make lca.out
 touch output_lca.csv
