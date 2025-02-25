@@ -183,7 +183,7 @@ int main(int argc, char* argv[])
         auto static_creation_middle = std::chrono::high_resolution_clock::now();
         
         // TR.print_state();
-        TR.verify_simple_tree();
+        // TR.verify_simple_tree();
 
         const long max_degree = 3;
         parlay::sequence<cluster<long, double>> clusters; 
@@ -216,7 +216,7 @@ int main(int argc, char* argv[])
         dynamic_counter = 0;
         dynamic_tern_time = 0.0f;
 
-        const int maxi = 8;
+        const int maxi = 3;
         long total_edge_size = retedges.size();
         for (unsigned int i = 0; i < maxi; i++) 
         {

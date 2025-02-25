@@ -150,6 +150,11 @@ class TreeGen
             // });
         }
 
+        T get_num_dynamic_edges()
+        {
+            return this->subgraph.size() > 0  
+        }
+
         void generateInterconnects()
         {
             parlay::random_generator gen(seed++);
