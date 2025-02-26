@@ -5,7 +5,7 @@
 #include "RC.h"
 #include <queue>
 #include <set>
-#include "../examples/filter_kruskal.h"
+#include "../examples/kruskal.h"
 #include "RCdynamic.h"
 #include "ternarizer.h"
 #include <chrono>
@@ -22,7 +22,7 @@ parlay::sequence<std::tuple<T,T,D>> convertClustersToTruples(const parlay::seque
 
     parlay::sequence<std::tuple<T,T,D>> Truples;
 
-    Truples = parlay::flatten(parlay::tabulate(clusters.size(), [&] (T index) {
+    Truples = parlay::flatten(parlay::delayed_tabulate(clusters.size(), [&] (T index) {
         parlay::sequence<std::tuple<T,T,D>> Truple_contribution;
 
         const auto& relevant_cluster = clusters[index];
@@ -420,14 +420,17 @@ std::pair<parlay::sequence<std::tuple<T,T,D>>, parlay::sequence<std::pair<T,T>>>
 
         auto cluster_v_ptr = &clusters[v];
         auto cluster_w_ptr = &clusters[w];
-        cluster_v_ptr->state &= remove_mark_mask;
-        cluster_w_ptr->state &= remove_mark_mask;
+        // cluster_v_ptr->state &= remove_mark_mask;
+        // cluster_w_ptr->state &= remove_mark_mask;
 
         while(cluster_v_ptr != nullptr)
         {
             if(cluster_v_ptr->counter.fetch_add(1))
                 break; // 
             cluster_v_ptr->state &= remove_mark_mask;
+            cluster_v_ptr->vertex_count = 0;
+            for(auto& entry : cluster_v_ptr->CGEntryValid)
+                entry = false;
             for(auto& child : cluster_v_ptr->children)
                 if(child)
                     child->state &= remove_mark_mask;
@@ -440,6 +443,9 @@ std::pair<parlay::sequence<std::tuple<T,T,D>>, parlay::sequence<std::pair<T,T>>>
             if(cluster_w_ptr->counter.fetch_add(1))
                 break; // 
             cluster_w_ptr->state &= remove_mark_mask;
+            for(auto& entry : cluster_w_ptr->CGEntryValid)
+                entry = false;
+            cluster_w_ptr->vertex_count = 0;
             for(auto& child : cluster_w_ptr->children)
                 if(child)
                     child->state &= remove_mark_mask;
@@ -456,14 +462,18 @@ std::pair<parlay::sequence<std::tuple<T,T,D>>, parlay::sequence<std::pair<T,T>>>
         auto cluster_v_ptr = &clusters[v];
         auto cluster_w_ptr = &clusters[w];
 
-        cluster_v_ptr->state |= is_marked_endpoint;
-        cluster_w_ptr->state |= is_marked_endpoint;
+        bool first = true;
+
+        // cluster_v_ptr->state |= is_marked_endpoint;
+        // cluster_w_ptr->state |= is_marked_endpoint;
 
         while(cluster_v_ptr != nullptr)
         {
             if(cluster_v_ptr->counter.fetch_add(-1) > 1)
                 break; // we are not the last
             // std::cout << "Relevant cluster " << cluster_v_ptr->index << std::endl;
+            if(first)
+                cluster_v_ptr->state |= is_marked_endpoint;
             cluster_v_ptr->state |= is_marked;
             if(cluster_v_ptr->parent == nullptr)
             {
@@ -473,11 +483,14 @@ std::pair<parlay::sequence<std::tuple<T,T,D>>, parlay::sequence<std::pair<T,T>>>
             cluster_v_ptr = cluster_v_ptr->parent;
         }
 
+        first = true;
+
         while(cluster_w_ptr != nullptr)
         {
             if(cluster_w_ptr->counter.fetch_add(-1) > 1)
                 break; // we are not the last
             cluster_w_ptr->state |= is_marked;
+            cluster_w_ptr->state |= is_marked_endpoint;
             if(cluster_w_ptr->parent == nullptr)
             {
                 top_down_ct(cluster_w_ptr, clusters);
@@ -818,21 +831,28 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
 
     auto& compressed_tree = compressed_tree_pair.first;
 
-    // std::cout << "Compressed tree has " << compressed_tree.size() << " vertices and " << compressed_tree_pair.second.size() << " edges " << std::endl;
-
-    if(clusters.size() <= 100)
-    {
-        std::cout << green << "Compressed tree: " << std::endl;
-        for(const auto& edge : compressed_tree)
-            std::cout << std::get<0>(edge) << " " << std::get<1>(edge) << " " << std::get<2>(edge) << std::endl;
-        std::cout << reset << std::endl;    
-    }
+    std::cout << "Compressed tree has " << compressed_tree.size() << " vertices and " << compressed_tree_pair.second.size() << " edges " << std::endl;
+      
     auto AllNewEdges = parlay::append(compressed_tree, newEdges);
+
+    // std::cout << green << "All edges to mst: " << std::endl;
+    // long t = 0;
+    // for(const auto& edge : AllNewEdges)
+    // {
+    //     if(t >= compressed_tree.size())
+    //         std::cout << red;
+    //     std::cout << std::get<0>(edge) << " " << std::get<1>(edge) << " " << std::get<2>(edge) << std::endl;
+    //     t++;
+    // }
+    // std::cout << reset << std::endl;  
+    
     auto& compressed_tree_endpoints = compressed_tree_pair.second;
 
     auto mst_gen_start = std::chrono::high_resolution_clock::now();
     auto finalEdgeIndices = min_spanning_forest(AllNewEdges, clusters.size());
     auto mst_gen_end = std::chrono::high_resolution_clock::now();
+
+    std::cout << "Done mst" << std::endl;
 
     auto insertion_start = std::chrono::high_resolution_clock::now();
 
@@ -843,24 +863,24 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
     });
 
 
-    if(clusters.size() <= 100)
-    {
-        std::cout << reset << "final edges: " << std::endl;
-        for(long i = 0; i < AllNewEdges.size(); i++)
-        {
-            auto& edge = AllNewEdges[i];
-            if(wasDeleted[i])
-                std::cout << red;
-            else
-                std::cout << green;
+    // if(clusters.size() <= 100)
+    // {
+    //     std::cout << reset << "final edges: " << std::endl;
+    //     for(long i = 0; i < AllNewEdges.size(); i++)
+    //     {
+    //         auto& edge = AllNewEdges[i];
+    //         if(wasDeleted[i])
+    //             std::cout << red;
+    //         else
+    //             std::cout << green;
 
-            std::cout << std::get<0>(edge) << " " << std::get<1>(edge) << " " << std::get<2>(edge) << " ";
-            if(i < compressed_tree.size())
-                std::cout << blue << compressed_tree_endpoints[i].first << " -- " << compressed_tree_endpoints[i].second << reset;
-            std::cout << std::endl;
-        }
-        std::cout << reset << std::endl;    
-    }
+    //         std::cout << std::get<0>(edge) << " " << std::get<1>(edge) << " " << std::get<2>(edge) << " ";
+    //         if(i < compressed_tree.size())
+    //             std::cout << blue << compressed_tree_endpoints[i].first << " -- " << compressed_tree_endpoints[i].second << reset;
+    //         std::cout << std::endl;
+    //     }
+    //     std::cout << reset << std::endl;    
+    // }
 
     // gather add edges via a filter which is O(n) work
     // Use a pack? TODO?
@@ -884,21 +904,21 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
         return pr.first != pr.second;
     });
 
-    if(clusters.size() <= 100)
-    {
-        std::cout << "Final add edges " << std::endl;
-        for(auto& edge : add_edges)
-            std::cout << std::get<0>(edge)  << " -- " << std::get<1>(edge) << ": " << std::get<2>(edge) << std::endl;
-        std::cout << std::endl;
+    // if(clusters.size() <= 100)
+    // {
+    //     std::cout << "Final add edges " << std::endl;
+    //     for(auto& edge : add_edges)
+    //         std::cout << std::get<0>(edge)  << " -- " << std::get<1>(edge) << ": " << std::get<2>(edge) << std::endl;
+    //     std::cout << std::endl;
 
-        std::cout << "Final delete edges " << std::endl;
-        for(auto& edge : delete_edges)
-            std::cout << edge.first  << " -- " << edge.second << std::endl;
-        std::cout << std::endl;
-    }
+    //     std::cout << "Final delete edges " << std::endl;
+    //     for(auto& edge : delete_edges)
+    //         std::cout << edge.first  << " -- " << edge.second << std::endl;
+    //     std::cout << std::endl;
+    // }
 
-    // std::cout << "Deleting " << delete_edges.size() << " edges " << std::endl;
-    // std::cout << "Adding " << add_edges.size() << " edges " << std::endl;
+    std::cout << "Deleting " << delete_edges.size() << " edges " << std::endl;
+    std::cout << "Adding " << add_edges.size() << " edges " << std::endl;
 
     parlay::sequence<std::tuple<T,T,D>> empty_add_edges;    
     parlay::sequence<std::pair<T,T>> empty_delete_edges;    
@@ -922,8 +942,6 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
     std::cout << cst_gen_time.count() << "," << mst_gen_time.count() << "," << insertion_time.count() << std::endl;
 
     // std::cout << "Done deleting " << std::endl;
-    // if(clusters.size() <= 100)
-    //     printTree(clusters);
 
     // verifyInsertionObeysDegreeCap(clusters, add_edges); // TODO remove
 

@@ -12,6 +12,12 @@
 
 using wedge = std::tuple<long,long,double>;
 
+long graph_size = 100000;
+auto distribution = exponential; // either exponential, geometric, constant or linear
+double ln = 0.1;
+double mean = 20.0;
+bool randomized = false;
+long num_queries = -1;
 
 static void print_help() {
     std::cout << "Usage: ./program [options]\n"
@@ -41,7 +47,9 @@ void test_simple_subtree_queries(const long& num_queries, parlay::sequence<clust
         return std::pair<long,long>(TG.random_perm_map[v], TG.random_perm_map[TG.parents[v]]);
     }), [] (auto pr){ return pr.first != pr.second;});
 
-    std::cout << "Testing " << test_pairs.size() << " values " << std::endl;
+    test_pairs = parlay::random_shuffle(test_pairs);
+
+    // std::cout << "Testing " << test_pairs.size() << " values " << std::endl;
 
     auto manual_values = parlay::delayed_tabulate(test_pairs.size(), [&] (long i){
         auto& pr = test_pairs[i];
@@ -73,11 +81,15 @@ void test_batched_subtree_queries(const long& num_queries, parlay::sequence<clus
     auto test_pairs = parlay::filter(parlay::delayed_tabulate(num_queries, [&] (long i) {
         auto r = gen[i];
         long v = dis(r);
+        if(i & 1)
+            return std::pair<long,long>(TG.random_perm_map[TG.parents[v]], TG.random_perm_map[v]);
 
         return std::pair<long,long>(TG.random_perm_map[v], TG.random_perm_map[TG.parents[v]]);
     }), [] (auto pr){ return pr.first != pr.second;});
 
-    std::cout << "Testing queries " << test_pairs.size() << " in a batch " << std::endl;
+    test_pairs = parlay::random_shuffle(test_pairs);
+
+    // std::cout << "Testing queries " << test_pairs.size() << " in a batch " << std::endl;
 
     auto start = std::chrono::high_resolution_clock::now();
     auto subtree_sum_values = parlay::tabulate(test_pairs.size(), [&] (long i){
@@ -85,16 +97,34 @@ void test_batched_subtree_queries(const long& num_queries, parlay::sequence<clus
         return subtree_query(pr.first, pr.second, clusters, TR, identity, assocfunc);
     });
     auto end = std::chrono::high_resolution_clock::now();
-    std::cout << "subtree_query time: "
-            << std::chrono::duration<double, std::milli>(end - start).count()
-            << " ms\n";
+    
 
-    start = std::chrono::high_resolution_clock::now();
+    std::cout << parlay::internal::init_num_workers() << ",";
+    std::cout << clusters.size()/3 << ",";
+    std::cout << ln << "," << mean << ",";
+        switch(distribution){
+          case exponential:
+            std::cout << "e";
+            break;
+          case geometric:
+            std::cout << "g";
+            break;
+          case constant:
+            std::cout << "c";
+            break;
+          case uniform:
+            std::cout << "u";
+            break;
+        }
+    std::cout << ",";
+    std::cout << num_queries << ",";
+    std::cout << std::chrono::duration<double, std::milli>(end - start).count()
+            << ",";
+    auto start_ = std::chrono::high_resolution_clock::now();
     auto subtree_batched_values = batched_subtree_query(test_pairs, clusters, TR, identity, assocfunc);
-    end = std::chrono::high_resolution_clock::now();
-    std::cout << "batched_subtree_query time: "
-            << std::chrono::duration<double, std::milli>(end - start).count()
-            << " ms\n";
+    auto end_ = std::chrono::high_resolution_clock::now();
+    std::cout << std::chrono::duration<double, std::milli>(end_ - start_).count()
+            << std::endl;
 
     assert(subtree_sum_values.size() == subtree_batched_values.size());
 
@@ -114,19 +144,14 @@ void test_batched_subtree_queries(const long& num_queries, parlay::sequence<clus
         }
     });
 
-    std::cout << std::endl;
+
 
 }
 
 int main(int argc, char* argv[])
 {
     
-    long graph_size = 100000;
-    auto distribution = exponential; // either exponential, geometric, constant or linear
-    double ln = 0.1;
-    double mean = 20.0;
-    bool randomized = false;
-    long num_queries = -1;
+
 
     // std::cout << "Argc " << argc << std::endl;
 
@@ -159,8 +184,6 @@ int main(int argc, char* argv[])
         }
     }
 
-    if(num_queries <= 0)
-        num_queries = graph_size/5;
         
 
     const double min_weight = 0.0;
@@ -193,9 +216,22 @@ int main(int argc, char* argv[])
 
     // test_simple_subtree_queries(clusters.size() / 10, clusters, TG, TR);
 
-    test_batched_subtree_queries(num_queries, clusters, TG, TR);
-
-    
+    if(num_queries >= 0)
+        test_batched_subtree_queries(num_queries, clusters, TG, TR);
+    else
+    {
+        num_queries = 1;
+        long multiplier = 5;
+        while(num_queries <= graph_size)
+        {
+            test_batched_subtree_queries(num_queries, clusters, TG, TR);
+            num_queries *= multiplier;
+            if(multiplier == 5)
+                multiplier = 2;
+            else
+                multiplier = 5;
+        }
+    }
 
     deleteRCtree(clusters); 
 

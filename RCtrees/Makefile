@@ -1,6 +1,6 @@
 # Variables
-CXX = g++-13
-CXXFLAGS = -O3 -std=c++17 -pthread -g -Werror -Wparentheses -flto
+CXX = g++
+CXXFLAGS = -O0 -g -std=c++17 -pthread -g -Werror -Wparentheses -flto
 # CXXFLAGS = -O0 -flto -std=c++17 -pthread -g -Werror -Wparentheses
 INCLUDES = -I ../include/ -I /usr/local/include/jemalloc/ -I parhash_include/ -I LCA -I .
 LDFLAGS = -ljemalloc
@@ -8,13 +8,13 @@ TARGET = RC.out
 SRC = RC.cpp
 
 # Default target
-all: RC.out testMST.out  testHashing.out testTreeGen.out testBatchedSubtree.out testPathQueries.out
+all: RC.out testMST.out  testHashing.out testTreeGen.out testBatchedSubtree.out testPathQueries.out testBatchInsertion.out testMST.out
 
 # Rule to build the target
 RC.out: RC.cpp RC.h cluster.h RCdynamic.h adjacency_linked_list.h incMST.h random_trees.h utils.h
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o RC.out RC.cpp
 
-testMST.out: testMST.cpp ternarizer.h treeGen.h incMST.h
+testMST.out: testMST.cpp ternarizer.h treeGen.h incMST.h RC.h cluster.h RCdynamic.h  adjacency_linked_list.h  random_trees.h utils.h
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o testMST.out testMST.cpp
 
 testTreeGen.out: testTreeGen.cpp treeGen.h RC.h cluster.h RCdynamic.h  adjacency_linked_list.h  random_trees.h utils.h
@@ -28,6 +28,9 @@ testBatchedSubtree.out: treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_li
 
 testPathQueries.out: testPathQueries.cpp treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h  random_trees.h utils.h ternarizer.h 
 	$(CXX)  $(CXXFLAGS)  -o testPathQueries.out testPathQueries.cpp $(INCLUDES)
+
+testBatchInsertion.out: treeGen.h RC.h cluster.h RCdynamic.h adjacency_linked_list.h  random_trees.h utils.h subtree_query.h testBatchInsertion.cpp
+	$(CXX)  $(CXXFLAGS)  -o testBatchInsertion.out testBatchInsertion.cpp $(INCLUDES)
 
 RC_CREATE_DEPS = MIS.h RC.h RCdynamic.h RC_test.h RCdynamic.h
 RC_BASE_DEPS = cluster.h adjacency_linked_list.h 

@@ -542,6 +542,7 @@ void batchInsertEdge( const parlay::sequence<std::pair<T, T>>& delete_edges, con
                     auto newEdgeClstrPtr = cluster_allocator::create();
                     newEdgeClstrPtr->add_empty_level(base_edge, 0);
                     newEdgeClstrPtr->data = std::get<2>(edge.E);
+                    newEdgeClstrPtr->max_weight_edge = newEdgeClstrPtr;
                     newEdgeClstrPtr->index = -1;
                     edge_node = newEdgeClstrPtr->adjacency.get_head();
                     newEdgeClstrPtr->add_ptr_to_highest_level(v_node_ptr);
