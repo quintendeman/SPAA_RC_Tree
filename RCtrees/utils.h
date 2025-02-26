@@ -107,7 +107,7 @@ void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int&
 }
 
 
-void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int& pseed, int& NUM_TREES, int& BATCH_SIZE, double& forest_ratio, double& chain_ratio, bool& run_from_file, std::string& filename,double& mean, double& ln) {
+void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int& pseed, int& NUM_TREES, int& BATCH_SIZE, double& forest_ratio, double& chain_ratio, bool& run_from_file, std::string& filename,double& mean, double& ln,std::string& dist_choice) {
     for (int i = 1; i < argc; i++) {
         std::string arg=argv[i];
         if (arg=="-n" && i+1 < argc) {
@@ -145,6 +145,9 @@ void parse_input(int argc, char* argv[], int& n, int& NUM_TRIALS,int& seed, int&
         }
         if (arg=="-ln" && i+1 < argc) {
             ln=std::stof(argv[i+1]);
+        }
+        if (arg=="-dist" && i+1 < argc) {
+            dist_choice = argv[i+1];
         }
 
     }
