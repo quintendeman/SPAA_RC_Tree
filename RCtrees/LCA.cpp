@@ -436,8 +436,19 @@ void bench(parlay::random_generator& pgen,long oldn, long max_k, int trials_per,
     int kscale=30;
    
     long k = -1;
+    parlay::sequence<long> kopts(kscale,1);
+    
+    for (int i = 1; i < kscale; i++) {
+        if (i % 2 == 1) {
+            kopts[i]=kopts[i-1] * 5;
+        }
+        else {
+            kopts[i]=kopts[i-1] * 2;
+        }
 
-    parlay::sequence<long> kvals = parlay::filter(parlay::tabulate(kscale,[&] (long i) {return static_cast<long>(1) << i;}),[&] (long kcand) {return kcand <= max_k;}); 
+    }
+
+    parlay::sequence<long> kvals = parlay::filter(kopts,[&] (long kcand) {return kcand <= max_k;}); 
     parlay::sequence<cluster<long, double>> clusters; 
 
     parlay::sequence<long> parent_tree(1,1);
