@@ -152,7 +152,7 @@ class TreeGen
 
         T get_num_dynamic_edges()
         {
-            return this->subgraph.size() > 0  
+            return this->subgraphs.size() > 0 ? this->subgraphs.size() - 1 : 0;
         }
 
         void generateInterconnects()
