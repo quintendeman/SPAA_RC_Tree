@@ -182,14 +182,14 @@ void mostly_forests_lca(std::mt19937& gen, parlay::random_generator& pgen) {
 
 void few_forests_lca(std::mt19937& gen, parlay::random_generator& pgen)  {
 
-    test_lca<int,int>(6,100,3,20,gen,pgen,.8,0.3);
-    test_lca<int,int>(51,100,3,15,gen,pgen,.8,0.2);
-    test_lca<int,int>(400,100,3,40,gen,pgen,.8,0.1);
-    test_lca<int,int>(5500,100,3,100,gen,pgen,.8,0.4);
-    test_lca<int,int>(90000,100,3,900,gen,pgen,.9,0.5);
-    test_lca<int,int>(1200000,10,3,3000,gen,pgen,.95,0.25);
-    test_lca<int,int>(1200000,10,3,3000,gen,pgen,.95,1); //all chains
-    test_lca<int,int>(90000000,11,3,3000,gen,pgen,0.999,0.32);
+    test_lca<int,int>(6,100,3,20,gen,pgen,.0001,0.3);
+    test_lca<int,int>(51,100,3,15,gen,pgen,.0001,0.2);
+    test_lca<int,int>(400,100,3,40,gen,pgen,.0001,0.1);
+    test_lca<int,int>(5500,100,3,100,gen,pgen,.0001,0.4);
+    test_lca<int,int>(90000,100,3,900,gen,pgen,.0001,0.5);
+    test_lca<int,int>(1200000,10,3,3000,gen,pgen,.000001,0.25);
+    test_lca<int,int>(1200000,10,3,3000,gen,pgen,.00001,1); //all chains
+    test_lca<int,int>(90000000,11,3,3000,gen,pgen,0.00000001,0.32);
 
 
 }
@@ -197,8 +197,8 @@ void few_forests_lca(std::mt19937& gen, parlay::random_generator& pgen)  {
 // //one huge tree
 //1.5 bil + 3 bil tree budget (fairly large)
 void single_tree_lca(std::mt19937& gen, parlay::random_generator& pgen) {
-    test_lca<int,int>(150000000,100,10,50000,gen,pgen,1,.2);
-    test_lca<int,int>(120020409,90,20,10001,gen,pgen,1,.4);
+    test_lca<int,int>(150000000,100,10,50000,gen,pgen,0,.2);
+    test_lca<int,int>(120020409,90,20,10001,gen,pgen,0,.4);
 
 }
 //benchmarking times TOD2*
@@ -226,6 +226,15 @@ void short_test_lca(std::mt19937& gen, parlay::random_generator& pgen) {
 void extensive_lca(std::mt19937& gen, parlay::random_generator& pgen,parlay::internal::timer& tim) {
     
     
+    few_forests_lca(gen,pgen);
+    std::cout << "Few forests done in " << tim.next_time() << std::endl;
+
+    single_tree_lca(gen,pgen);
+    std::cout << "Single tree done in " << tim.next_time() << std::endl;
+
+    std::cout << "finished tests of interest, exit" << std::endl;
+    exit(7);
+
 
     large_test_lca(gen,pgen);
     std::cout << "Large test done in " << tim.next_time() << std::endl;
@@ -248,13 +257,7 @@ void extensive_lca(std::mt19937& gen, parlay::random_generator& pgen,parlay::int
     mostly_forests_lca(gen,pgen);
         std::cout << "Mostly forests test done in " << tim.next_time() << std::endl;
 
-    few_forests_lca(gen,pgen);
-        std::cout << "Few forests done in " << tim.next_time() << std::endl;
-
-    single_tree_lca(gen,pgen);
-        std::cout << "Single tree done in " << tim.next_time() << std::endl;
-
-
+   
 
     chain_test_lca(gen,pgen); //vary balanced vs chain formation
         std::cout << "Chain test done in " << tim.next_time() << std::endl;
