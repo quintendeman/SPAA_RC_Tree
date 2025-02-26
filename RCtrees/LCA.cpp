@@ -446,16 +446,14 @@ void bench(parlay::random_generator& pgen,long oldn, long max_k, int trials_per,
 
     std::uniform_int_distribution<long> dis(0,n-1);
 
-    double total=0;
+    double runtime=0;
     for (int j = 0; j < kvals.size(); j++) {
-        total=0;
         k=kvals[j];
         for (int iter = 0; iter < trials_per; iter++) {
-            total += get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
+            runtime= get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
         }
-        double average = total/trials_per;
 
-        std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << ", e, " << average << std::endl;
+        std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << ", e, " << runtime << std::endl;
     }
    
 
@@ -482,16 +480,15 @@ void bench_threads(parlay::random_generator& pgen, long oldn, long k, int NUM_TR
 
     std::uniform_int_distribution<long> dis(0,n-1);
 
-    double total = 0;
-
+    double runtime=0;
     for (int iter = 0; iter < NUM_TRIALS; iter++) {
-        total += get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
+        runtime = get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
+        std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << ", e, " << runtime << std::endl;
         
     }
-    double average = total/NUM_TRIALS;
     deleteRCtree(clusters);
 
-    std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << ", e, " << average << std::endl;
+   
 
 }
 
