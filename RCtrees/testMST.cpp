@@ -49,7 +49,7 @@ parlay::sequence<std::tuple<vertex,vertex,double>> generate_random_edges(const p
 }
 
 int main(int argc, char* argv[]) {
-    auto usage = "Usage: testMST.out [--graph-size <graph-size>] [-n <graph-size>] [--num-additions <extra edges added>]\nPrints compressed tree creation time, MST time, insertion time";
+    auto usage = "Usage: testMST.out [--graph_size <graph_size>] [-n <graph_size>] [--num-additions <extra edges added>] [--ln <0.0-1.0>] [--mean <1.0f+>] [--dist <u,e,g,c>] [--randomized]\nPrints compressed tree creation time, MST time, insertion time";
 
     srand(time(NULL));
 
@@ -66,7 +66,7 @@ int main(int argc, char* argv[]) {
     // Parse command line arguments
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--graph-size" && i + 1 < argc) {
+        if (arg == "--graph_size" && i + 1 < argc) {
             graph_size = std::stol(argv[++i]);
         } else if (arg == "-n" && i + 1 < argc) {
             graph_size = std::stol(argv[++i]);
@@ -75,6 +75,20 @@ int main(int argc, char* argv[]) {
         } else if (i == 1 && arg.find_first_not_of("0123456789") == std::string::npos) {
             // Handle the case where a single number is provided as graph_size
             graph_size = std::stol(arg);
+        } else if (arg == "--dist" && i + 1 < argc) {
+            std::string dist_arg = argv[++i];
+            if (dist_arg == "e") {
+                distribution = exponential;
+            } else if (dist_arg == "g") {
+                distribution = geometric;
+            } else if (dist_arg == "c") {
+                distribution = constant;
+            } else if (dist_arg == "u") {
+                distribution = uniform;
+            } else {
+                std::cerr << "Invalid distribution type\n";
+                return 1;
+            }
         } else if (arg == "--randomized") {
           randomized = true;
         } else if (arg == "--ln" && i + 1 < argc) {
@@ -82,6 +96,7 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--mean" && i + 1 < argc) {
             mean = std::stod(argv[++i]);
         } else {
+            std::cout << "Invalid argument: " << arg << std::endl;
             std::cout << usage << std::endl;
             return -1;
         }
@@ -181,8 +196,8 @@ int main(int argc, char* argv[]) {
 
 
 
-    if(graph_size <= 100)
-        printTree(clusters);
+    // if(graph_size <= 100)
+    //     printTree(clusters);
 
     // if(graph_size <= 100)
     //     printTree(clusters);
