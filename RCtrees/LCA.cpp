@@ -370,11 +370,22 @@ parlay::sequence<long> tree_gen(long graph_size, parlay::sequence<cluster<long, 
 }
 
 
-long tree_gen_size(long graph_size, parlay::sequence<cluster<long, double>>& clusters, double mean, double ln) {
+long tree_gen_size(long graph_size, parlay::sequence<cluster<long, double>>& clusters, double mean, double ln, std::string dist) {
 
     const double min_weight = 0.0;
     const double max_weight = 100.0f;
-    auto distribution = exponential; // either exponential, geometric, constant or uniform
+    auto distribution=exponential;// either exponential, geometric, constant or uniform
+    if (dist=="e") {
+        distribution=exponential;
+
+    }
+    else if (dist=="u") {
+        distribution=uniform;
+    }
+    else {
+        std::cout << "error, wrong dist, abort " << std::endl;
+        exit(10);
+    }
 
     int II = 0;
 
@@ -432,30 +443,39 @@ std::chrono::duration<double> get_single_runtime(parlay::random_generator& pgen,
 
 
 
-void bench(parlay::random_generator& pgen,long oldn, long max_k, int trials_per, double mean, double ln) {
+void bench(parlay::random_generator& pgen,long oldn, long max_k, int trials_per, double mean, double ln,std::string dist_choice) {
     int kscale=30;
    
     long k = -1;
+    parlay::sequence<long> kopts(kscale,1);
+    
+    for (int i = 1; i < kscale; i++) {
+        if (i % 2 == 1) {
+            kopts[i]=kopts[i-1] * 5;
+        }
+        else {
+            kopts[i]=kopts[i-1] * 2;
+        }
 
-    parlay::sequence<long> kvals = parlay::filter(parlay::tabulate(kscale,[&] (long i) {return static_cast<long>(1) << i;}),[&] (long kcand) {return kcand <= max_k;}); 
+    }
+
+    parlay::sequence<long> kvals = parlay::filter(kopts,[&] (long kcand) {return kcand <= max_k;}); 
     parlay::sequence<cluster<long, double>> clusters; 
 
     parlay::sequence<long> parent_tree(1,1);
     //one tree for all testing
-    long n = tree_gen_size(oldn,clusters,mean,ln);
+    long n = tree_gen_size(oldn,clusters,mean,ln,dist_choice);
 
     std::uniform_int_distribution<long> dis(0,n-1);
 
-    double total=0;
+    double runtime=0;
     for (int j = 0; j < kvals.size(); j++) {
-        total=0;
         k=kvals[j];
         for (int iter = 0; iter < trials_per; iter++) {
-            total += get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
+            runtime= get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
         }
-        double average = total/trials_per;
 
-        std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << ", e, " << average << std::endl;
+        std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << "," << dist_choice <<  ", " << runtime << std::endl;
     }
    
 
@@ -467,7 +487,7 @@ void bench(parlay::random_generator& pgen,long oldn, long max_k, int trials_per,
 
 
 //pass in n,k via input parms
-void bench_threads(parlay::random_generator& pgen, long oldn, long k, int NUM_TRIALS, double mean, double ln) {
+void bench_threads(parlay::random_generator& pgen, long oldn, long k, int NUM_TRIALS, double mean, double ln,std::string dist_choice) {
 
   
     auto distribution = exponential; // either exponential, geometric, constant or linear
@@ -477,21 +497,20 @@ void bench_threads(parlay::random_generator& pgen, long oldn, long k, int NUM_TR
     parlay::sequence<long> parent_tree(1,1);
     //one tree for all testing
     //n is ternerized size
-    long n = tree_gen_size(oldn,clusters,mean,ln); 
+    long n = tree_gen_size(oldn,clusters,mean,ln,dist_choice); 
    
 
     std::uniform_int_distribution<long> dis(0,n-1);
 
-    double total = 0;
-
+    double runtime=0;
     for (int iter = 0; iter < NUM_TRIALS; iter++) {
-        total += get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
+        runtime = get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
+        std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << ", " << dist_choice << ", " << runtime << std::endl;
         
     }
-    double average = total/NUM_TRIALS;
     deleteRCtree(clusters);
 
-    std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << ", e, " << average << std::endl;
+   
 
 }
 
@@ -564,9 +583,10 @@ int main(int argc, char* argv[]) {
     double mean=8;
     double ln=.1;
     std::string filename = "";
+    std::string dist_choice = "";
 
 
-    parse_input(argc,argv,n,NUM_TRIALS,seed,pseed,NUM_TREES,k,forest_ratio,chain_ratio,is_from_file,filename,mean,ln);
+    parse_input(argc,argv,n,NUM_TRIALS,seed,pseed,NUM_TREES,k,forest_ratio,chain_ratio,is_from_file,filename,mean,ln,dist_choice);
 
     //std::cout << "pseed: " << pseed << std::endl;
 
@@ -622,13 +642,13 @@ int main(int argc, char* argv[]) {
     }
     
     else if (forest_ratio==-4) {
-        bench(pgen,n,k,NUM_TRIALS,mean,ln);
+        bench(pgen,n,k,NUM_TRIALS,mean,ln,dist_choice);
 
     }
     else if (forest_ratio==-5) {
         //tim.next_time();
         //std::cout << "num_threads,n,ternsize,ln,mean,dist,time" << std::endl;
-        bench_threads(pgen,n,k,NUM_TRIALS,mean,ln);
+        bench_threads(pgen,n,k,NUM_TRIALS,mean,ln,dist_choice);
         //std::cout << "total runtime of tests: " << tim.next_time() << std::endl;
     }
     else if (forest_ratio==-6) {

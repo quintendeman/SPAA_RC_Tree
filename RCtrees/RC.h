@@ -620,7 +620,7 @@ void accumulate(const node<T,D>* contracted_node, D defretval, lambdafunc func, 
                 }
                 else
                 {
-                    if(child->data > contracted_node->cluster_ptr->data)
+                    if(child->data > contracted_node->cluster_ptr->max_weight_edge->data)
                         contracted_node->cluster_ptr->max_weight_edge = child->max_weight_edge;
                     contracted_node->cluster_ptr->data = func(contracted_node->cluster_ptr->data, child->data);
                 

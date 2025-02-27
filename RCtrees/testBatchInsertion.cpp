@@ -20,7 +20,7 @@ static void print_help() {
               << "  --ln <value>          Set ln parameter (default: 0.1)\n"
               << "  --mean <value>        Set mean value (default: 20.0)\n"
               << "  --randomized          Enable randomized mode\n"
-              << "  --num-insertions      Number of (add+delete) edges i.e. batch insertion size\n"
+              << "  --num-insertions      Number of (add+delete) edges i.e. batch insertion size -1 for sweep\n"
               << "  --help                Show this help message\n";
 }
 
@@ -28,11 +28,11 @@ int main(int argc, char* argv[])
 {
     
     long graph_size = 100000;
-    auto distribution = exponential; // either exponential, geometric, constant or uniform
+    auto distribution = constant; // either exponential, geometric, constant or uniform
     double ln = 0.1;
     double mean = 1.01f;
     bool randomized = false;
-    long batch_insertion = 100;
+    long batch_insertion = -1;
 
     // std::cout << "Argc " << argc << std::endl;
 
@@ -65,7 +65,6 @@ int main(int argc, char* argv[])
         }
     }
         
-
     const double min_weight = 0.0;
     const double max_weight = 100.0f;
 
@@ -77,7 +76,7 @@ int main(int argc, char* argv[])
 
     const int maxII = 4;
 
-    for(int II = 0; II < maxII; II++)
+    for(int II = 0; II < maxII; II++) // settle the fragmentation
     {
 
         TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true, II);
@@ -103,5 +102,165 @@ int main(int argc, char* argv[])
         deleteRCtree(clusters); 
     }
 
+    // now for the dynamic stuff
+
+    TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true, 12345);
+
+    TG.generateInitialEdges();
+
+    auto retedges = TG.getAllEdges();
+
+    ternarizer<long, double> TR(graph_size, 0);
+
+    auto ret_edge_modified = TR.add_edges(retedges);
+
+    const long max_degree = 3;
+    parlay::sequence<cluster<long, double>> clusters; 
+    double defretval = 0.0;
+
+    parlay::sequence<wedge> empty_edges_sequence;
+
+    create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
+
+    create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
+
+    // std::cout << "Num dynamic edges " << TG.get_num_dynamic_edges() << std::endl;
+    if(batch_insertion != -1)
+    {
+      double desired_prob = (static_cast<double>(batch_insertion)/TG.get_num_dynamic_edges());
+      if(desired_prob > 1.0f)
+        desired_prob = 1.0f;
+
+      parlay::sequence<std::pair<long, long>> empty_pairs;
+      long batch_insert_size = 0;
+      auto del_pairs = TG.generateDeleteEdges(desired_prob);
+      auto add_truples = TG.generateAddEdges(desired_prob);
+      batch_insert_size = del_pairs.size() + add_truples.size();
+      auto delete_start = std::chrono::high_resolution_clock::now();
+      auto ret_seqs = TR.delete_edges(del_pairs);
+      add_truples = TR.add_edges(add_truples);
+      add_truples.append(ret_seqs.first); 
+      auto delete_end = std::chrono::high_resolution_clock::now();
+      batchInsertEdge(ret_seqs.second, add_truples, clusters, (double) 0.0f, [] (double A, double B) {return A+B;}, randomized);
+      auto final_insert_end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> diff = final_insert_end - delete_start;
+      
+      std::cout << parlay::internal::init_num_workers() << ",";
+      std::cout << graph_size << "," << ln << "," << mean << ",";
+      switch(distribution){
+        case exponential:
+          std::cout << "e";
+          break;
+        case geometric:
+          std::cout << "g";
+          break;
+        case constant:
+          std::cout << "c";
+          break;
+        case uniform:
+          std::cout << "u";
+          break;
+      }
+      
+
+      std::cout << ",";
+      std::cout << batch_insert_size << "," << diff.count() << ",";
+
+      std::cout << std::endl;
+    }
+    else
+    {
+      batch_insertion = 1;
+      long multiplier = 5;
+      while(batch_insertion <= TG.get_num_dynamic_edges() )
+      {
+        double desired_prob = (static_cast<double>(batch_insertion)/TG.get_num_dynamic_edges());
+        if(desired_prob > 1.0f)
+          desired_prob = 1.0f;
+
+        parlay::sequence<std::pair<long, long>> empty_pairs;
+        long batch_insert_size = 0;
+        auto del_pairs = TG.generateDeleteEdges(desired_prob);
+        auto add_truples = TG.generateAddEdges(desired_prob);
+        batch_insert_size = del_pairs.size() + add_truples.size();
+        auto delete_start = std::chrono::high_resolution_clock::now();
+        auto ret_seqs = TR.delete_edges(del_pairs);
+        add_truples = TR.add_edges(add_truples);
+        add_truples.append(ret_seqs.first); 
+        auto delete_end = std::chrono::high_resolution_clock::now();
+        batchInsertEdge(ret_seqs.second, add_truples, clusters, (double) 0.0f, [] (double A, double B) {return A+B;}, randomized);
+        auto final_insert_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = final_insert_end - delete_start;
+        
+        std::cout << parlay::internal::init_num_workers() << ",";
+        std::cout << graph_size << "," << ln << "," << mean << ",";
+        switch(distribution){
+          case exponential:
+            std::cout << "e";
+            break;
+          case geometric:
+            std::cout << "g";
+            break;
+          case constant:
+            std::cout << "c";
+            break;
+          case uniform:
+            std::cout << "u";
+            break;
+        }
+        
+
+        std::cout << ",";
+        std::cout << batch_insert_size << "," << diff.count() << ",";
+
+        std::cout << std::endl;
+        batch_insertion *= multiplier;
+        if (multiplier == 2)
+          multiplier = 5;
+        else
+          multiplier = 2;
+      }
+        double desired_prob = (static_cast<double>(batch_insertion)/TG.get_num_dynamic_edges());
+        if(desired_prob > 1.0f)
+          desired_prob = 1.0f;
+
+        parlay::sequence<std::pair<long, long>> empty_pairs;
+        long batch_insert_size = 0;
+        auto del_pairs = TG.generateDeleteEdges(desired_prob);
+        auto add_truples = TG.generateAddEdges(desired_prob);
+        batch_insert_size = del_pairs.size() + add_truples.size();
+        auto delete_start = std::chrono::high_resolution_clock::now();
+        auto ret_seqs = TR.delete_edges(del_pairs);
+        add_truples = TR.add_edges(add_truples);
+        add_truples.append(ret_seqs.first); 
+        auto delete_end = std::chrono::high_resolution_clock::now();
+        batchInsertEdge(ret_seqs.second, add_truples, clusters, (double) 0.0f, [] (double A, double B) {return A+B;}, randomized);
+        auto final_insert_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = final_insert_end - delete_start;
+        
+        std::cout << parlay::internal::init_num_workers() << ",";
+        std::cout << graph_size << "," << ln << "," << mean << ",";
+        switch(distribution){
+          case exponential:
+            std::cout << "e";
+            break;
+          case geometric:
+            std::cout << "g";
+            break;
+          case constant:
+            std::cout << "c";
+            break;
+          case uniform:
+            std::cout << "u";
+            break;
+        }
+        
+        std::cout << ",";
+        std::cout << batch_insert_size << "," << diff.count() << ",";
+
+        std::cout << std::endl;
+    }
+
+    deleteRCtree(clusters); 
 
 }

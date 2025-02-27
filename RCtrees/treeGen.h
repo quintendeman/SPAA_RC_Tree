@@ -149,11 +149,11 @@ class TreeGen
             //     assert(this->counts[i] <= max_edges);
             // });
         }
-        //commenting because not complete?
-        // T get_num_dynamic_edges()
-        // {
-        //     return this->subgraph.size() > 0  
-        // }
+
+        T get_num_dynamic_edges()
+        {
+            return this->subgraphs.size() > 0 ? this->subgraphs.size() - 1 : 0;
+        }
 
         void generateInterconnects()
         {
