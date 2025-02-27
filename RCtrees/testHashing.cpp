@@ -208,8 +208,6 @@ int main(int argc, char* argv[])
 
         // batchInsertEdge(retpair.second, retpair.first, clusters, (double) 0.0f, [] (double A, double B) {return A+B;});
 
-
-
         testPathQueryValid(clusters, TG.parents, TG.weights, TG.random_perm_map, graph_size);
 
         dynamic_gen_time = 0.0f;

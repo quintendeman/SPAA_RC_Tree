@@ -47,7 +47,7 @@ parlay::sequence<std::pair<vertex,vertex>> generate_random_pairs(const parlay::s
 }
 
 int main(int argc, char* argv[]) {
-    auto usage = "Usage: testMST.out [--graph-size <graph-size>] [-n <graph-size>] [--num-queries <number of path queries to perform>]\nPrints compressed tree creation time, MST time, insertion time";
+    auto usage = "Usage: testMST.out [--graph_size <graph-size>] [-n <graph-size>] [--num-queries <number of path queries to perform>] [--ln <0.0-1.0>] [--mean <1.0f+>] [--dist <u,e,g,c>] [--randomized]\nPrints compressed tree creation time, MST time, insertion time";
 
     srand(time(NULL));
 
