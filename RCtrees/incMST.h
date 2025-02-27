@@ -831,7 +831,7 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
 
     auto& compressed_tree = compressed_tree_pair.first;
 
-    std::cout << "Compressed tree has " << compressed_tree.size() << " vertices and " << compressed_tree_pair.second.size() << " edges " << std::endl;
+    // std::cout << "Compressed tree has " << compressed_tree.size() << " vertices and " << compressed_tree_pair.second.size() << " edges " << std::endl;
       
     auto AllNewEdges = parlay::append(compressed_tree, newEdges);
 
@@ -852,7 +852,7 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
     auto finalEdgeIndices = min_spanning_forest(AllNewEdges, clusters.size());
     auto mst_gen_end = std::chrono::high_resolution_clock::now();
 
-    std::cout << "Done mst" << std::endl;
+    // std::cout << "Done mst" << std::endl;
 
     auto insertion_start = std::chrono::high_resolution_clock::now();
 
@@ -917,8 +917,8 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
     //     std::cout << std::endl;
     // }
 
-    std::cout << "Deleting " << delete_edges.size() << " edges " << std::endl;
-    std::cout << "Adding " << add_edges.size() << " edges " << std::endl;
+    // std::cout << "Deleting " << delete_edges.size() << " edges " << std::endl;
+    // std::cout << "Adding " << add_edges.size() << " edges " << std::endl;
 
     parlay::sequence<std::tuple<T,T,D>> empty_add_edges;    
     parlay::sequence<std::pair<T,T>> empty_delete_edges;    
@@ -939,7 +939,7 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
     std::chrono::duration<double> mst_gen_time = mst_gen_end - mst_gen_start;
     std::chrono::duration<double> insertion_time = insertion_end - insertion_start;
 
-    std::cout << cst_gen_time.count() << "," << mst_gen_time.count() << "," << insertion_time.count() << std::endl;
+    std::cout << cst_gen_time.count() << "," << mst_gen_time.count() << "," << insertion_time.count() << "," <<  cst_gen_time.count() + mst_gen_time.count() + insertion_time.count() << std::endl;
 
     // std::cout << "Done deleting " << std::endl;
 

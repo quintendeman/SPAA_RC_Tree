@@ -181,6 +181,9 @@ int main(int argc, char* argv[])
             num_queries = std::stod(argv[++i]);
         } else if (arg == "--mean" && i + 1 < argc) {
             mean = std::stod(argv[++i]);
+        } else {
+            print_help();
+            return -1;
         }
     }
 

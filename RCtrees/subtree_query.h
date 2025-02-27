@@ -732,11 +732,11 @@ parlay::sequence<D> batched_subtree_query_helper(ds& indices, parlay::sequence<c
     //     return;
     // });
 
-    std::cout << "There are " << roots.size() << " unique roots " << std::endl;
+    // std::cout << "There are " << roots.size() << " unique roots " << std::endl;
 
-    for(auto& root : roots)
-        std::cout << root->index << " ";
-    std::cout << std::endl;
+    // for(auto& root : roots)
+    //     std::cout << root->index << " ";
+    // std::cout << std::endl;
 
     parlay::parallel_for(0, roots.size(), [&] (T i){
         build_partial_sums(roots[i], identity, func);
