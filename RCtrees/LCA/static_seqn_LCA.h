@@ -104,7 +104,7 @@ void set_preorder(parlay::sequence<parlay::sequence<T>>& child_tree, T root, par
 
         augmented_vertices[s].preorder = count;
         count += 1;
-        //TOD2 does order of accessing children matter here? (does order not matter but need to be kept consistent across functions?)
+        //Note that children are traversed in the order they are listed
         for (T i = child_tree[s].size()-1; i >= 0; i--) {
             stack.push_back(child_tree[s][i]);
         }

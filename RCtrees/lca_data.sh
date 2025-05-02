@@ -25,3 +25,4 @@ for PNT in "${NUM_THREADS[@]}"; do
 done
 
 date
+
