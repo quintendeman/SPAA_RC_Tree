@@ -569,7 +569,7 @@ void build_partial_sums(cluster<T,D>* root, D identity, assocfunc func) // top-d
         build_partial_sums(root->children[i], identity, func);
         return;
     });
-}
+} //TODO* Q* when does this code ever finalize the root's value from the partial sums? 
 
 template<typename T, typename D, typename assocfunc, typename ds>
 parlay::sequence<D> do_constant_time_batch_query(ds& indices, parlay::sequence<cluster<T,D>>& clusters, D identity, assocfunc func)
