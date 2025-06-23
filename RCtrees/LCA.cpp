@@ -390,8 +390,8 @@ long tree_gen_size(long graph_size, parlay::sequence<cluster<long, double>>& clu
     int II = 0;
 
     // std::cout << "II " << II << std::endl;
-      TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true); //NOT passing in seed
-      std::cout << "seed used " << TG.seed << std::endl;
+      TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true,0); //passing in seed of 0
+      //std::cout << "seed used " << TG.seed << std::endl;
 
       TG.generateInitialEdges();
 
@@ -410,9 +410,10 @@ long tree_gen_size(long graph_size, parlay::sequence<cluster<long, double>>& clu
 
       parlay::sequence<wedge> empty_edges_sequence;
       create_base_clusters(clusters, ret_edge_modified.second, max_degree, graph_size * extra_tern_node_factor);
-      create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
+      create_RC_tree(clusters, graph_size*extra_tern_node_factor, defretval, [] (double A, double B) {return A+B;},false); //Q* added extra_tern_node_factor
 
-      return graph_size + 2*retedges.size();
+      //return graph_size + 2*retedges.size(); old ternarizer size
+      return graph_size * extra_tern_node_factor; //new ternarizer size
 
 }
 
