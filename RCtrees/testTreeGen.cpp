@@ -230,6 +230,7 @@ int main(int argc, char* argv[])
         break;
     }
 
+    std::cout << " " << static_counter << " " << dynamic_counter << " ";
     
     
     std::cout << "," << static_gen_time/static_counter << "," << static_tern_time/static_counter << "," << dynamic_gen_time/dynamic_counter << "," << dynamic_tern_time/dynamic_counter << ",";

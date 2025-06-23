@@ -124,7 +124,7 @@ read_wedge_from_file(const std::string &file_path) {
             double dt = std::chrono::duration<double>(now - last_time).count();
             double dbytes = double(processed - last_processed);
             double mbps = (dbytes / (1024.0 * 1024.0)) / (dt > 0 ? dt : 1);
-            print_progress(fraction, mbps);
+            // print_progress(fraction, mbps);
             last_time = now;
             last_processed = processed;
         }
@@ -144,12 +144,12 @@ read_wedge_from_file(const std::string &file_path) {
     }
 
     // Final update to 100%
-    print_progress(1.0, 0.0);
-    std::cout << std::endl;
+    // print_progress(1.0, 0.0);
+    // std::cout << std::endl;
 
-    std::cout << "Duplicate removal reduced size from " << edge_list.size() << " to ";
+    // std::cout << "Duplicate removal reduced size from " << edge_list.size() << " to ";
     remove_duplicates(edge_list);
-    std::cout << edge_list.size() << std::endl;
+    // std::cout << edge_list.size() << std::endl;
 
     edge_list = parlay::random_shuffle(edge_list);
 
@@ -276,8 +276,8 @@ int main(int argc, char* argv[]) {
 
    
     double time_per_edge = total_time / static_cast<double>((times_done - warmup_trials) * batch_size);
-    std::cout << "Time per edge: " << time_per_edge << " seconds" << std::endl;
-
+    // std::cout << "Time per edge: " << time_per_edge << " seconds" << std::endl;
+    std::cout << parlay::internal::init_num_workers() << batch_size << "," << time_per_edge << std::endl;
 
     deleteRCtree(clusters);
 
