@@ -10,6 +10,7 @@ touch output_lca.csv
 
 date
 
+#here k is max_k (hence the +1)
 LD_PRELOAD=$jemellocpath PARLAY_NUM_THREADS=48 ./lca.out -forr -4 -trials 10 -n 10000000 -k 10000001 -mean 20 -ln .1 -dist u >> output_lca.csv
 
 LD_PRELOAD=$jemellocpath PARLAY_NUM_THREADS=48 ./lca.out -forr -4 -trials 10 -n 10000000 -k 10000001 -mean 40 -ln .9 -dist e >> output_lca.csv
