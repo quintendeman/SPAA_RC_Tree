@@ -133,10 +133,10 @@ read_wedge_from_file(const std::string &file_path) {
         std::string tag;
         long u, v;
         double w;
-        if (!(iss >> u >> v >> w)) continue;
+        if (!(iss >> tag >> u >> v >> w)) continue;
         // std::cout << u << " " << v << " " << w << std::endl;
-        // if (tag != "a") continue;
-        // if (u >= v) continue;
+        if (tag != "a") continue;
+        if (u >= v) continue;
 
         edge_list.emplace_back(u, v, (double) (u * v + u + v));
         max_vertex = std::max({max_vertex, u, v});
