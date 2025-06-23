@@ -9,6 +9,8 @@
 #include "RCdynamic.h"
 #include "ternarizer.h"
 #include <chrono>
+#include <unordered_set>
+
 
 
 template<typename T, typename D> 
@@ -819,11 +821,104 @@ void verifyInsertionObeysDegreeCap(parlay::sequence<cluster<T,D>>& clusters, par
     return;
 }
 
+
+void doesDeleteExist(parlay::sequence<cluster<long,double>>& clusters, parlay::sequence<std::pair<long,long>>& del_edges) {
+    // do the edges being asked to be deleted actually even exist
+    
+    // checkDuplicates(del_edges);
+
+    parlay::parallel_for(0, del_edges.size(), [&] (long i) {
+        const long& v = del_edges[i].first;
+        const long& w = del_edges[i].second;
+
+        auto& cluster_v = clusters[v];
+        auto& cluster_w = clusters[w];
+
+        bool found_w = false;
+        bool found_v = false;
+
+        for(short a = 0; a < cluster_v.adjacency.get_head()->adjacents.size(); ++a) {
+            auto& nbr_node = cluster_v.adjacency.get_head()->adjacents[a];
+            if(nbr_node != nullptr){
+                auto other_side = get_other_side(cluster_v.adjacency.get_head(), nbr_node);
+                if(other_side->cluster_ptr->index == w)
+                    found_w = true;
+            }
+        }
+
+        for(short a = 0; a < cluster_w.adjacency.get_head()->adjacents.size(); ++a) {
+            auto& nbr_node = cluster_w.adjacency.get_head()->adjacents[a];
+            if(nbr_node != nullptr){
+                auto other_side = get_other_side(cluster_w.adjacency.get_head(), nbr_node);
+                if(other_side->cluster_ptr->index == v)
+                    found_v = true;
+            }
+        }
+        if(!found_v || !found_w) {
+            std::cout << "Couldn't find " << v << " -- " << w << std::endl;
+        }
+        assert(found_v && found_w);
+
+    });
+
+}
+
+void matchClustersAndSimplifiedTree(parlay::sequence<cluster<long, double>>& clusters, parlay::sequence<tern_node<long, double>>& simplified_tree) {
+    parlay::parallel_for(0, clusters.size(), [&] (long i) {
+        auto& clstr = clusters[i];
+        auto& tern_node = simplified_tree[i];
+
+        for(int a = 0; a < 3; ++a) {
+            long expected_neighbor = tern_node.outgoing_edgeindices[a];
+                if(expected_neighbor == -1)
+                    continue;
+            bool exists = false;
+            for(auto& nbr : clstr.adjacency.get_head()->adjacents) {
+                if(nbr == nullptr)
+                    continue;
+                for(auto& n : nbr->adjacents)
+                    if(n != nullptr && n->cluster_ptr->index == expected_neighbor)
+                        exists = true;
+            }
+            if(!exists){
+                std::cout << tern_node << std::endl;
+                clstr.print();
+                std::cout << std::endl;
+            }
+            assert(exists);
+        }
+
+        return;
+    });
+}
+
+// Cantor pairing function for two non-negative integers
+inline uint64_t cantorPair(uint64_t x, uint64_t y) {
+    return ((x + y) * (x + y + 1)) / 2 + y;
+}
+
+template<typename T>
+void checkInSet(T v, T w) {
+    if (w < v) std::swap(v, w);  // ensure (v, w) is canonical
+
+    // std::cout << "Inserting " << v << " ---- " << w << std::endl;
+
+    static std::unordered_set<uint64_t> seen;
+    uint64_t key = cantorPair(static_cast<uint64_t>(v), static_cast<uint64_t>(w));
+
+    if (seen.count(key)) {
+        std::cout << v << " to " << w << " is a duplicate edge" << std::endl;
+        // assert(false && "duplicate edge");
+    }
+    seen.insert(key);
+}
+
+
 /*
     Warning, changes cluster and MST in place
 */
 template<typename T, typename D>
-void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequence<std::tuple<T,T,D>>& newEdges, ternarizer<T,D>& TR)
+std::tuple<double,double,double> incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequence<std::tuple<T,T,D>>& newEdges, ternarizer<T,D>& TR)
 {
     auto cst_gen_start = std::chrono::high_resolution_clock::now();
     auto compressed_tree_pair = createCompressedPathTree(clusters, newEdges); 
@@ -904,34 +999,69 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
         return pr.first != pr.second;
     });
 
-    // if(clusters.size() <= 100)
+    // if(clusters.size() <= 100 || true)
     // {
-    //     std::cout << "Final add edges " << std::endl;
-    //     for(auto& edge : add_edges)
-    //         std::cout << std::get<0>(edge)  << " -- " << std::get<1>(edge) << ": " << std::get<2>(edge) << std::endl;
-    //     std::cout << std::endl;
+        // std::cout << "Final add edges " << std::endl;
+        // for(auto& edge : add_edges)
+        //     checkInSet(std::get<0>(edge), std::get<1>(edge));
+        // std::cout << std::endl;
+        // std::cout << "Final add edges " << std::endl;
+        // for(auto& edge : add_edges)
+        //     std::cout << std::get<0>(edge)  << " -- " << std::get<1>(edge) << ": " << std::get<2>(edge) << std::endl;
+        // std::cout << std::endl;
 
-    //     std::cout << "Final delete edges " << std::endl;
-    //     for(auto& edge : delete_edges)
-    //         std::cout << edge.first  << " -- " << edge.second << std::endl;
-    //     std::cout << std::endl;
+        // std::cout << "Final delete edges " << std::endl;
+        // for(auto& edge : delete_edges)
+        //     std::cout << edge.first  << " -- " << edge.second << std::endl;
+        // std::cout << std::endl;
     // }
 
     // std::cout << "Deleting " << delete_edges.size() << " edges " << std::endl;
     // std::cout << "Adding " << add_edges.size() << " edges " << std::endl;
 
     parlay::sequence<std::tuple<T,T,D>> empty_add_edges;    
-    parlay::sequence<std::pair<T,T>> empty_delete_edges;    
+    parlay::sequence<std::pair<T,T>> empty_delete_edges; 
+    
+
+
 
     // first ternarize the delete edges
     auto del_pair = TR.delete_edges(delete_edges);
 
-    batchInsertEdge(del_pair.second, del_pair.first, clusters, (D) 0, [] (D a, D b) {return a > b ? a : b;});
+    TR.verify_simple_tree();
+    checkDuplicates(del_pair.first);
+    doesDeleteExist(clusters, del_pair.first);
+
+    // std::cout << "Final del ternarized " << delete_edges.size() << std::endl;
+    // for(auto& edge : del_pair.second)
+    //     std::cout << std::get<0>(edge)  << " -- " << std::get<1>(edge) << ": " << std::get<2>(edge) << std::endl;
+    // std::cout << std::endl;
+
+    // for(auto& edge : del_pair.first)
+    //     std::cout << edge.first  << " -- " << edge.second << std::endl;
+    // std::cout << std::endl;
+
+    batchInsertEdge(del_pair.first, del_pair.second, clusters, (D) 0, [] (D a, D b) {return a > b ? a : b;});
+    matchClustersAndSimplifiedTree(clusters, TR.get_simplified_tree());
 
     // then ternarize the add edges
     auto add_edges_ternarized = TR.add_edges(add_edges);
 
-    batchInsertEdge(empty_delete_edges, add_edges_ternarized, clusters, (D) 0, [] (D a, D b) {return a > b ? a : b;});
+    TR.verify_simple_tree();
+    checkDuplicates(add_edges_ternarized.first);
+    doesDeleteExist(clusters, add_edges_ternarized.first);
+
+    // std::cout << "Final add ternarized " << add_edges.size() <<  std::endl;
+    // for(auto& edge : add_edges_ternarized.second)
+    //     std::cout << std::get<0>(edge)  << " -- " << std::get<1>(edge) << ": " << std::get<2>(edge) << std::endl;
+    // std::cout << std::endl;
+
+    // for(auto& edge : add_edges_ternarized.first)
+    //     std::cout << edge.first  << " -- " << edge.second << std::endl;
+    // std::cout << std::endl;
+
+    batchInsertEdge(add_edges_ternarized.first, add_edges_ternarized.second, clusters, (D) 0, [] (D a, D b) {return a > b ? a : b;});
+    matchClustersAndSimplifiedTree(clusters, TR.get_simplified_tree());
 
     auto insertion_end = std::chrono::high_resolution_clock::now();
 
@@ -939,7 +1069,7 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
     std::chrono::duration<double> mst_gen_time = mst_gen_end - mst_gen_start;
     std::chrono::duration<double> insertion_time = insertion_end - insertion_start;
 
-    std::cout << cst_gen_time.count() << "," << mst_gen_time.count() << "," << insertion_time.count() << "," <<  cst_gen_time.count() + mst_gen_time.count() + insertion_time.count() << std::endl;
+    // std::cout << cst_gen_time.count() << "," << mst_gen_time.count() << "," << insertion_time.count() << "," <<  cst_gen_time.count() + mst_gen_time.count() + insertion_time.count() << std::endl;
 
     // std::cout << "Done deleting " << std::endl;
 
@@ -948,7 +1078,7 @@ void incrementMST(parlay::sequence<cluster<T,D>>& clusters, const parlay::sequen
     // batchInsertEdge(empty_delete_edges, add_edges, clusters, (D) 0, [] (D a, D b) {return a > b ? a : b;});
 
 
-    return;
+    return {cst_gen_time.count(), mst_gen_time.count(), insertion_time.count()};
 }
 
 #endif

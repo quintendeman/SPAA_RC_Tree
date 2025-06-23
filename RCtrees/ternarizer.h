@@ -335,7 +335,10 @@ class ternarizer{
 
             for(auto& n : this->simplified_tree)
             { 
-                std::cout << n << std::endl;
+                if(n.owner != n.dummy_index || n.real) {
+                    if(n.outgoing_edgeindices[0] != -1 || n.outgoing_edgeindices[1] != -1 || n.outgoing_edgeindices[2] != -1)
+                        std::cout << n << std::endl;
+                }
             }
 
             for(long i = 0; i < this->hash_table_size; ++i) {
@@ -576,8 +579,10 @@ class ternarizer{
         }
 
 
+
         std::pair<parlay::sequence<std::pair<T,T>>, parlay::sequence<wedge>> add_edges(parlay::sequence<wedge>& add_edges)
         {
+
             parlay::sequence<wedge> ret_wedges;
             parlay::sequence<std::pair<T,T>> ret_del_pairs;
 
@@ -752,8 +757,10 @@ class ternarizer{
                         relevant_edge.dummy_v = this->simplified_tree[endpoint].new_tail_node_index;
                     else if(this->simplified_tree[relevant_edge.dummy_w].owner == endpoint)
                         relevant_edge.dummy_w = this->simplified_tree[endpoint].new_tail_node_index;
-                    // else
-                    //     assert(false && "Should never reach here"); // todo
+                    else {
+                        std::cout << relevant_edge << std::endl;
+                        assert(false && "Should never reach here"); // todo
+                    }
                     // tail changed AND was populated, need to upgrade it
                     this->simplified_tree[ntni].outgoing_edgeindices[2] = this->simplified_tree[this->simplified_tree[endpoint].tail_node_index].outgoing_edgeindices[2];
                     this->simplified_tree[ntni].outgoing_weights[2] = this->simplified_tree[this->simplified_tree[endpoint].tail_node_index].outgoing_weights[2];
@@ -871,8 +878,8 @@ class ternarizer{
                 const T& other_endpoint = this->simplified_tree[other_side].owner;
                 const D& rel_weight = this->simplified_tree[endpoint].tail_data;
 
-                // assert(other_side != -1); // TODO
-                // assert(other_endpoint != endpoint);
+                assert(other_side != -1); // TODO
+                assert(other_endpoint != endpoint);
                 
                 T v = endpoint;
                 T w = other_endpoint;
@@ -1538,8 +1545,8 @@ class ternarizer{
                             relevant_edge.dummy_v = endpoint;
                             auto& their_node = this->simplified_tree[relevant_edge.dummy_w];
                             short ind = -1;
-                            for(short a = 0; a < 3; ++a) {
-                                // assert(a != 3); //
+                            for(short a = 0; a < 4; ++a) {
+                                assert(a != 3); //
                                 if(their_node.outgoing_edgeindices[a] != -1 && this->simplified_tree[their_node.outgoing_edgeindices[a]].owner == endpoint) {
                                     their_node.outgoing_edgeindices[a] = relevant_edge.dummy_v;
                                     break;
@@ -1550,8 +1557,8 @@ class ternarizer{
                             relevant_edge.dummy_w = endpoint;
                             auto& their_node = this->simplified_tree[relevant_edge.dummy_v];
                             
-                            for(short a = 0; a < 3; ++a) {
-                                // assert(a != 3); //
+                            for(short a = 0; a < 4; ++a) {
+                                assert(a != 3); //
                                 if(their_node.outgoing_edgeindices[a] != -1 && this->simplified_tree[their_node.outgoing_edgeindices[a]].owner == endpoint) {
                                     their_node.outgoing_edgeindices[a] = relevant_edge.dummy_w;
                                     break;
@@ -1643,10 +1650,10 @@ class ternarizer{
                     // assert(payload != -1); // todo
                     T other_endpoint = this->simplified_tree[payload].owner;
                     // assert(other_endpoint != endpoint); // todo
-                    if(other_endpoint == -1) { // 
-                        std::cout << tail_node << std::endl;
-                    }
-                    // assert(other_endpoint != -1);
+                    // if(other_endpoint == -1) { // todo
+                    //     std::cout << tail_node << std::endl;
+                    // }
+                    // assert(other_endpoint != -1); // todo
                     T v = endpoint;
                     T w = other_endpoint;
                     if(w < v)
@@ -1759,7 +1766,7 @@ class ternarizer{
                 T other_endpoint = w;
                 if(w < v)
                     std::swap(v, w);
-                assert(payload != -1); // todo
+                // assert(payload != -1); // todo
 
                 // std::cout << "looking for " << v << " -- " << w << std::endl;
                 auto& relevant_edge = this->find_basic_edge_in_ht(v, w);
@@ -1826,7 +1833,7 @@ class ternarizer{
                             }
                         }
                         tail_node.outgoing_edgeindices[2] = relevant_edge.dummy_w;
-                        // assert(tail_node.outgoing_edgeindices[2] == relevant_edge.dummy_w); // todo
+                        assert(tail_node.outgoing_edgeindices[2] == relevant_edge.dummy_w); // todo
                         relevant_edge.dummy_v = head_node.new_tail_node_index;
                     } else if(this->simplified_tree[relevant_edge.dummy_w].owner == endpoint) {
                         // flipped
@@ -1852,8 +1859,8 @@ class ternarizer{
                         relevant_edge.dummy_v = head_node.new_tail_node_index;
                     else if(this->simplified_tree[relevant_edge.dummy_w].owner == endpoint)
                         relevant_edge.dummy_w = head_node.new_tail_node_index;
-                    // else
-                    //     assert(false && "Shouldn't ever reach here");
+                    else
+                        assert(false && "Shouldn't ever reach here");
                     tail_node.outgoing_edgeindices[2] = their_tail_index;
                     if(endpoint < other_endpoint) {
                         ret_seq.push_back({head_node.new_tail_node_index ,their_tail_index, tail_node.outgoing_weights[2]});
@@ -1882,7 +1889,7 @@ class ternarizer{
             // for(auto& fr : free_node_entries)
             //     std::cout << fr << std::endl;
 
-            checkDuplicates(free_node_entries); // todo
+            // checkDuplicates(free_node_entries); // todo
 
             parlay::parallel_for(0, endpoints.size(), [&] (T i) {
                 const T& endpoint = endpoints[i];
@@ -1995,10 +2002,6 @@ class ternarizer{
             return false;
         }
 
-
-
-
-
         void verify_simple_tree(void)
         {
             
@@ -2021,8 +2024,8 @@ class ternarizer{
                         if(neighbour_tern_node.outgoing_edgeindices[j] == my_tern_node.dummy_index)
                             return;
                     }
-                    // std::cout << red << my_tern_node << reset << std::endl;
-                    // std::cout << red << neighbour_tern_node << reset << std::endl;
+                    std::cout << my_tern_node  << std::endl;
+                    std::cout <<  neighbour_tern_node  << std::endl;
 
                     // this->print_state();
 
@@ -2055,8 +2058,11 @@ class ternarizer{
 
                 while(curr_index != -1 && this->simplified_tree[curr_index].owner == head_node.dummy_index) {
                     auto& curr_node = this->simplified_tree[curr_index];
-                    if(curr_node.real == false)
+                    if(curr_node.real == false){
+                        if(curr_node.outgoing_edgeindices[1] == -1)
+                            std::cout << curr_node << std::endl;
                         assert(curr_node.outgoing_edgeindices[1] != -1);
+                    }
                     if(curr_node.dummy_index == head_node.tail_node_index) {
                         if(head_node.adjacency_count > 3)
                             assert(curr_node.outgoing_edgeindices[2] != -1);
@@ -2064,7 +2070,15 @@ class ternarizer{
 
                     curr_index = curr_node.outgoing_edgeindices[2];
                 }
+            });
 
+            parlay::parallel_for(0, this->hash_table_size, [&] (T i) {
+                auto& relevant_edge = this->key_edges[i];
+                if(this->key_valid[i] == false)
+                    return;
+                assert(relevant_edge.dummy_w != -1 && relevant_edge.dummy_v != -1);
+                assert(this->get_owner(relevant_edge.dummy_v) == relevant_edge.v);
+                assert(this->get_owner(relevant_edge.dummy_w) == relevant_edge.w);
             });
 
             // this->hasCycle(edge_list);

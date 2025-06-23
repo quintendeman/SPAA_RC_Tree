@@ -37,3 +37,4 @@ done
 for PNT in "${NUM_THREADS[@]}"; do
     LD_PRELOAD=$jemellocpath PARLAY_NUM_THREADS=$PNT   ./testMST.out --ln 0.9 --mean 40 --dist u --graph_size $CONST_GRAPH_SIZE  --num-additions 1000000 >> output_incmst.csv
 done
+
