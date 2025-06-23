@@ -68,7 +68,9 @@
         "format": "cpp",
         "numbers": "cpp",
         "bitset": "cpp",
-        "typeindex": "cpp"
+        "typeindex": "cpp",
+        "cstdarg": "cpp",
+        "ranges": "cpp"
     },
     "workbench.colorTheme": "monokai-charcoal (purple)"
 }

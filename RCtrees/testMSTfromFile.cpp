@@ -181,8 +181,8 @@ int main(int argc, char* argv[]) {
     long batch_size = std::stol(argv[2]);
 
     auto wedge_pair = read_wedge_from_file(path_to_file);
-    std::cout << "max node: " << wedge_pair.second << std::endl;
-    std::cout << "num edges: " << wedge_pair.first.size() << std::endl;
+    // std::cout << "max node: " << wedge_pair.second << std::endl;
+    // std::cout << "num edges: " << wedge_pair.first.size() << std::endl;
 
     vertex graph_size = wedge_pair.second + 1;  
 
@@ -236,8 +236,8 @@ int main(int argc, char* argv[]) {
     //     warmup_trials = 0;
     // }
 
-    std::cout << "max_times_done " << max_times_done << std::endl;
-    std::cout << "warmup_trials " << warmup_trials << std::endl;
+    // std::cout << "max_times_done " << max_times_done << std::endl;
+    // std::cout << "warmup_trials " << warmup_trials << std::endl;
 
     // time measurement start
     
@@ -248,7 +248,7 @@ int main(int argc, char* argv[]) {
     while(current_edges < max_edges) {
         // init start
 
-        std::cout << "CE " << current_edges << std::endl;
+        // std::cout << "CE " << current_edges << std::endl;
 
         long start_index = current_edges;
         long end_index = (current_edges + batch_size) >= max_edges ? max_edges : current_edges + batch_size;

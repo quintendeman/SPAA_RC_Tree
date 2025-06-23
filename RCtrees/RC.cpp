@@ -128,7 +128,7 @@ int main(int argc, char* argv[]) {
 
     // // Measure creation time
     // auto start_creation = std::chrono::high_resolution_clock::now();
-    create_base_clusters(clusters, ternerized_initial_edges, static_cast<long>(3), graph_size*extra_tern_node_factor);
+    create_base_clusters(clusters, ternerized_initial_edges.second, static_cast<long>(3), graph_size*extra_tern_node_factor);
     create_RC_tree(clusters, graph_size*extra_tern_node_factor, static_cast<double>(0.0f), [] (double A, double B) {return A+B;}, false);
 
     auto random_add_edges = generate_random_edges(TG.parents, TG.random_perm_map, num_additions);

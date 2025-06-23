@@ -150,9 +150,20 @@ int main(int argc, char* argv[]) {
         std::cout << ",";
         std::cout << num_additions << ",";
 
-        auto random_add_edges = generate_random_edges(TG.parents, TG.random_perm_map, num_additions);
+        double cst_time = 0.0;
+        double mst_time = 0.0;
+        double insert_time = 0.0;
+        for(short a = 0; a < 10; a++) {
+            auto random_add_edges = generate_random_edges(TG.parents, TG.random_perm_map, num_additions);
+            auto rets = incrementMST(clusters, random_add_edges, TR);
+            double c,m,i;
+            std::tie(c,m,i) = rets;
+            cst_time+=c;
+            mst_time+=m;
+            insert_time+=i;
+        }
+        std::cout << cst_time/10 << "," << mst_time/10 << "," << insert_time;
 
-        incrementMST(clusters, random_add_edges, TR);
     }
     else
     {
@@ -181,8 +192,19 @@ int main(int argc, char* argv[]) {
                 }
             std::cout << ",";
             std::cout << num_additions << ",";
-            auto random_add_edges = generate_random_edges(TG.parents, TG.random_perm_map, num_additions);
-            incrementMST(clusters, random_add_edges, TR);
+            double cst_time = 0.0;
+            double mst_time = 0.0;
+            double insert_time = 0.0;
+            for(short a = 0; a < 10; a++) {
+                auto random_add_edges = generate_random_edges(TG.parents, TG.random_perm_map, num_additions);
+                auto rets = incrementMST(clusters, random_add_edges, TR);
+                double c,m,i;
+                std::tie(c,m,i) = rets;
+                cst_time+=c;
+                mst_time+=m;
+                insert_time+=i;
+            }
+            std::cout << cst_time/10 << "," << mst_time/10 << "," << insert_time;
             std::cout << std::endl;
 
             num_additions *= multiplier;
