@@ -359,7 +359,7 @@ parlay::sequence<long> tree_gen(long graph_size, parlay::sequence<cluster<long, 
       double defretval = 0.0;
 
       parlay::sequence<wedge> empty_edges_sequence;
-      create_base_clusters(clusters, ret_edge_modified.second, max_degree, graph_size * extra_tern_node_factor);
+      create_base_clusters(clusters, ret_edge_modified.second, max_degree, graph_size * extra_tern_node_factor); //note the .second needed
       create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
 
       parlay::sequence<std::pair<long,long>> all_edges = parlay::map(ret_edge_modified.second,[&] (std::tuple<long,long,double>& edge) {return std::make_pair(std::get<0>(edge),std::get<1>(edge));});
@@ -390,7 +390,8 @@ long tree_gen_size(long graph_size, parlay::sequence<cluster<long, double>>& clu
     int II = 0;
 
     // std::cout << "II " << II << std::endl;
-      TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true, 0);
+      TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true); //NOT passing in seed
+      std::cout << "seed used " << TG.seed << std::endl;
 
       TG.generateInitialEdges();
 
@@ -458,72 +459,67 @@ parlay::sequence<long> get_kvals(long max_k, int kscale) {
     return kvals;
 
 }
-//force a different tree each time, according to the TG seed change
-void bench_diff_trees(parlay::random_generator& pgen,long graph_size, long max_k, int trials_per, double mean, double ln,std::string dist_choice) {
-    std::cout << "bench diff trees " << std::endl;
-    int kscale=30;
-    long k = -1;
-    parlay::sequence<long> kvals = get_kvals(max_k,kscale);
+// //force a different tree each time, according to the TG seed change
+// void bench_diff_trees(parlay::random_generator& pgen,long graph_size, long max_k, int trials_per, double mean, double ln,std::string dist_choice) {
+//     std::cout << "bench diff trees " << std::endl;
+//     int kscale=30;
+//     long k = -1;
+//     parlay::sequence<long> kvals = get_kvals(max_k,kscale);
 
-    const double min_weight = 0.0;
-    const double max_weight = 100.0f;
-    auto distribution=exponential;// either exponential, geometric, constant or uniform
-    if (dist_choice=="e") distribution=exponential;
-    else if (dist_choice=="u") distribution=uniform;
-    else {
-        std::cout << "error, wrong dist, abort " << std::endl;
-        exit(10);
-    }
+//     const double min_weight = 0.0;
+//     const double max_weight = 100.0f;
+//     auto distribution=exponential;// either exponential, geometric, constant or uniform
+//     if (dist_choice=="e") distribution=exponential;
+//     else if (dist_choice=="u") distribution=uniform;
+//     else {
+//         std::cout << "error, wrong dist, abort " << std::endl;
+//         exit(10);
+//     }
 
-    TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true,15213); // note seed is 15213 (which also is default val)
+//     TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true,15213); // note seed is 15213 (which also is default val)
 
-    parlay::sequence<long> parent_tree(1,1); //dummy to fill in necessary argument
+//     parlay::sequence<long> parent_tree(1,1); //dummy to fill in necessary argument
 
-    double runtime=0;
-    for (int j = 0; j < kvals.size(); j++) {
+//     double runtime=0;
+//     for (int j = 0; j < kvals.size(); j++) {
 
-        k=kvals[j];
-        for (int iter = 0; iter < trials_per; iter++) {
+//         k=kvals[j];
+//         for (int iter = 0; iter < trials_per; iter++) {
 
-            parlay::sequence<cluster<long, double>> clusters; 
+//             parlay::sequence<cluster<long, double>> clusters; 
 
-            TG.generateInitialEdges(); //increments seed twice
+//             TG.generateInitialEdges(); //increments seed twice
 
-            auto retedges = TG.getAllEdges();
-
-
-            ternarizer<long, double> TR(graph_size, 0);
-
-            auto ret_edge_modified = TR.add_edges(retedges);
-
-            TR.verify_simple_tree();
-
-            const long max_degree = 3;
-            double defretval = 0.0;
-
-            parlay::sequence<wedge> empty_edges_sequence;
-            create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
-            create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
+//             auto retedges = TG.getAllEdges();
 
 
-            long n = graph_size + 2*retedges.size(); //ternarized n
+//             ternarizer<long, double> TR(graph_size, 0);
 
-            std::uniform_int_distribution<long> dis(0,n-1);
-            runtime= get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
-            std::cout << parlay::internal::init_num_workers() << "," << n << "," << graph_size << "," << k << ", " << ln << "," << mean << "," << dist_choice <<  ", " << runtime << std::endl;
+//             auto ret_edge_modified = TR.add_edges(retedges);
 
-            deleteRCtree(clusters);
-        }
+//             TR.verify_simple_tree();
+
+//             const long max_degree = 3;
+//             double defretval = 0.0;
+
+//             parlay::sequence<wedge> empty_edges_sequence;
+//             create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
+//             create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
+
+
+//             long n = graph_size + 2*retedges.size(); //ternarized n
+
+//             std::uniform_int_distribution<long> dis(0,n-1);
+//             runtime= get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
+//             std::cout << parlay::internal::init_num_workers() << "," << n << "," << graph_size << "," << k << ", " << ln << "," << mean << "," << dist_choice <<  ", " << runtime << std::endl;
+
+//             deleteRCtree(clusters);
+//         }
 
         
-    }
-   
+//     }
 
-  
-
-
-
-}
+// }
 
 
 
@@ -595,7 +591,6 @@ void bench_threads(parlay::random_generator& pgen, long oldn, long k, int NUM_TR
     }
     deleteRCtree(clusters);
 
-   
 
 }
 
@@ -739,9 +734,9 @@ int main(int argc, char* argv[]) {
     else if (forest_ratio==-6) {
         test();
     }
-    else if (forest_ratio==-7) {
-        bench_diff_trees(pgen,n,k,NUM_TRIALS,mean,ln,dist_choice);
-    }
+    // else if (forest_ratio==-7) {
+    //     bench_diff_trees(pgen,n,k,NUM_TRIALS,mean,ln,dist_choice);
+    // }
     else {
         test_lca<int,int>(n,NUM_TRIALS,NUM_TREES,k,gen,pgen,forest_ratio,chain_ratio); //0 is forest ratio
 
