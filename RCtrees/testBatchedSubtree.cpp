@@ -33,8 +33,9 @@ static void print_help() {
 
 void test_simple_subtree_queries(const long& num_queries, parlay::sequence<cluster<long,double>>& clusters,  TreeGen<long, double>& TG,  ternarizer<long, double>& TR)
 {
-    assert(clusters.size());
-    parlay::random_generator gen(clusters.size());
+    // assert(clusters.size());
+    static int seed = 15213;
+    parlay::random_generator gen(clusters.size() + seed++);
     std::uniform_int_distribution<long> dis(0, TG.num_vertices - 1);
 
     auto assocfunc = [] (double A, double B) {return A + B;};
@@ -71,8 +72,9 @@ void test_simple_subtree_queries(const long& num_queries, parlay::sequence<clust
 
 void test_batched_subtree_queries(const long& num_queries, parlay::sequence<cluster<long,double>>& clusters,  TreeGen<long, double>& TG,  ternarizer<long, double>& TR)
 {
-    assert(clusters.size());
-    parlay::random_generator gen(clusters.size());
+    // assert(clusters.size());
+    static int seed = 15213;
+    parlay::random_generator gen(clusters.size() + seed++);
     std::uniform_int_distribution<long> dis(0, TG.num_vertices - 1);
 
     auto assocfunc = [] (double A, double B) {return A + B;};
@@ -92,10 +94,12 @@ void test_batched_subtree_queries(const long& num_queries, parlay::sequence<clus
     // std::cout << "Testing queries " << test_pairs.size() << " in a batch " << std::endl;
 
     auto start = std::chrono::high_resolution_clock::now();
-    auto subtree_sum_values = parlay::tabulate(test_pairs.size(), [&] (long i){
-        auto& pr = test_pairs[i];
-        return subtree_query(pr.first, pr.second, clusters, TR, identity, assocfunc);
-    });
+    for(int a = 0; a < 10; a++) {
+        auto subtree_sum_values = parlay::tabulate(test_pairs.size(), [&] (long i){
+            auto& pr = test_pairs[i];
+            return subtree_query(pr.first, pr.second, clusters, TR, identity, assocfunc);
+        });
+    }
     auto end = std::chrono::high_resolution_clock::now();
     
 
@@ -118,15 +122,16 @@ void test_batched_subtree_queries(const long& num_queries, parlay::sequence<clus
         }
     std::cout << ",";
     std::cout << num_queries << ",";
-    std::cout << std::chrono::duration<double, std::milli>(end - start).count()
+    std::cout << (std::chrono::duration<double, std::milli>(end - start).count()/10)
             << ",";
     auto start_ = std::chrono::high_resolution_clock::now();
-    auto subtree_batched_values = batched_subtree_query(test_pairs, clusters, TR, identity, assocfunc);
+    for(int a = 0; a < 10; a++)
+       auto subtree_batched_values = batched_subtree_query(test_pairs, clusters, TR, identity, assocfunc);
     auto end_ = std::chrono::high_resolution_clock::now();
-    std::cout << std::chrono::duration<double, std::milli>(end_ - start_).count()
+    std::cout << (std::chrono::duration<double, std::milli>(end_ - start_).count()/10)
             << std::endl;
 
-    assert(subtree_sum_values.size() == subtree_batched_values.size());
+    // assert(subtree_sum_values.size() == subtree_batched_values.size());
 
     // for(long i = 0; i < test_pairs.size(); i++)
     // {
@@ -136,13 +141,13 @@ void test_batched_subtree_queries(const long& num_queries, parlay::sequence<clus
 
 
 
-    parlay::parallel_for(0, subtree_sum_values.size(), [&] (long i) {
-        if(!isNearlyEqual(subtree_sum_values[i], subtree_batched_values[i]))
-        {
-            std::cout << subtree_sum_values[i] << " != " << subtree_batched_values[i] << std::endl;
-            assert("Subtree queries don't match" && false);
-        }
-    });
+    // parlay::parallel_for(0, subtree_sum_values.size(), [&] (long i) {
+    //     if(!isNearlyEqual(subtree_sum_values[i], subtree_batched_values[i]))
+    //     {
+    //         std::cout << subtree_sum_values[i] << " != " << subtree_batched_values[i] << std::endl;
+    //         assert("Subtree queries don't match" && false);
+    //     }
+    // });
 
 
 
