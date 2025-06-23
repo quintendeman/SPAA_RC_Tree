@@ -390,7 +390,7 @@ long tree_gen_size(long graph_size, parlay::sequence<cluster<long, double>>& clu
     int II = 0;
 
     // std::cout << "II " << II << std::endl;
-      TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true); //NOT passing in seed
+      TreeGen<long, double> TG(graph_size, min_weight, max_weight, ln, mean, distribution, true); //NOT passing in seed TODO revert
       std::cout << "seed used " << TG.seed << std::endl;
 
       TG.generateInitialEdges();
