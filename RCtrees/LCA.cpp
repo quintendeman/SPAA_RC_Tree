@@ -473,9 +473,10 @@ void bench(parlay::random_generator& pgen,long oldn, long max_k, int trials_per,
         k=kvals[j];
         for (int iter = 0; iter < trials_per; iter++) {
             runtime= get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
+            std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << "," << dist_choice <<  ", " << runtime << std::endl;
         }
 
-        std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << "," << dist_choice <<  ", " << runtime << std::endl;
+        
     }
    
 

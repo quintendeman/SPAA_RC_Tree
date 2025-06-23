@@ -384,6 +384,7 @@ void degree_cap_add_edge(parlay::sequence<T> &parents, const T max_degree, parla
 //given a list of edges that form a (unbounded degree) tree, convert to parent tree form
 //Sequential -- don't run often!
 //TOD2* What data type for newsize? 
+//slightly inefficient converting to long then back to T, should maintain in type T
 template<typename T>
 parlay::sequence<T> parentTree_from_treeGen(long newsize, parlay::sequence<std::pair<T,T>>& edges, bool extra_print=false) {
 
