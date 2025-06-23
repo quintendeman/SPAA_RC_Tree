@@ -95,7 +95,7 @@ int main(int argc, char* argv[])
 
         parlay::sequence<wedge> empty_edges_sequence;
 
-        create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
+        create_base_clusters(clusters, ret_edge_modified.second, max_degree, graph_size * extra_tern_node_factor);
 
         create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
 
@@ -120,7 +120,7 @@ int main(int argc, char* argv[])
 
     parlay::sequence<wedge> empty_edges_sequence;
 
-    create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
+    create_base_clusters(clusters, ret_edge_modified.second, max_degree, graph_size * extra_tern_node_factor);
 
     create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
 
@@ -137,11 +137,12 @@ int main(int argc, char* argv[])
       auto add_truples = TG.generateAddEdges(desired_prob);
       batch_insert_size = del_pairs.size() + add_truples.size();
       auto delete_start = std::chrono::high_resolution_clock::now();
-      auto ret_seqs = TR.delete_edges(del_pairs);
-      add_truples = TR.add_edges(add_truples);
-      add_truples.append(ret_seqs.first); 
+      auto del_pairs__ = TR.delete_edges(del_pairs);
+      auto add_pairs__ = TR.add_edges(add_truples);
+      // add_truples.append(ret_seqs.first); 
       auto delete_end = std::chrono::high_resolution_clock::now();
-      batchInsertEdge(ret_seqs.second, add_truples, clusters, (double) 0.0f, [] (double A, double B) {return A+B;}, randomized);
+      batchInsertEdge(del_pairs__.first, del_pairs__.second, clusters, (double) 0.0f, [] (double A, double B) {return A+B;}, randomized);
+      batchInsertEdge(add_pairs__.first, add_pairs__.second, clusters, (double) 0.0f, [] (double A, double B) {return A+B;}, randomized);
       auto final_insert_end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> diff = final_insert_end - delete_start;
       
@@ -184,11 +185,12 @@ int main(int argc, char* argv[])
         auto add_truples = TG.generateAddEdges(desired_prob);
         batch_insert_size = del_pairs.size() + add_truples.size();
         auto delete_start = std::chrono::high_resolution_clock::now();
-        auto ret_seqs = TR.delete_edges(del_pairs);
-        add_truples = TR.add_edges(add_truples);
-        add_truples.append(ret_seqs.first); 
+        auto del_pairs__ = TR.delete_edges(del_pairs);
+        auto add_pairs__ = TR.add_edges(add_truples);
+        // add_truples.append(ret_seqs.first); 
         auto delete_end = std::chrono::high_resolution_clock::now();
-        batchInsertEdge(ret_seqs.second, add_truples, clusters, (double) 0.0f, [] (double A, double B) {return A+B;}, randomized);
+        batchInsertEdge(del_pairs__.first, del_pairs__.second, clusters, (double) 0.0f, [] (double A, double B) {return A+B;}, randomized);
+        batchInsertEdge(add_pairs__.first, add_pairs__.second, clusters, (double) 0.0f, [] (double A, double B) {return A+B;}, randomized);
         auto final_insert_end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = final_insert_end - delete_start;
         
@@ -230,11 +232,12 @@ int main(int argc, char* argv[])
         auto add_truples = TG.generateAddEdges(desired_prob);
         batch_insert_size = del_pairs.size() + add_truples.size();
         auto delete_start = std::chrono::high_resolution_clock::now();
-        auto ret_seqs = TR.delete_edges(del_pairs);
-        add_truples = TR.add_edges(add_truples);
-        add_truples.append(ret_seqs.first); 
+        auto del_pairs__ = TR.delete_edges(del_pairs);
+        auto add_pairs__ = TR.add_edges(add_truples);
+        // add_truples.append(ret_seqs.first); 
         auto delete_end = std::chrono::high_resolution_clock::now();
-        batchInsertEdge(ret_seqs.second, add_truples, clusters, (double) 0.0f, [] (double A, double B) {return A+B;}, randomized);
+        batchInsertEdge(del_pairs__.first, del_pairs__.second, clusters, (double) 0.0f, [] (double A, double B) {return A+B;}, randomized);
+        batchInsertEdge(add_pairs__.first, add_pairs__.second, clusters, (double) 0.0f, [] (double A, double B) {return A+B;}, randomized);
         auto final_insert_end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = final_insert_end - delete_start;
         

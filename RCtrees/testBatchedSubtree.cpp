@@ -207,7 +207,7 @@ int main(int argc, char* argv[])
     parlay::sequence<cluster<long, double>> clusters; 
     double defretval = 0.0;
     
-    create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
+    create_base_clusters(clusters, ret_edge_modified.second, max_degree, graph_size * extra_tern_node_factor);
 
     create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false, false);
 

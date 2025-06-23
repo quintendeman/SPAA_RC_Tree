@@ -114,7 +114,7 @@ int main(int argc, char* argv[]) {
 
     // // Measure creation time
     // auto start_creation = std::chrono::high_resolution_clock::now();
-    create_base_clusters(clusters, ternerized_initial_edges, static_cast<long>(3), graph_size*extra_tern_node_factor);
+    create_base_clusters(clusters, ternerized_initial_edges.second, static_cast<long>(3), graph_size*extra_tern_node_factor);
     create_RC_tree(clusters, graph_size*extra_tern_node_factor, static_cast<double>(0.0f), [] (double A, double B) {return A+B;}, false);
 
 
@@ -152,7 +152,7 @@ int main(int argc, char* argv[]) {
                 return pathQuery(rp.first, rp.second, clusters, identity, [] (double A, double B) {return A+B;});
             });
             std::cout << parlay::internal::init_num_workers() << ",";
-            std::cout << clusters.size()/3 << ",";
+            std::cout << clusters.size()/extra_tern_node_factor << ",";
             std::cout << ln << "," << mean << ",";
                 switch(distribution){
                 case exponential:
