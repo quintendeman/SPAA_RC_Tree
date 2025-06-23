@@ -359,10 +359,10 @@ parlay::sequence<long> tree_gen(long graph_size, parlay::sequence<cluster<long, 
       double defretval = 0.0;
 
       parlay::sequence<wedge> empty_edges_sequence;
-      create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
+      create_base_clusters(clusters, ret_edge_modified.second, max_degree, graph_size * extra_tern_node_factor);
       create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
 
-      parlay::sequence<std::pair<long,long>> all_edges = parlay::map(ret_edge_modified,[&] (std::tuple<long,long,double>& edge) {return std::make_pair(std::get<0>(edge),std::get<1>(edge));});
+      parlay::sequence<std::pair<long,long>> all_edges = parlay::map(ret_edge_modified.second,[&] (std::tuple<long,long,double>& edge) {return std::make_pair(std::get<0>(edge),std::get<1>(edge));});
 
       
       return parentTree_from_treeGen(initial_parent_tree.size()+2*retedges.size(),all_edges);
@@ -408,7 +408,7 @@ long tree_gen_size(long graph_size, parlay::sequence<cluster<long, double>>& clu
       double defretval = 0.0;
 
       parlay::sequence<wedge> empty_edges_sequence;
-      create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
+      create_base_clusters(clusters, ret_edge_modified.second, max_degree, graph_size * extra_tern_node_factor);
       create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
 
       return graph_size + 2*retedges.size();

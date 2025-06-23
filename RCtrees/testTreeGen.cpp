@@ -131,7 +131,7 @@ int main(int argc, char* argv[])
                 distribution = exponential;
             } else if (dist_arg == "g") {
                 distribution = geometric;
-            } else if (dist_arg == "c") {
+            }  else if (dist_arg == "c") {
                 distribution = constant;
             } else if (dist_arg == "u") {
                 distribution = uniform;
@@ -191,7 +191,7 @@ int main(int argc, char* argv[])
 
         parlay::sequence<wedge> empty_edges_sequence;
 
-        create_base_clusters(clusters, ret_edge_modified, max_degree, graph_size * extra_tern_node_factor);
+        create_base_clusters(clusters, ret_edge_modified.second, max_degree, graph_size * extra_tern_node_factor);
 
         create_RC_tree(clusters, graph_size, defretval, [] (double A, double B) {return A+B;},false);
 

@@ -44,7 +44,54 @@ void print_progress(double fraction, double mbps) {
     std::cout.flush();
 }
 
-std::pair<parlay::sequence<std::tuple<long, long, long>>, vertex>
+void remove_duplicates(parlay::sequence<std::tuple<long,long,double>>& input) {
+    parlay::sequence<std::atomic<char>> flags = parlay::tabulate<std::atomic<char>>(roundUpPow2(input.size() * 1.5f), [] (long i) {return 0;});
+    auto vals = parlay::sequence<std::tuple<long, long, double>>(flags.size());
+
+    parlay::parallel_for(0, input.size(), [&] (long i) {
+        long& v = std::get<0>(input[i]);
+        long& w = std::get<1>(input[i]);
+        double& weight = std::get<2>(input[i]);
+
+        if(w < v)
+            std::swap(v, w);
+        long expected_location = simple_hash(v, w) & (flags.size() - 1);
+        while(true) {
+            if(flags[expected_location] == 0) {
+                long& v_ = std::get<0>(vals[expected_location]);
+                long& w_ = std::get<1>(vals[expected_location]);
+                double& weight_ = std::get<2>(vals[expected_location]);
+                if(v_ == v && w_ == w)
+                    return;
+                char expected = 0;
+                char desired = 1;
+                bool success = flags[expected_location].compare_exchange_strong(expected, desired);
+                if(success) {
+                    v_ = w;
+                    w_ = w;
+                    weight_ = weight;
+                    return;
+                }
+            }
+            expected_location = (expected_location + 1) & (flags.size() - 1);
+        }
+    });
+
+    auto indices = parlay::delayed_tabulate(flags.size(), [&] (long i){
+        return i;
+    });
+    auto good_indices = parlay::filter(indices, [&] (long i) {
+        return flags[indices[i]] == 1;
+    });
+    input = parlay::tabulate(good_indices.size(), [&] (long i) {
+        return vals[good_indices[i]];
+    });
+
+
+}
+
+
+std::pair<parlay::sequence<std::tuple<long, long, double>>, vertex>
 read_wedge_from_file(const std::string &file_path) {
     std::ifstream file(file_path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
@@ -55,13 +102,15 @@ read_wedge_from_file(const std::string &file_path) {
     std::streamsize total_size = file.tellg();
     file.seekg(0, std::ios::beg);
 
-    parlay::sequence<std::tuple<long, long, long>> edge_list;
+    parlay::sequence<std::tuple<long, long, double>> edge_list;
     vertex max_vertex = 0;
 
     std::string line;
     std::streamsize processed = 0;
     auto last_time = std::chrono::steady_clock::now();
     std::streamsize last_processed = 0;
+
+    long time = -1;
 
     while (std::getline(file, line)) {
         processed = file.tellg();
@@ -82,12 +131,14 @@ read_wedge_from_file(const std::string &file_path) {
 
         std::istringstream iss(line);
         std::string tag;
-        long u, v, w;
-        if (!(iss >> tag >> u >> v >> w)) continue;
-        if (tag != "a") continue;
-        if (u >= v) continue;
+        long u, v;
+        double w;
+        if (!(iss >> u >> v >> w)) continue;
+        // std::cout << u << " " << v << " " << w << std::endl;
+        // if (tag != "a") continue;
+        // if (u >= v) continue;
 
-        edge_list.emplace_back(u, v, w);
+        edge_list.emplace_back(u, v, (double) (u * v + u + v));
         max_vertex = std::max({max_vertex, u, v});
         assert(v >= 0 && w >= 0 && "indices should be positive");
     }
@@ -96,7 +147,16 @@ read_wedge_from_file(const std::string &file_path) {
     print_progress(1.0, 0.0);
     std::cout << std::endl;
 
+    std::cout << "Duplicate removal reduced size from " << edge_list.size() << " to ";
+    remove_duplicates(edge_list);
+    std::cout << edge_list.size() << std::endl;
+
     edge_list = parlay::random_shuffle(edge_list);
+
+    parlay::parallel_for(0, edge_list.size(), [&] (long i) { //
+        std::get<2>(edge_list[i]) = edge_list.size() * 2 + -1 * i;
+    });
+
     return {edge_list, max_vertex};
 }
 
@@ -105,7 +165,7 @@ read_wedge_from_file(const std::string &file_path) {
 
 
 int main(int argc, char* argv[]) {
-    auto usage = "Usage: testMST.out [--path_to_file]\nThe file must have data in the form of \"i j w\" per line where i and j are indices and w is an integer weight";
+    auto usage = "Usage: ./testMST.out [path_to_file]\nThe file must have data in the form of \"i j w\" per line where i and j are indices and w is an integer weight";
 
     srand(time(NULL));
 
@@ -124,19 +184,19 @@ int main(int argc, char* argv[]) {
     std::cout << "max node: " << wedge_pair.second << std::endl;
     std::cout << "num edges: " << wedge_pair.first.size() << std::endl;
 
-    vertex graph_size = wedge_pair.second; 
+    vertex graph_size = wedge_pair.second + 1;  
 
     
-    ternarizer<long, long> TR(graph_size, 0);
-    parlay::sequence<cluster<vertex, long>> clusters;
-
+    ternarizer<long, double> TR(graph_size, 0.0f);
+    parlay::sequence<cluster<vertex, double>> clusters;
     
-    parlay::sequence<std::tuple<long,long,long>> empty_edges;
+    parlay::sequence<std::tuple<long,long,double>> empty_edges;
     
     create_base_clusters(clusters, empty_edges, static_cast<long>(3), graph_size*extra_tern_node_factor);
-    create_RC_tree(clusters, graph_size*extra_tern_node_factor, 0l, [] (long A, long B) {return A+B;}, false);
+    create_RC_tree(clusters, graph_size*extra_tern_node_factor, (double) 0.0f, [] (double A, double B) {return A+B;}, false);
     // incrementMST(clusters, wedge_pair.first, TR);
 
+    // std::cout << "Created empty clusters" << std::endl;
     
 
     const long max_edges = wedge_pair.first.size();
@@ -146,26 +206,35 @@ int main(int argc, char* argv[]) {
     // assert(max_edges < graph_size);
 
     
-    const long starting_insert_edges = wedge_pair.second;
-    
+    const long starting_insert_edges = 1000;
+
+
+    // for(auto& wd : wedge_pair.first)
+    //     std::cout << std::get<0>(wd) << " " << std::get<1>(wd) << " " << std::get<2>(wd) << std::endl;
+
+
+
     incrementMST(clusters, wedge_pair.first.subseq(0, starting_insert_edges), TR);
     
-    std::cout << "Done initializing" << std::endl;
+    parlay::parallel_for(0, wedge_pair.first.size(), [&] (long i) {
+        std::get<2>(wedge_pair.first[i]) = -1 * i;
+    });
+
 
     long times_done = 0;
-    long max_times_done = 1000;
-    long warmup_trials = 500;
-    if(batch_size >= 1000) {
-        max_times_done = 100;
-        warmup_trials = 50;
-    }
-    if(batch_size >= 100000l) {
-        max_times_done = 5;
-        warmup_trials = 0;
-    }  if (batch_size >= 1000000l) {
-        max_times_done = 1;
-        warmup_trials = 0;
-    }
+    long max_times_done = 5;
+    long warmup_trials = 0;
+    // if(batch_size >= 1000) {
+    //     max_times_done = 100;
+    //     warmup_trials = 50;
+    // }
+    // if(batch_size >= 100000l) {
+    //     max_times_done = 5;
+    //     warmup_trials = 0;
+    // }  if (batch_size >= 1000000l) {
+    //     max_times_done = 1;
+    //     warmup_trials = 0;
+    // }
 
     std::cout << "max_times_done " << max_times_done << std::endl;
     std::cout << "warmup_trials " << warmup_trials << std::endl;
@@ -178,6 +247,9 @@ int main(int argc, char* argv[]) {
 
     while(current_edges < max_edges) {
         // init start
+
+        std::cout << "CE " << current_edges << std::endl;
+
         long start_index = current_edges;
         long end_index = (current_edges + batch_size) >= max_edges ? max_edges : current_edges + batch_size;
         auto sub_seq = wedge_pair.first.subseq(start_index, end_index);
