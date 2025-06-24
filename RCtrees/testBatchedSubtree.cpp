@@ -98,6 +98,8 @@ void test_batched_subtree_queries(const long& num_queries, parlay::sequence<clus
     double total_time = 0.0;
 
     for(int a = 0; a < 10; a++) {
+        dis(gen); //resettle the generator 
+
         auto test_pairs = parlay::filter(parlay::delayed_tabulate(num_queries, [&] (long i) {
             auto r = gen[i];
             long v = dis(r);
@@ -108,6 +110,8 @@ void test_batched_subtree_queries(const long& num_queries, parlay::sequence<clus
         }), [] (auto pr){ return pr.first != pr.second;});
     
         test_pairs = parlay::random_shuffle(test_pairs);
+
+        //std::cout << "test pairs " << test_pairs[0].first << " " << test_pairs[0].second << std::endl;
 
         auto start = std::chrono::high_resolution_clock::now();
 
@@ -147,6 +151,7 @@ void test_batched_subtree_queries(const long& num_queries, parlay::sequence<clus
 
     total_time = 0.0;
     for(int a = 0; a < 10; a++) {
+        dis(gen); //resettle the generator
         auto test_pairs = parlay::filter(parlay::delayed_tabulate(num_queries, [&] (long i) {
             auto r = gen[i];
             long v = dis(r);
