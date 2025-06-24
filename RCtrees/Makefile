@@ -9,7 +9,7 @@ SRC = RC.cpp
 
 # Default target
 # all: RC.out testMST.out  testHashing.out testTreeGen.out testBatchedSubtree.out testPathQueries.out testBatchInsertion.out testMST.out testMSTfromFile.out testNewTernarizer.out
-all: testMST.out   testTreeGen.out testBatchedSubtree.out testPathQueries.out testBatchInsertion.out testMST.out lca.out testMSTfromFile.out
+all: testMST.out   testTreeGen.out testBatchedSubtree.out testPathQueries.out testBatchInsertion.out testMST.out lca.out testMSTfromFile.out testMSTfromFile2.out
 
 # Rule to build the target
 # RC.out: RC.cpp RC.h cluster.h RCdynamic.h adjacency_linked_list.h incMST.h random_trees.h utils.h
@@ -20,6 +20,10 @@ testMST.out: testMST.cpp ternarizer.h treeGen.h incMST.h RC.h cluster.h RCdynami
 
 testMSTfromFile.out: testMSTfromFile.cpp ternarizer.h treeGen.h incMST.h RC.h cluster.h RCdynamic.h  adjacency_linked_list.h  random_trees.h utils.h
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o testMSTfromFile.out testMSTfromFile.cpp
+
+testMSTfromFile2.out: testMSTfromFile2.cpp ternarizer.h treeGen.h incMST.h RC.h cluster.h RCdynamic.h  adjacency_linked_list.h  random_trees.h utils.h
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o testMSTfromFile2.out testMSTfromFile2.cpp
+
 
 testTreeGen.out: testTreeGen.cpp treeGen.h RC.h cluster.h RCdynamic.h  adjacency_linked_list.h  random_trees.h utils.h
 	$(CXX)  $(CXXFLAGS) $(INCLUDES) -o testTreeGen.out testTreeGen.cpp

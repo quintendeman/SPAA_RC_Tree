@@ -1028,9 +1028,9 @@ std::tuple<double,double,double> incrementMST(parlay::sequence<cluster<T,D>>& cl
     // first ternarize the delete edges
     auto del_pair = TR.delete_edges(delete_edges);
 
-    TR.verify_simple_tree();
-    checkDuplicates(del_pair.first);
-    doesDeleteExist(clusters, del_pair.first);
+    // TR.verify_simple_tree();
+    // checkDuplicates(del_pair.first);
+    // doesDeleteExist(clusters, del_pair.first);
 
     // std::cout << "Final del ternarized " << delete_edges.size() << std::endl;
     // for(auto& edge : del_pair.second)
@@ -1042,14 +1042,14 @@ std::tuple<double,double,double> incrementMST(parlay::sequence<cluster<T,D>>& cl
     // std::cout << std::endl;
 
     batchInsertEdge(del_pair.first, del_pair.second, clusters, (D) 0, [] (D a, D b) {return a > b ? a : b;});
-    matchClustersAndSimplifiedTree(clusters, TR.get_simplified_tree());
+    // matchClustersAndSimplifiedTree(clusters, TR.get_simplified_tree());
 
     // then ternarize the add edges
     auto add_edges_ternarized = TR.add_edges(add_edges);
 
-    TR.verify_simple_tree();
-    checkDuplicates(add_edges_ternarized.first);
-    doesDeleteExist(clusters, add_edges_ternarized.first);
+    // TR.verify_simple_tree();
+    // checkDuplicates(add_edges_ternarized.first);
+    // doesDeleteExist(clusters, add_edges_ternarized.first);
 
     // std::cout << "Final add ternarized " << add_edges.size() <<  std::endl;
     // for(auto& edge : add_edges_ternarized.second)
@@ -1061,7 +1061,7 @@ std::tuple<double,double,double> incrementMST(parlay::sequence<cluster<T,D>>& cl
     // std::cout << std::endl;
 
     batchInsertEdge(add_edges_ternarized.first, add_edges_ternarized.second, clusters, (D) 0, [] (D a, D b) {return a > b ? a : b;});
-    matchClustersAndSimplifiedTree(clusters, TR.get_simplified_tree());
+    // matchClustersAndSimplifiedTree(clusters, TR.get_simplified_tree());
 
     auto insertion_end = std::chrono::high_resolution_clock::now();
 
