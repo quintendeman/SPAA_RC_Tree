@@ -413,7 +413,7 @@ long tree_gen_size(long graph_size, parlay::sequence<cluster<long, double>>& clu
       create_RC_tree(clusters, graph_size*extra_tern_node_factor, defretval, [] (double A, double B) {return A+B;},false); //Q* added extra_tern_node_factor
 
       //return graph_size + 2*retedges.size(); old ternarizer size
-      return graph_size * extra_tern_node_factor; //new ternarizer size
+      return graph_size;//graph_size * extra_tern_node_factor; //new ternarizer size
 
 }
 
@@ -545,16 +545,16 @@ void bench(parlay::random_generator& pgen,long oldn, long max_k, int trials_per,
 
     parlay::sequence<long> parent_tree(1,1);
     //one tree for all testing
-    long n = tree_gen_size(oldn,clusters,mean,ln,dist_choice);
+    tree_gen_size(oldn,clusters,mean,ln,dist_choice); 
 
-    std::uniform_int_distribution<long> dis(0,n-1);
+    std::uniform_int_distribution<long> dis(0,oldn-1); //vary among the old value of n (only real vertices)
 
     double runtime=0;
     for (int j = 0; j < kvals.size(); j++) {
         k=kvals[j];
         for (int iter = 0; iter < trials_per; iter++) {
             runtime= get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
-            std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << "," << dist_choice <<  ", " << runtime << std::endl;
+            std::cout << parlay::internal::init_num_workers() << "," << oldn << "," << k << ", " << ln << "," << mean << "," << dist_choice <<  ", " << runtime << std::endl;
         }
 
         
@@ -579,15 +579,15 @@ void bench_threads(parlay::random_generator& pgen, long oldn, long k, int NUM_TR
     parlay::sequence<long> parent_tree(1,1); //not used, because handle answers set to false currently. If true, need to get parent tree from clusters
     //one tree for all testing
     //n is ternerized size
-    long n = tree_gen_size(oldn,clusters,mean,ln,dist_choice); 
+    tree_gen_size(oldn,clusters,mean,ln,dist_choice); 
    
 
-    std::uniform_int_distribution<long> dis(0,n-1);
+    std::uniform_int_distribution<long> dis(0,oldn-1);
 
     double runtime=0;
     for (int iter = 0; iter < NUM_TRIALS; iter++) {
         runtime = get_single_runtime(pgen,clusters,k,dis,parent_tree,false).count();
-        std::cout << parlay::internal::init_num_workers() << "," << n << "," << oldn << "," << k << ", " << ln << "," << mean << ", " << dist_choice << ", " << runtime << std::endl;
+        std::cout << parlay::internal::init_num_workers() << "," << oldn << "," << k << ", " << ln << "," << mean << ", " << dist_choice << ", " << runtime << std::endl;
         
     }
     deleteRCtree(clusters);
@@ -651,6 +651,11 @@ int main(int argc, char* argv[]) {
     parlay::internal::timer tim = parlay::internal::timer();
 
     //std::cout << "hello world!31" << std::endl;
+
+    // std::mt19937 my_gen(10);
+    // std::uniform_int_distribution<int> hi(0,3);
+    // for (int i = 0; i < 20; i++) std::cout << hi(my_gen) << " ";
+    // std::cout << std::endl;
 
     int n = 10; //defaults
     int NUM_TRIALS = 1;
