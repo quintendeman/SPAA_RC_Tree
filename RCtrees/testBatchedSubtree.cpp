@@ -94,13 +94,33 @@ void test_batched_subtree_queries(const long& num_queries, parlay::sequence<clus
     // std::cout << "Testing queries " << test_pairs.size() << " in a batch " << std::endl;
 
     auto start = std::chrono::high_resolution_clock::now();
+    
+    double total_time = 0.0;
+
     for(int a = 0; a < 10; a++) {
+        auto test_pairs = parlay::filter(parlay::delayed_tabulate(num_queries, [&] (long i) {
+            auto r = gen[i];
+            long v = dis(r);
+            if(i & 1)
+                return std::pair<long,long>(TG.random_perm_map[TG.parents[v]], TG.random_perm_map[v]);
+    
+            return std::pair<long,long>(TG.random_perm_map[v], TG.random_perm_map[TG.parents[v]]);
+        }), [] (auto pr){ return pr.first != pr.second;});
+    
+        test_pairs = parlay::random_shuffle(test_pairs);
+
+        auto start = std::chrono::high_resolution_clock::now();
+
         auto subtree_sum_values = parlay::tabulate(test_pairs.size(), [&] (long i){
             auto& pr = test_pairs[i];
             return subtree_query(pr.first, pr.second, clusters, TR, identity, assocfunc);
         });
+        auto end = std::chrono::high_resolution_clock::now();
+        total_time += std::chrono::duration<double, std::milli>(end - start).count();   
     }
-    auto end = std::chrono::high_resolution_clock::now();
+
+    total_time /= 10;
+    
     
 
     std::cout << parlay::internal::init_num_workers() << ",";
@@ -122,13 +142,28 @@ void test_batched_subtree_queries(const long& num_queries, parlay::sequence<clus
         }
     std::cout << ",";
     std::cout << num_queries << ",";
-    std::cout << (std::chrono::duration<double, std::milli>(end - start).count()/10)
+    std::cout << total_time
             << ",";
-    auto start_ = std::chrono::high_resolution_clock::now();
-    for(int a = 0; a < 10; a++)
-       auto subtree_batched_values = batched_subtree_query(test_pairs, clusters, TR, identity, assocfunc);
-    auto end_ = std::chrono::high_resolution_clock::now();
-    std::cout << (std::chrono::duration<double, std::milli>(end_ - start_).count()/10)
+
+    total_time = 0.0;
+    for(int a = 0; a < 10; a++) {
+        auto test_pairs = parlay::filter(parlay::delayed_tabulate(num_queries, [&] (long i) {
+            auto r = gen[i];
+            long v = dis(r);
+            if(i & 1)
+                return std::pair<long,long>(TG.random_perm_map[TG.parents[v]], TG.random_perm_map[v]);
+    
+            return std::pair<long,long>(TG.random_perm_map[v], TG.random_perm_map[TG.parents[v]]);
+        }), [] (auto pr){ return pr.first != pr.second;});
+    
+        test_pairs = parlay::random_shuffle(test_pairs);
+        
+        auto start_ = std::chrono::high_resolution_clock::now();
+        auto subtree_batched_values = batched_subtree_query(test_pairs, clusters, TR, identity, assocfunc);
+        auto end_ = std::chrono::high_resolution_clock::now();
+        total_time += (std::chrono::duration<double, std::milli>(end_ - start_).count());
+    }
+    std::cout << total_time/10
             << std::endl;
 
     // assert(subtree_sum_values.size() == subtree_batched_values.size());

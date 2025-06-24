@@ -143,16 +143,18 @@ int main(int argc, char* argv[]) {
         long multiplier = 5;
         while(num_queries <= graph_size)
         {
-            auto random_pairs = generate_random_pairs(TG.parents, TG.random_perm_map, num_queries);
-            parlay::internal::timer t1;
-            t1.start();
-
+            double total_time = 0.0;
+            
             for(int a = 0; a < 10; a++) {
+                auto random_pairs = generate_random_pairs(TG.parents, TG.random_perm_map, num_queries);
+                parlay::internal::timer t1;
+                t1.start();
                 auto results = parlay::tabulate(random_pairs.size(), [&] (long i) {
                     auto& rp = random_pairs[i]; 
                     const double identity = 0.0f;
                     return pathQuery(rp.first, rp.second, clusters, identity, [] (double A, double B) {return A+B;});
                 });
+                total_time += t1.next_time();
             }
             std::cout << parlay::internal::init_num_workers() << ",";
             std::cout << clusters.size()/extra_tern_node_factor << ",";
@@ -174,7 +176,7 @@ int main(int argc, char* argv[]) {
             std::cout << ",";
             std::cout << num_queries << ",";
 
-            std::cout << t1.next_time() * 1000/10 << std::endl;
+            std::cout << total_time * 1000/10 << std::endl;
 
             num_queries *= multiplier;
             if(multiplier == 5)
