@@ -1,6 +1,3 @@
-#ifndef GRAPH_UTILS_H
-#define GRAPH_UTILS_H
-
 #include <iostream>
 #include <string>
 #include <parlay/primitives.h>
@@ -32,7 +29,7 @@ struct graph_utils {
   // i.e. generate the backward edges for every forward edges
   static graph transpose(const graph& G) {
     auto pairs = flatten(parlay::delayed::tabulate(G.size(), [&] (vertex i) {
-      return map(G[i], [=] (auto ngh) {
+      return parlay::map(G[i], [=] (auto ngh) {
         return std::pair(ngh, i);}, 1000);}));
     return group_by_index(pairs, G.size());
   }
@@ -48,7 +45,7 @@ struct graph_utils {
   // symmetrize and remove self edges from an edge sequence
   static graph symmetrize(const edges& Ein, long n) {
     auto E = filter(Ein, [] (auto e) {return e.first != e.second;});
-    auto ET = map(E, [] (auto e) {return std::pair(e.second, e.first);});
+    auto ET = parlay::map(E, [] (auto e) {return std::pair(e.second, e.first);});
     auto G = group_by_index(E, n);
     auto GT = group_by_index(ET, n);
     return parlay::tabulate(n, [&] (long i) {
@@ -57,7 +54,7 @@ struct graph_utils {
 
   static edges to_edges(const graph& G) {
     return flatten(parlay::tabulate(G.size(), [&] (vertex u) {
-      return map(G[u], [=] (vertex v) {return std::pair(u,v);});}));
+      return parlay::map(G[u], [=] (vertex v) {return std::pair(u,v);});}));
   }
 
   // adds random weights so (u,v) and (v,u) have same weight
@@ -90,7 +87,7 @@ struct graph_utils {
   }
 
   static long num_vertices(const edges& E) {
-    return reduce(map(E, [] (auto e) {return std::max(e.first,e.second);}),
+    return reduce(parlay::map(E, [] (auto e) {return std::max(e.first,e.second);}),
                   parlay::maximum<vertex>()) + 1;
   }
 
@@ -151,14 +148,14 @@ struct graph_utils {
     vertex sqn = sqrt(n);
     parlay::sequence<vertex> offsets({-1-sqn,-sqn,1-sqn,-1,1,-1+sqn,sqn,1+sqn});
     return parlay::tabulate(sqn*sqn, [&] (vertex u) {
-      auto nghs = map(offsets, [&] (vertex o) {return u+o;});
+      auto nghs = parlay::map(offsets, [&] (vertex o) {return u+o;});
       return filter(nghs, [=] (vertex v) {
         return (v >= 0 && v < sqn*sqn && abs(u % sqn - v % sqn) < 2);});});
   }
 
   static void print_graph_stats(const graph& G) {
-    long num_edges = reduce(map(G, parlay::size_of()));
-    long max_degree = reduce(map(G, parlay::size_of()), parlay::maximum<size_t>());
+    long num_edges = reduce(parlay::map(G, parlay::size_of()));
+    long max_degree = reduce(parlay::map(G, parlay::size_of()), parlay::maximum<size_t>());
     std::cout << "num vertices = " << G.size() << std::endl;
     std::cout << "num edges    = " << num_edges << std::endl;
     std::cout << "max degree   = " << max_degree << std::endl;
@@ -225,7 +222,7 @@ struct graph_utils {
 
   static void write_graph_to_file(const graph& G, const std::string& filename) {
     using lseq = parlay::sequence<long>;
-    auto lengths = map(G, [] (auto& nghs) {return (long) nghs.size();});
+    auto lengths = parlay::map(G, [] (auto& nghs) {return (long) nghs.size();});
     auto edges = flatten(parlay::tabulate(G.size(), [&] (long i) {
       auto nghs = sort(G[i]);
       return parlay::tabulate(nghs.size(), [&] (long j) -> long {
@@ -234,7 +231,7 @@ struct graph_utils {
     auto all = flatten(parlay::sequence<lseq>({lseq(1,(long) G.size()),
                                                lseq(1,(long)edges.size()),lengths,edges}));
     auto newline = parlay::chars(1, '\n');
-    chars_to_file(flatten(map(all, [&] (long v) {
+    chars_to_file(flatten(parlay::map(all, [&] (long v) {
       return append(parlay::to_chars(v),newline);})), filename);
   }
 
@@ -245,6 +242,3 @@ struct graph_utils {
     write_graph_to_file(GR, filename);
   }
 };
-
-
-#endif
