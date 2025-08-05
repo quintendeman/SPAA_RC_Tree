@@ -15,7 +15,7 @@
 
 
 const double load_factor = 2.0f; // load factor for the hash table
-const long extra_tern_node_factor = 2;
+const long extra_ternarized_node_factor = 2;
 
 const bool debug_print = false;
 
@@ -104,170 +104,167 @@ void checkDuplicates(const parlay::sequence<long>& input) {
     });
 }
 
-
-namespace { // we already have a tern_node in adjacency linked list but.. I couldn't come up with a better name
     
 
-    template <typename T, typename D>
-    struct tern_node{
-        // parlay::sequence<std::tuple<T,T,D>> adds;
-        // parlay::sequence<std::pair<T,T>> dels;
-        T dummy_index = -1; // the actual node that I am
-        T owner = -1; // The owner i.e. whose linked list I am in
-        T tail_outgoing_index = -1;
-        T tail_node_index = -1;
-        T new_tail_node_index = -1;
-        T adjacency_count = 0;
-        T spill = 0;
-        D tail_data;
-        std::array<T, 3> outgoing_edgeindices = {-1};
-        std::array<D, 3> outgoing_weights;
-        char random_colour = 0.0;
-        bool real = true; // TODO unnecessary?
-        bool marked_for_deletion = false;
-        bool shortlisted = false; // pun not intended
-        bool last_to_contract = false;
-        bool tail_changed = false;
-        std::array<bool, 3> new_conn = {false, false, false};
-        
-        void clear_data(D identity)
-        {
-            this->owner = -1;
-            // assert(!real); // TODO remove
-            this->marked_for_deletion = false;
-            this->shortlisted = false;
-            this->random_colour = 0;
-            this->outgoing_edgeindices[0] = this->outgoing_edgeindices[1] = this->outgoing_edgeindices[2] = -1;
-            this->outgoing_weights[0] = this->outgoing_weights[1] = this->outgoing_weights[2] = identity;
+template <typename T, typename D>
+struct ternarized_node{
+    // parlay::sequence<std::tuple<T,T,D>> adds;
+    // parlay::sequence<std::pair<T,T>> dels;
+    T dummy_index = -1; // the actual node that I am
+    T owner = -1; // The owner i.e. whose linked list I am in
+    T tail_outgoing_index = -1;
+    T tail_node_index = -1;
+    T new_tail_node_index = -1;
+    T adjacency_count = 0;
+    T spill = 0;
+    D tail_data;
+    std::array<T, 3> outgoing_edgeindices = {-1};
+    std::array<D, 3> outgoing_weights;
+    char random_colour = 0.0;
+    bool real = true; // TODO unnecessary?
+    bool marked_for_deletion = false;
+    bool shortlisted = false; // pun not intended
+    bool last_to_contract = false;
+    bool tail_changed = false;
+    std::array<bool, 3> new_conn = {false, false, false};
+    
+    void clear_data(D identity)
+    {
+        this->owner = -1;
+        // assert(!real); // TODO remove
+        this->marked_for_deletion = false;
+        this->shortlisted = false;
+        this->random_colour = 0;
+        this->outgoing_edgeindices[0] = this->outgoing_edgeindices[1] = this->outgoing_edgeindices[2] = -1;
+        this->outgoing_weights[0] = this->outgoing_weights[1] = this->outgoing_weights[2] = identity;
 
-            // this->head_index = -1;
-            this->tail_outgoing_index = -1;
-            this->tail_node_index = -1;
-            this->new_tail_node_index = -1;
-            this->adjacency_count = 0;
-            this->spill = 0;
-            this->tail_changed = false;
-            this->last_to_contract = false;
-            new_conn[0] = false;
-            new_conn[1] = false;
-            new_conn[2] = false;
+        // this->head_index = -1;
+        this->tail_outgoing_index = -1;
+        this->tail_node_index = -1;
+        this->new_tail_node_index = -1;
+        this->adjacency_count = 0;
+        this->spill = 0;
+        this->tail_changed = false;
+        this->last_to_contract = false;
+        new_conn[0] = false;
+        new_conn[1] = false;
+        new_conn[2] = false;
+    }
+
+    short find_min_valid_index(void) {
+        for(short a = 0; a < 3; ++a) {
+            if(this->outgoing_edgeindices[a] == -1)
+                return a;
         }
+        return -1;
+    }
 
-        short find_min_valid_index(void) {
-            for(short a = 0; a < 3; ++a) {
-                if(this->outgoing_edgeindices[a] == -1)
-                    return a;
-            }
-            return -1;
-        }
+    friend std::ostream& operator<<(std::ostream& os, const ternarized_node& obj) {
+        os << "[" << obj.dummy_index << "/" << obj.owner << "]: " << obj.dummy_index << " ";
+        os << obj.outgoing_edgeindices[0] << "/" << obj.outgoing_weights[0] << " ";
+        os << obj.outgoing_edgeindices[1] << "/" << obj.outgoing_weights[1] << " ";
+        os << obj.outgoing_edgeindices[2] << "/" << obj.outgoing_weights[2] << " ";
+        os << (int) obj.random_colour << " ";
+        os << "adj: " << obj.adjacency_count << " ";
+        os << obj.tail_node_index << " " << obj.new_tail_node_index << " " << obj.tail_outgoing_index << " ";
+        if(obj.real)
+            os << "REAL ";
+        else
+            os << "DMMY ";
+        if(obj.marked_for_deletion)
+            os << "M";
+        if(obj.shortlisted)
+            os << "S";
+        os << "]";
+        return os;
+    }
+};
 
-        friend std::ostream& operator<<(std::ostream& os, const tern_node& obj) {
-            os << "[" << obj.dummy_index << "/" << obj.owner << "]: " << obj.dummy_index << " ";
-            os << obj.outgoing_edgeindices[0] << "/" << obj.outgoing_weights[0] << " ";
-            os << obj.outgoing_edgeindices[1] << "/" << obj.outgoing_weights[1] << " ";
-            os << obj.outgoing_edgeindices[2] << "/" << obj.outgoing_weights[2] << " ";
-            os << (int) obj.random_colour << " ";
-            os << "adj: " << obj.adjacency_count << " ";
-            os << obj.tail_node_index << " " << obj.new_tail_node_index << " " << obj.tail_outgoing_index << " ";
-            if(obj.real)
-                os << "REAL ";
-            else
-                os << "DMMY ";
-            if(obj.marked_for_deletion)
-                os << "M";
-            if(obj.shortlisted)
-                os << "S";
-            os << "]";
-            return os;
-        }
-    };
-
-    // basic edge in hash table that helps us find dummy vertices
-    // helps map an edge to two nodes in simplified tree
-    template <typename T>
-    struct basic_edge {
-        T v = -2;
-        T w = -1;
-        T dummy_v = -2;
-        T dummy_w = -1;
-        char ind = -3;
-        std::atomic<char> state;
+// basic edge in hash table that helps us find dummy vertices
+// helps map an edge to two nodes in simplified tree
+template <typename T>
+struct basic_edge {
+    T v = -2;
+    T w = -1;
+    T dummy_v = -2;
+    T dummy_w = -1;
+    char ind = -3;
+    std::atomic<char> state;
 
 
-        friend std::ostream& operator<<(std::ostream& os, const basic_edge<T>& edge) {
-        return os << "basic_edge { v: " << edge.v
-                << ", w: " << edge.w
-                << ", dummy_v: " << edge.dummy_v
-                << ", dummy_w: " << edge.dummy_w
-                << ", state: " << (int) edge.state 
-                << " }";
-        }
-    };
+    friend std::ostream& operator<<(std::ostream& os, const basic_edge<T>& edge) {
+    return os << "basic_edge { v: " << edge.v
+            << ", w: " << edge.w
+            << ", dummy_v: " << edge.dummy_v
+            << ", dummy_w: " << edge.dummy_w
+            << ", state: " << (int) edge.state 
+            << " }";
+    }
+};
 
-    template<typename T, typename D>
-    struct hash_nodic {
-        using kType = basic_edge<T>; // Key type: the tuple
-        using eType = void*; // Value type: pointer to the tuple
+template<typename T, typename D>
+struct hash_nodic {
+    using kType = basic_edge<T>; // Key type: the tuple
+    using eType = void*; // Value type: pointer to the tuple
 
-        // Define an empty value as nullptr
-        eType empty() { return nullptr; }
+    // Define an empty value as nullptr
+    eType empty() { return nullptr; }
 
-        // Extract the key (tuple) from the value (pointer)
-        kType getKey(eType v) {
-            return *static_cast<kType*>(v); // Dereference pointer to get the tuple
-        }
+    // Extract the key (tuple) from the value (pointer)
+    kType getKey(eType v) {
+        return *static_cast<kType*>(v); // Dereference pointer to get the tuple
+    }
 
-            // Hash function for the tuple
-        size_t hash(kType V) {
-            // Hash each element of the tuple and combine
-            assert(V.v != -1 && V.w != -1); 
-            T v = V.v;
-            T w = V.w;
-            // if(v < w)
-            //     std::swap(v, w);
-            static const unsigned long random_prime1 = 1000003l;
-            static const unsigned long random_prime2 = 10000000019l;
+        // Hash function for the tuple
+    size_t hash(kType V) {
+        // Hash each element of the tuple and combine
+        assert(V.v != -1 && V.w != -1); 
+        T v = V.v;
+        T w = V.w;
+        // if(v < w)
+        //     std::swap(v, w);
+        static const unsigned long random_prime1 = 1000003l;
+        static const unsigned long random_prime2 = 10000000019l;
 
-            size_t h1 = v * random_prime1;
-            size_t h2 = w * random_prime2;
-            // std::cout << "[HASH] returning " << (h1 ^ h2) << " for " << v << " -- " << w << std::endl;
+        size_t h1 = v * random_prime1;
+        size_t h2 = w * random_prime2;
+        // std::cout << "[HASH] returning " << (h1 ^ h2) << " for " << v << " -- " << w << std::endl;
 
-            return h1 ^ h2; // Combine hashes using XOR 
-            // return v + w; // Combine hashes using XOR 
-        }
+        return h1 ^ h2; // Combine hashes using XOR 
+        // return v + w; // Combine hashes using XOR 
+    }
 
-        // Comparison function for tuples
-        int cmp(kType v1, kType v2) {
-            // Extract values
-            T val1 = v1.v, wal1 = v1.w;
-            T val2 = v2.v, wal2 = v2.w;
+    // Comparison function for tuples
+    int cmp(kType v1, kType v2) {
+        // Extract values
+        T val1 = v1.v, wal1 = v1.w;
+        T val2 = v2.v, wal2 = v2.w;
 
-            // Ensure (val, wal) is always in sorted order
-            // if (val1 < wal1) std::swap(val1, wal1);
-            // if (val2 < wal2) std::swap(val2, wal2);
+        // Ensure (val, wal) is always in sorted order
+        // if (val1 < wal1) std::swap(val1, wal1);
+        // if (val2 < wal2) std::swap(val2, wal2);
 
-            // std::cout << "cmp" << std::endl;
+        // std::cout << "cmp" << std::endl;
 
-            // Lexicographic comparison: (val1, wal1) vs (val2, wal2)
-            // if (val1 != val2) return (val1 < val2) ? -1 : 1;
-            // if (wal1 != wal2) return (wal1 < wal2) ? -1 : 1;
-            if(val1 != val2 || wal1 != wal2) return -1;
-            return 0; // Equal
-        }
+        // Lexicographic comparison: (val1, wal1) vs (val2, wal2)
+        // if (val1 != val2) return (val1 < val2) ? -1 : 1;
+        // if (wal1 != wal2) return (wal1 < wal2) ? -1 : 1;
+        if(val1 != val2 || wal1 != wal2) return -1;
+        return 0; // Equal
+    }
 
-        // Replace query: always return false (no replacement logic here)
-        bool replaceQ(eType, eType) { return false; }
+    // Replace query: always return false (no replacement logic here)
+    bool replaceQ(eType, eType) { return false; }
 
-        // Update: return the current value
-        eType update(eType v, eType) { return v; }
+    // Update: return the current value
+    eType update(eType v, eType) { return v; }
 
-        // Atomic compare-and-swap (CAS) operation
-        bool cas(eType* p, eType o, eType n) {
-            return std::atomic_compare_exchange_strong_explicit(
-            reinterpret_cast<std::atomic<eType>*>(p), &o, n, std::memory_order_relaxed, std::memory_order_relaxed);
-        }
-    };
-}
+    // Atomic compare-and-swap (CAS) operation
+    bool cas(eType* p, eType o, eType n) {
+        return std::atomic_compare_exchange_strong_explicit(
+        reinterpret_cast<std::atomic<eType>*>(p), &o, n, std::memory_order_relaxed, std::memory_order_relaxed);
+    }
+};
 
 size_t simple_hash(long v, long w) {
     static const size_t random_prime1 = 1000003ul;
@@ -308,7 +305,7 @@ class ternarizer{
         T num_vertices; // including dummy graphs
         D identity;
         parlay::sequence<T> free_list; // free dummy indices;
-        parlay::sequence<tern_node<T,D>> simplified_tree;
+        parlay::sequence<ternarized_node<T,D>> simplified_tree;
         // parlay::hashtable<hash_nodic<T,D>> HT;
         parlay::sequence<std::atomic<T>> tail_indices;
         // parlay::sequence<T> adjacents_count;
@@ -352,20 +349,20 @@ class ternarizer{
         {
             this->identity = identity;
             this->max_index = max_index;
-            this->num_vertices = extra_tern_node_factor * max_index;
+            this->num_vertices = extra_ternarized_node_factor * max_index;
             this->free_list = parlay::tabulate(this->num_vertices - max_index, [max_index] (T i) {
                 return i + max_index; // N to 2N-1
             });
             this->simplified_tree = parlay::tabulate(this->num_vertices, [max_index, identity] (T i) {
-                auto ret_tern_node = tern_node<T,D>();
-                ret_tern_node.clear_data(identity);
-                ret_tern_node.dummy_index = i;
-                ret_tern_node.real = i >= max_index ? false : true;
-                ret_tern_node.owner = i >= max_index ? -1 : i;
-                // ret_tern_node.head_index = i >= max_index ? -1 : 0;
-                // ret_tern_node.tail_index = i >= max_index ? -1 : 2;
-                ret_tern_node.tail_node_index = i;
-                return ret_tern_node;
+                auto ret_ternarized_node = ternarized_node<T,D>();
+                ret_ternarized_node.clear_data(identity);
+                ret_ternarized_node.dummy_index = i;
+                ret_ternarized_node.real = i >= max_index ? false : true;
+                ret_ternarized_node.owner = i >= max_index ? -1 : i;
+                // ret_ternarized_node.head_index = i >= max_index ? -1 : 0;
+                // ret_ternarized_node.tail_index = i >= max_index ? -1 : 2;
+                ret_ternarized_node.tail_node_index = i;
+                return ret_ternarized_node;
             });
 
             // this->adjacents_count = parlay::sequence<T>(this->max_index, 0);
@@ -2007,25 +2004,25 @@ class ternarizer{
             
             
             parlay::parallel_for(0, this->num_vertices, [&] (T i) {
-                auto& my_tern_node = this->simplified_tree[i];
+                auto& my_ternarized_node = this->simplified_tree[i];
                 for(short I = 0; I < 3; I ++)
                 {
-                    T& neighbour_index = my_tern_node.outgoing_edgeindices[I];
+                    T& neighbour_index = my_ternarized_node.outgoing_edgeindices[I];
                     if(neighbour_index == -1)
                         continue;
 
-                    if(neighbour_index == my_tern_node.dummy_index) {
-                        // std::cout << red << my_tern_node << reset << std::endl;
+                    if(neighbour_index == my_ternarized_node.dummy_index) {
+                        // std::cout << red << my_ternarized_node << reset << std::endl;
                         assert("self edge??" && false);
                     }
-                    auto& neighbour_tern_node = this->simplified_tree[neighbour_index];
+                    auto& neighbour_ternarized_node = this->simplified_tree[neighbour_index];
                     for(short j = 0; j < 3; j++)
                     {
-                        if(neighbour_tern_node.outgoing_edgeindices[j] == my_tern_node.dummy_index)
+                        if(neighbour_ternarized_node.outgoing_edgeindices[j] == my_ternarized_node.dummy_index)
                             return;
                     }
-                    std::cout << my_tern_node  << std::endl;
-                    std::cout <<  neighbour_tern_node  << std::endl;
+                    std::cout << my_ternarized_node  << std::endl;
+                    std::cout <<  neighbour_ternarized_node  << std::endl;
 
                     // this->print_state();
 
